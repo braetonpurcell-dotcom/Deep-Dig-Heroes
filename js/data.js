@@ -117,8 +117,8 @@ const BOSS_NAMES = { golem: 'Golem Lord', slime: 'King Slime', bat: 'Bat Queen' 
 const UPGRADES = [
   { id: 'sharpen', name: 'Sharpen Pick', icon: 'pick', base: 10, growth: 1.15, unlock: 1,
     desc: '+1 base damage. Damage doubles every 25 levels' },
-  { id: 'brain', name: 'Brain Amp', icon: 'brain', base: 30, growth: 1.45, unlock: 2,
-    desc: '+10% math strike damage' },
+  { id: 'brain', name: 'Power Tap', icon: 'bolt', base: 30, growth: 1.45, unlock: 2,
+    desc: '+10% tap strike damage' },
   { id: 'fury', name: 'Fury', icon: 'bolt', base: 50, growth: 1.4, max: 50, unlock: 3,
     desc: '+4% attack speed' },
   { id: 'magnet', name: 'Coin Magnet', icon: 'coin', base: 80, growth: 1.45, unlock: 5,
@@ -136,16 +136,16 @@ const TIER_REQ = [0, 5, 10, 15];
 const BRANCHES = [
   {
     id: 'brawler', name: 'Brawler', color: '#ff6b5a',
-    blurb: 'Active play: math strikes, combos and bosses.',
+    blurb: 'Active play: tap strikes, combos and bosses.',
     passive: '+2% damage per point',
     nodes: [
-      { id: 'quickwit', name: 'Quick Wit', tier: 0, max: 5, desc: '+20% math strike damage per rank' },
+      { id: 'quickwit', name: 'Quick Hands', tier: 0, max: 5, desc: '+20% tap strike damage per rank' },
       { id: 'momentum', name: 'Momentum', tier: 0, max: 5, desc: '+4 max combo per rank' },
-      { id: 'ironmind', name: 'Iron Mind', tier: 1, max: 3, desc: 'A wrong answer keeps 10% more of your streak per rank' },
+      { id: 'ironmind', name: 'Iron Mind', tier: 1, max: 3, desc: 'An escaped monster costs less: keep 5% more of your combo per rank' },
       { id: 'adrenaline', name: 'Adrenaline', tier: 1, max: 3, desc: 'Each combo stack gives +1% more damage per rank' },
       { id: 'focus', name: 'Battle Focus', tier: 2, max: 3, desc: 'Your combo waits 2s longer before it starts to fade, per rank' },
       { id: 'executioner', name: 'Executioner', tier: 2, max: 5, desc: '+30% damage to bosses per rank' },
-      { id: 'overdrive', name: 'Overdrive', tier: 3, max: 1, desc: 'Every 10th answer in a streak lands a MEGA strike (x5)' },
+      { id: 'overdrive', name: 'Overdrive', tier: 3, max: 1, desc: 'Every 25th tap in a combo lands a MEGA strike (x5)' },
     ],
   },
   {
@@ -159,7 +159,7 @@ const BRANCHES = [
       { id: 'deeppockets', name: 'Deep Pockets', tier: 1, max: 3, desc: '+2h max offline time per rank (base 4h)' },
       { id: 'oresense', name: 'Ore Sense', tier: 2, max: 3, desc: 'Lucky ores appear 20% more often per rank' },
       { id: 'compound', name: 'Compound', tier: 2, max: 3, desc: '+0.3% coins per floor reached this run, per rank' },
-      { id: 'golddrill', name: 'Golden Drill', tier: 3, max: 1, desc: 'x2.5 damage while your combo is 0 (pure idle)' },
+      { id: 'golddrill', name: 'Golden Drill', tier: 3, max: 1, desc: 'x1.5 damage while your combo is 0 (pure idle)' },
     ],
   },
   {
@@ -189,7 +189,7 @@ const STATS = {
   crit: { name: 'Crit chance', base: 0.015, tier: 1.15 },
   critdmg: { name: 'Crit damage', base: 0.20, tier: 1.8 },
   xp: { name: 'XP', base: 0.10, tier: 1.7 },
-  strike: { name: 'Math strike', base: 0.25, tier: 2.2 },
+  strike: { name: 'Tap strike', base: 0.25, tier: 2.2 },
 };
 const SLOTS = {
   pick: { name: 'Pickaxe', main: 'dmg', weight: 40 },
@@ -236,12 +236,6 @@ const EPIC_PITY = 10;
 const LEGENDARY_PITY = 60;
 const FREE_CRATE_HOURS = 4;
 
-const MATH_TIERS = [
-  null,
-  'Addition', 'Subtraction', 'Times tables', 'Bigger sums', 'Division', 'Two-digit sums',
-  'Long multiply', 'Mixed operations', 'Squares and percents', 'Algebra', 'Two-digit times', 'Expert mix',
-];
-
 // Seven-day login calendar. The streak keeps counting past day 7 and keys grow each week.
 const DAILY_REWARDS = [
   { label: '2 keys', keys: 2 },
@@ -254,9 +248,9 @@ const DAILY_REWARDS = [
 ];
 
 const QUESTS = [
-  { id: 'solve', ev: 'solve', n: [40, 60, 80], text: n => `Solve ${n} problems` },
-  { id: 'quick', ev: 'quick', n: [15, 25, 35], text: n => `Get ${n} QUICK answers` },
-  { id: 'streak', ev: 'streak', max: true, n: [12, 18, 25], text: n => `Reach a streak of ${n}` },
+  { id: 'taps', ev: 'tap', n: [150, 250, 400], text: n => `Tap ${n} monsters` },
+  { id: 'perfects', ev: 'perfect', n: [60, 100, 160], text: n => `Land ${n} PERFECT taps` },
+  { id: 'streak', ev: 'streak', max: true, n: [30, 45, 65], text: n => `Reach a combo of ${n}` },
   { id: 'kills', ev: 'kill', n: [200, 350, 500], text: n => `Defeat ${n} enemies` },
   { id: 'bosses', ev: 'boss', n: [2, 3, 5], text: n => `Defeat ${n} bosses` },
   { id: 'floors', ev: 'floor', n: [10, 15, 25], text: n => `Clear ${n} floors` },
@@ -278,18 +272,18 @@ const ACHIEVEMENTS = [
   { id: 'f100', name: 'Into the Abyss', desc: 'Reach B100', test: statAtLeast('bestFloor', 100), keys: 5 },
   { id: 'f150', name: 'Starcore', desc: 'Reach B150', test: statAtLeast('bestFloor', 150), keys: 8 },
   { id: 'f200', name: 'Bottomless', desc: 'Reach B200', test: statAtLeast('bestFloor', 200), keys: 10 },
-  { id: 'p50', name: 'Warm Up', desc: 'Solve 50 problems', test: statAtLeast('correct', 50), keys: 1 },
-  { id: 'p250', name: 'Number Cruncher', desc: 'Solve 250 problems', test: statAtLeast('correct', 250), keys: 2 },
-  { id: 'p1000', name: 'Human Calculator', desc: 'Solve 1,000 problems', test: statAtLeast('correct', 1000), keys: 4 },
-  { id: 'p5000', name: 'Math Machine', desc: 'Solve 5,000 problems', test: statAtLeast('correct', 5000), keys: 8 },
-  { id: 's10', name: 'On a Roll', desc: 'Reach a streak of 10', test: statAtLeast('bestStreak', 10), keys: 1 },
-  { id: 's25', name: 'Locked In', desc: 'Reach a streak of 25', test: statAtLeast('bestStreak', 25), keys: 2 },
-  { id: 's50', name: 'Flow State', desc: 'Reach a streak of 50', test: statAtLeast('bestStreak', 50), keys: 4 },
-  { id: 's100', name: 'Unbreakable', desc: 'Reach a streak of 100', test: statAtLeast('bestStreak', 100), keys: 8 },
-  { id: 'ml4', name: 'Times Tables', desc: 'Reach Math Lv 4', test: statAtLeast('bestMath', 4), keys: 1 },
-  { id: 'ml7', name: 'Mental Gymnast', desc: 'Reach Math Lv 7', test: statAtLeast('bestMath', 7), keys: 2 },
-  { id: 'ml10', name: 'Algebra Brain', desc: 'Reach Math Lv 10', test: statAtLeast('bestMath', 10), keys: 4 },
-  { id: 'ml12', name: 'Big Brain', desc: 'Reach Math Lv 12', test: statAtLeast('bestMath', 12), keys: 6 },
+  { id: 't100', name: 'Warm Up', desc: 'Tap 100 monsters', test: statAtLeast('taps', 100), keys: 1 },
+  { id: 't1000', name: 'Quick Hands', desc: 'Tap 1,000 monsters', test: statAtLeast('taps', 1000), keys: 2 },
+  { id: 't5000', name: 'Whack-a-Mole', desc: 'Tap 5,000 monsters', test: statAtLeast('taps', 5000), keys: 4 },
+  { id: 't25000', name: 'Thousand Hands', desc: 'Tap 25,000 monsters', test: statAtLeast('taps', 25000), keys: 8 },
+  { id: 's10', name: 'On a Roll', desc: 'Reach a combo of 10', test: statAtLeast('bestStreak', 10), keys: 1 },
+  { id: 's25', name: 'Locked In', desc: 'Reach a combo of 25', test: statAtLeast('bestStreak', 25), keys: 2 },
+  { id: 's50', name: 'Flow State', desc: 'Reach a combo of 50', test: statAtLeast('bestStreak', 50), keys: 4 },
+  { id: 's100', name: 'Unbreakable', desc: 'Reach a combo of 100', test: statAtLeast('bestStreak', 100), keys: 8 },
+  { id: 'x2', name: 'Double Up', desc: 'Reach a x2 multiplier', test: statAtLeast('bestMult', 2), keys: 1 },
+  { id: 'x3', name: 'Triple Threat', desc: 'Reach a x3 multiplier', test: statAtLeast('bestMult', 3), keys: 2 },
+  { id: 'x45', name: 'In the Zone', desc: 'Reach a x4.5 multiplier', test: statAtLeast('bestMult', 4.5), keys: 4 },
+  { id: 'x6', name: 'Max Power', desc: 'Reach a x6 multiplier', test: statAtLeast('bestMult', 6), keys: 6 },
   { id: 'c10', name: 'Just One More', desc: 'Open 10 cases', test: statAtLeast('cases', 10), keys: 1 },
   { id: 'c50', name: 'Case Hardened', desc: 'Open 50 cases', test: statAtLeast('cases', 50), keys: 3 },
   { id: 'c250', name: 'High Roller', desc: 'Open 250 cases', test: statAtLeast('cases', 250), keys: 5 },

@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Deep Dig">
-<meta name="description" content="Pixel-art mining idle game where solving math problems powers your strikes. Works offline.">
+<meta name="description" content="Pixel-art mining idle game where tapping monsters powers your strikes. Works offline.">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -48,24 +48,14 @@
   <main id="panel">
     <section id="tab-fight" class="tab">
       <div id="ticker" class="ticker" aria-live="polite"></div>
-      <div id="mathcard" class="card mathcard">
-        <div class="problem"><span id="pQ" class="q">1 + 1</span><span id="pEq" class="eq">=</span><span id="pA" class="ans empty"></span></div>
+      <div id="combocard" class="card mathcard">
         <div class="mathmeta">
           <span id="cMult" class="mult zero">×1.00</span>
-          <div class="streakbar" title="Combo streak"><i id="cFill"></i></div>
-          <span id="cStreak" class="num">0/20</span>
-          <span>Math <b id="cLv">1</b></span>
-          <button id="skip" class="skip">Skip</button>
+          <div class="streakbar" title="Combo"><i id="cFill"></i></div>
+          <span id="cStreak" class="num">0/100</span>
         </div>
-        <div class="timer" title="Answer before the bar empties for a QUICK bonus"><i id="pTimer"></i></div>
       </div>
-      <div id="keypad" class="keypad">
-        <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button>
-        <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button>
-        <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button>
-        <button data-key="clear" class="fn">Clear</button><button data-key="0">0</button><button data-key="back" class="fn" aria-label="Delete">⌫</button>
-      </div>
-      <div id="choices" class="choices" hidden></div>
+      <div id="tappad" class="tappad" aria-label="Tap the monsters before their ring closes"></div>
       <div id="arena" class="arena"></div>
     </section>
     <section id="tab-forge" class="tab" hidden></section>
@@ -77,7 +67,7 @@
   </main>
 
   <nav id="tabs" aria-label="Game sections">
-    <button data-tab="fight" class="on"><img data-icon="brain" alt=""><span>Fight</span><i class="dot"></i></button>
+    <button data-tab="fight" class="on"><img data-icon="skull" alt=""><span>Fight</span><i class="dot"></i></button>
     <button data-tab="forge"><img data-icon="anvil" alt=""><span>Forge</span><i class="dot"></i></button>
     <button data-tab="skills"><img data-icon="star" alt=""><span>Skills</span><i class="dot"></i></button>
     <button data-tab="cases"><img data-icon="chest" alt=""><span>Cases</span><i class="dot"></i></button>
@@ -100,6 +90,7 @@
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/minigames.js"></script>
+  <script src="js/tappad.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

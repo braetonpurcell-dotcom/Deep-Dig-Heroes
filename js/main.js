@@ -17,7 +17,7 @@ function showIntro() {
   openModal(`<h2>Deep Dig Heroes</h2>
     <div style="text-align:center"><img src="${spriteUrl(heroSprite(false), 5, 'intro:hero')}" alt="" style="width:80px;image-rendering:pixelated"></div>
     <p>Your miner digs and fights on their own. Coins keep coming in, even while the app is closed.</p>
-    <p><b>Solve math problems to strike.</b> Each correct answer adds to your combo, and the combo multiplies all your damage. Quick answers hit harder. Mistakes cut your streak.</p>
+    <p><b>Tap the monsters on the pad before their ring closes.</b> Each tap strikes and adds to your combo, and the combo multiplies all your damage, up to x6. Tap early for a PERFECT. A monster that escapes cuts your combo, and the faster you are, the faster they come.</p>
     <p>Spend coins in the <b>Forge</b>, open <b>Cases</b> for gear and pets, and put skill points into your build. Reach B25 to prestige for permanent power.</p>
     <div class="mbtns"><button class="btn gold" data-act="close">Start digging</button></div>`, { dismissable: true });
 }
@@ -135,7 +135,6 @@ async function cloudInit() {
       if (d && typeof d.code === 'string' && (d.savedAt || 0) > (S.savedAt || 0) + 5000) {
         try {
           loadState(parseCode(d.code));
-          newProblem();
           saveLocal();
           refreshAll();
           toast('Loaded your newest save from your Claude account', 'good');
@@ -194,15 +193,15 @@ function boot(hotData) {
   bindInput();
   UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
   UI.nextBreak = S.settings.breakMin > 0 ? S.settings.breakMin * 60 : 0;
-  newProblem();
   showTab('fight');
+  tapStart();
 
   const away = base ? (Date.now() - (S.lastSeen || Date.now())) / 1000 : 0;
   const offline = away >= 60 ? applyOffline(away) : null;
   UI.booting = false;
   if (!base) queueModal(showIntro);
   if (broken) toast('Your save could not be read, so the game started fresh. A copy was kept.', 'bad');
-  if (S.bonusRound) toast('Your double-it round is still on: 5 in a row', 'purple');
+  if (S.bonusRound) toast(`Your double-it round is still on: ${BONUS_TAPS} taps in a row`, 'purple');
   if (offline && offline.coins > 0) queueModal(() => showWelcomeBack(offline));
   if (!S.daily.claimed) queueModal(showDailyPopup);
 
@@ -228,7 +227,7 @@ function boot(hotData) {
 window.DDH = {
   get state() { return S; }, runtime: R, step, recalc, saveLocal, exportCode, parseCode, loadState,
   buyUpgrade, learnSkill, openCase, equipItem, equipPet, mergeAllPets, doPrestige, canPrestige,
-  submitAnswer, skipProblem, collectOre, applyOffline, idleRates, claimDaily, claimQuest, claimAchievement,
+  tapHit, tapMiss, collectOre, applyOffline, idleRates, claimDaily, claimQuest, claimAchievement,
   upgradeQuote, caseCost, bestCaseTier, itemStats, comboMult, get stats() { return ST; },
 };
 

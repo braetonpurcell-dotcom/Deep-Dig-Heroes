@@ -1,11 +1,11 @@
 'use strict';
-// Game rules: state, formulas, combat, math combos, cases, gear, pets, quests, prestige and saves.
+// Game rules: state, formulas, combat, tap combos, cases, gear, pets, quests, prestige and saves.
 // Nothing here touches the DOM. Visual and UI code listens through on()/emit().
 
 const SAVE_KEY = 'ddh-save-v1';
 const SAVE_VERSION = 2;
 const KILLS_PER_FLOOR = 6;
-const BOSS_TIME = 45; // duel length: mini-games take longer than math answers
+const BOSS_TIME = 45; // duel length in seconds
 const DUEL_LIVES = 3;
 const MINIGAME_IDS = ['reaction', 'sequence', 'number', 'chimp'];
 const RUNE_CHANCE = 0.35;
@@ -37,8 +37,6 @@ function sharpenDamage(L) {
 }
 function upgradeCost(u, level) { return Math.ceil(u.base * Math.pow(u.growth, level)); }
 function coresFor(f) { return f < 25 ? 0 : Math.floor(TUNE.coreScale * Math.pow((f - 15) / 5, TUNE.coreExp)); }
-function strikeSeconds(tier) { return 1.2 + 0.25 * tier; }
-function targetTime(tier) { return 2.5 + 0.9 * tier; }
 function isBossFloor(f) { return f % 10 === 0; }
 function biomeIndex(f) { return Math.floor((f - 1) / FLOORS_PER_BIOME); }
 function biomeFor(f) { return BIOMES[biomeIndex(f) % BIOMES.length]; }
@@ -74,7 +72,7 @@ function freshState() {
     v: SAVE_VERSION, created: Date.now(), savedAt: 0, lastSeen: Date.now(),
     coins: 0, keys: 0, scrap: 0, cores: 0, trophies: 0, prestiges: 0, nextId: 1,
     run: freshRun(),
-    math: { rating: 1, streak: 0 },
+    math: { streak: 0 }, // the tap combo (the key name is kept so old saves load)
     gear: { eq: { pick: null, helm: null, charm: null }, bag: [] },
     pets: { inv, eq: [] },
     pity: { epic: 0, leg: 0 },
@@ -88,12 +86,12 @@ function freshState() {
     bonusRound: null,
     mg: { reaction: 0, sequence: 0, number: 0, chimp: 0 }, // personal bests (reaction is in ms, lower is better)
     stats: {
-      playTime: 0, kills: 0, bosses: 0, correct: 0, wrong: 0, skipped: 0, answerTime: 0, fastest: 0,
-      bestStreak: 0, bestMath: 1, cases: 0, bestDrop: -1, coinsEarned: 0, merges: 0, ores: 0, goldies: 0,
+      playTime: 0, kills: 0, bosses: 0, taps: 0, perfects: 0, escapes: 0, bestMult: 1,
+      bestStreak: 0, cases: 0, bestDrop: -1, coinsEarned: 0, merges: 0, ores: 0, goldies: 0,
       prestiges: 0, bestFloor: 1, maxHit: 0, dailyDone: 0, bestLogin: 0, days: {},
     },
     settings: {
-      sound: true, vibe: true, answer: 'keypad', mathMode: 'adaptive', mathTier: 3,
+      sound: true, vibe: true,
       autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA, bagSort: 'new',
     },
   };
@@ -149,7 +147,7 @@ function hydrate(obj) {
   const now = Date.now();
   for (const k of ['coins', 'keys', 'scrap', 'cores', 'trophies', 'prestiges']) s[k] = nonNeg(s[k]);
   s.nextId = nonNegInt(s.nextId, 1);
-  // Run and math numbers.
+  // Run and combo numbers.
   const run = s.run;
   run.level = Math.max(1, nonNegInt(run.level, 1));
   run.xp = nonNeg(run.xp);
@@ -172,7 +170,6 @@ function hydrate(obj) {
     else if (u.max != null) run.upg[id] = Math.min(u.max, run.upg[id]);
   }
   if (!run.bossDone || typeof run.bossDone !== 'object') run.bossDone = {};
-  s.math.rating = isFinite(s.math.rating) ? clamp(s.math.rating, 1, 12.99) : 1;
   s.math.streak = nonNegInt(s.math.streak);
   s.pity.epic = nonNegInt(s.pity.epic);
   s.pity.leg = nonNegInt(s.pity.leg);
@@ -234,16 +231,13 @@ function hydrate(obj) {
   if (!isFinite(s.created)) s.created = now;
   const br = s.bonusRound;
   if (!br || typeof br !== 'object' || !br.reward || !isFinite(br.reward.coins) || !isFinite(br.reward.xp)) s.bonusRound = null;
-  else s.bonusRound = { need: 5, done: nonNegInt(br.done), reward: { coins: nonNeg(br.reward.coins), xp: nonNeg(br.reward.xp) } };
+  else s.bonusRound = { need: BONUS_TAPS, done: nonNegInt(br.done), reward: { coins: nonNeg(br.reward.coins), xp: nonNeg(br.reward.xp) } };
   if (!s.mg || typeof s.mg !== 'object') s.mg = freshState().mg;
   for (const k of MINIGAME_IDS) s.mg[k] = nonNeg(s.mg[k]);
   // Settings.
   const st = s.settings;
-  if (!['keypad', 'choices'].includes(st.answer)) st.answer = 'keypad';
-  if (!['adaptive', 'fixed'].includes(st.mathMode)) st.mathMode = 'adaptive';
   if (!['low', 'med', 'high'].includes(st.juice)) st.juice = 'high';
   st.shake = st.shake !== false;
-  st.mathTier = Number.isInteger(st.mathTier) ? clamp(st.mathTier, 1, 12) : 3;
   st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, TOP_RARITY) : 0;
   if (!['new', 'rarity', 'best'].includes(st.bagSort)) st.bagSort = 'new';
   st.autoStop = Number.isInteger(st.autoStop) ? clamp(st.autoStop, 2, TOP_RARITY) : ULTRA;
@@ -260,7 +254,6 @@ let ST = null;
 const R = {
   sim: false, paused: false, hitstop: 0, time: 0, session: 0, secT: 0, dayKey: '', hiddenAt: 0,
   enemy: null, spawnT: 0.6, atkT: 0, swingT: 0, queued: [],
-  prob: null, probStart: 0, input: '', choices: null,
   lastAnswer: -99, decayAcc: 0,
   frenzyT: 0, ore: null, oreT: 40,
   boostOn: false, bonusRound: null, duel: null,
@@ -300,12 +293,13 @@ function computeStats() {
   st.dps = st.hit * st.aps * (1 + st.critChance * (st.critMult - 1));
   st.strikeMult = (1 + 0.1 * up('brain')) * (1 + 0.2 * sk('quickwit')) * (1 + add.strike);
   st.comboPer = 0.05 + 0.01 * sk('adrenaline');
-  st.comboCap = 20 + 4 * sk('momentum');
-  st.comboKeep = 0.5 + 0.1 * sk('ironmind');
+  // The tap pad's own difficulty is the real limit on the combo.
+  st.comboCap = TAP_COMBO_CAP + 4 * sk('momentum');
+  st.comboKeep = Math.min(0.95, TAP_KEEP + 0.05 * sk('ironmind'));
   st.decay = 6 + 2 * sk('focus');
   st.bossMult = 1 + 0.3 * sk('executioner');
   st.overdrive = sk('overdrive') > 0;
-  st.goldDrill = sk('golddrill') > 0 ? 2.5 : 1;
+  st.goldDrill = sk('golddrill') > 0 ? GOLD_DRILL : 1;
   st.boost = Date.now() < S.boostUntil ? 2 : 1;
   st.coinMult = (1 + 0.1 * up('magnet')) * (1 + add.coin) * (1 + 0.15 * sk('greed'))
     * (1 + 0.02 * branchPoints('tycoon')) * (1 + 0.003 * sk('compound') * S.run.maxFloor)
@@ -510,7 +504,7 @@ function startBossDuel() {
   return R.duel;
 }
 
-// A won mini-game round: a big strike that also keeps the math combo alive.
+// A won mini-game round: a big strike that also keeps the tap combo alive.
 function duelHit(quality) {
   const e = R.enemy;
   if (!R.duel || !e || !e.boss) return;
@@ -571,166 +565,58 @@ function canRetryBoss() {
   return !S.run.auto && isBossFloor(next) && next <= S.run.maxFloor;
 }
 
-// ---------- math combos ----------
-function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+// ---------- tap combos ----------
+// Monsters pop up on the tap pad (tappad.js) inside a shrinking ring. Each one tapped in time is a
+// strike and +1 combo; each one that escapes cuts the combo. The combo multiplies all damage,
+// including the miner's own swings, so active play is far stronger than leaving the game idle.
+const TAP_COMBO_CAP = 100; // 6x at the base 5% per stack
+let TAP_STRIKE = 0.35; // seconds of damage per tap
+const TAP_KEEP = 0.8; // an escaped monster keeps 80% of the combo
+const PERFECT_BONUS = 1.4; // tapped in the first half of the ring
+const OVERDRIVE_EVERY = 25;
+const GOLD_DRILL = 1.5;
+const BONUS_TAPS = 20; // "Double it" round: this many taps in a row without an escape
 
-function genProblem(tier) {
-  let text;
-  let answer;
-  let prompt = '?';
-  const r = randi;
-  switch (tier) {
-    case 1: { const a = r(1, 9), b = r(1, 9); text = `${a} + ${b}`; answer = a + b; break; }
-    case 2: { const a = r(6, 20), b = r(1, a - 1); text = `${a} − ${b}`; answer = a - b; break; }
-    case 3: { const a = r(2, 9), b = r(2, 9); text = `${a} × ${b}`; answer = a * b; break; }
-    case 4: {
-      if (Math.random() < 0.5) { const a = r(12, 89), b = r(3, 9); text = `${a} + ${b}`; answer = a + b; }
-      else { const a = r(21, 99), b = r(3, 9); text = `${a} − ${b}`; answer = a - b; }
-      break;
-    }
-    case 5: { const b = r(2, 9), q = r(2, 12); text = `${b * q} ÷ ${b}`; answer = q; break; }
-    case 6: {
-      if (Math.random() < 0.5) { const a = r(15, 89), b = r(15, 89); text = `${a} + ${b}`; answer = a + b; }
-      else { const a = r(40, 99), b = r(12, a - 5); text = `${a} − ${b}`; answer = a - b; }
-      break;
-    }
-    case 7: { const a = r(11, 25), b = r(3, 9); text = `${a} × ${b}`; answer = a * b; break; }
-    case 8: {
-      const a = r(3, 9), b = r(3, 9), c = r(2, 30);
-      if (Math.random() < 0.5) { text = `${a} × ${b} + ${c}`; answer = a * b + c; }
-      else { const cc = Math.min(c, a * b - 1); text = `${a} × ${b} − ${cc}`; answer = a * b - cc; }
-      break;
-    }
-    case 9: {
-      if (Math.random() < 0.5) {
-        const p = pick([5, 10, 15, 20, 25, 30, 40, 50, 60, 75]);
-        const stepN = 100 / gcd(p, 100);
-        const n = stepN * r(1, Math.max(1, Math.floor(400 / stepN)));
-        text = `${p}% of ${n}`;
-        answer = (p * n) / 100;
-      } else {
-        const a = r(11, 25);
-        text = `${a}²`;
-        answer = a * a;
-      }
-      break;
-    }
-    case 10: {
-      const x = r(2, 12), m = r(2, 9), b = r(1, 30);
-      text = `${m}x + ${b} = ${m * x + b}`;
-      answer = x;
-      prompt = 'x = ?';
-      break;
-    }
-    case 11: { const a = r(12, 39), b = r(11, 29); text = `${a} × ${b}`; answer = a * b; break; }
-    default: {
-      const v = r(1, 3);
-      if (v === 1) { const a = r(3, 15), b = r(2, 15), c = r(3, 9); text = `(${a} + ${b}) × ${c}`; answer = (a + b) * c; }
-      else if (v === 2) { const b = r(3, 9), q = r(14, 99); text = `${b * q} ÷ ${b}`; answer = q; }
-      else { const a = r(11, 30), b = r(2, a - 1); text = `${a}² − ${b}²`; answer = a * a - b * b; }
-    }
-  }
-  return { tier, text, answer, prompt };
-}
-
-function pickTier() {
-  if (S.settings.mathMode === 'fixed') return clamp(S.settings.mathTier, 1, 12);
-  const base = Math.floor(S.math.rating);
-  const roll = Math.random();
-  const t = roll < 0.15 ? base - 1 : roll < 0.85 ? base : base + 1;
-  return clamp(t, 1, 12);
-}
-
-function makeChoices(ans) {
-  const set = new Set([ans]);
-  const swapped = Number(String(ans).split('').reverse().join(''));
-  const cands = shuffle([ans + 1, ans - 1, ans + 2, ans - 2, ans + 10, ans - 10, ans + 5, ans - 5, swapped,
-    ans + 9, ans - 9, Math.round(ans * 1.1), Math.round(ans * 0.9)]);
-  for (const c of cands) {
-    if (set.size >= 4) break;
-    if (Number.isInteger(c) && c > 0 && c !== ans) set.add(c);
-  }
-  let k = 3;
-  while (set.size < 4) set.add(ans + k++);
-  return shuffle([...set]);
-}
-
-function newProblem() {
-  R.prob = genProblem(pickTier());
-  R.probStart = R.time;
-  R.input = '';
-  R.choices = makeChoices(R.prob.answer);
-  emit('problem', R.prob);
-}
-
-function submitAnswer(value) {
-  const p = R.prob;
-  if (!p) return null;
-  const dt = R.time - R.probStart;
-  const res = value === p.answer ? answerCorrect(p, dt) : answerWrong(p, value);
-  newProblem();
-  emit('answer', res);
-  return res;
-}
-
-function answerCorrect(p, dt) {
-  const T = targetTime(p.tier);
-  const quick = dt <= T * 0.6;
+function tapHit(quality) {
+  const perfect = quality >= 0.5;
   S.math.streak++;
   R.lastAnswer = R.time;
   R.decayAcc = 0;
   const st = S.stats;
-  st.correct++;
-  st.answerTime += dt;
-  if (!st.fastest || dt < st.fastest) st.fastest = dt;
+  st.taps++;
+  if (perfect) st.perfects++;
   let streakRecord = false;
   if (S.math.streak > st.bestStreak) {
     if (st.bestStreak >= 10 && S.math.streak === st.bestStreak + 1) streakRecord = true;
     st.bestStreak = S.math.streak;
   }
-  if (S.settings.mathMode === 'adaptive') {
-    const atLevel = p.tier >= Math.floor(S.math.rating);
-    const gain = quick ? 0.2 : dt <= T ? 0.1 : 0.02;
-    S.math.rating = clamp(S.math.rating + gain * (atLevel ? 1 : 0.4), 1, 12.99);
-  }
-  st.bestMath = Math.max(st.bestMath, Math.floor(S.math.rating));
-  let mult = strikeSeconds(p.tier) * ST.strikeMult;
-  if (quick) mult *= 1.5;
-  const mega = ST.overdrive && S.math.streak % 10 === 0;
+  st.bestMult = Math.max(st.bestMult, comboMult());
+  let mult = TAP_STRIKE * ST.strikeMult * (perfect ? PERFECT_BONUS : 1);
+  const mega = ST.overdrive && S.math.streak % OVERDRIVE_EVERY === 0;
   if (mega) mult *= 5;
-  queueStrike(mult, mega ? 'mega' : quick ? 'quick' : 'strike');
-  gainXp(xpUnit(S.run.floor) * (0.5 + 0.25 * p.tier) * ST.xpMult);
-  track('solve');
-  if (quick) track('quick');
+  queueStrike(mult, mega ? 'mega' : perfect ? 'quick' : 'strike');
+  gainXp(xpUnit(S.run.floor) * 0.3 * ST.xpMult);
+  track('tap');
+  if (perfect) track('perfect');
   track('streak', 0, S.math.streak);
   let bonus = null;
   if (R.bonusRound) {
     R.bonusRound.done++;
     if (R.bonusRound.done >= R.bonusRound.need) bonus = finishBonusRound(true);
   }
-  return { ok: true, quick, mega, dt, streak: S.math.streak, streakRecord, bonus, tier: p.tier };
+  const res = { ok: true, perfect, mega, streak: S.math.streak, streakRecord, bonus };
+  emit('tap', res);
+  return res;
 }
 
-function answerWrong(p, value) {
-  S.stats.wrong++;
+function tapMiss() {
   const before = S.math.streak;
   S.math.streak = Math.floor(S.math.streak * ST.comboKeep);
-  if (S.settings.mathMode === 'adaptive') S.math.rating = clamp(S.math.rating - 0.4, 1, 12.99);
-  let bonus = null;
-  if (R.bonusRound) bonus = finishBonusRound(false);
-  return { ok: false, answer: p.answer, text: p.text, given: value, lost: before - S.math.streak, bonus };
-}
-
-function skipProblem() {
-  if (!R.prob) return;
-  S.stats.skipped++;
-  S.math.streak = Math.floor(S.math.streak * Math.max(0.5, ST.comboKeep));
-  if (S.settings.mathMode === 'adaptive') S.math.rating = clamp(S.math.rating - 0.25, 1, 12.99);
-  const p = R.prob;
-  let bonus = null;
-  if (R.bonusRound) bonus = finishBonusRound(false);
-  newProblem();
-  emit('answer', { ok: false, skipped: true, answer: p.answer, text: p.text, bonus });
+  S.stats.escapes++;
+  const bonus = R.bonusRound ? finishBonusRound(false) : null;
+  const res = { ok: false, lost: before - S.math.streak, streak: S.math.streak, bonus };
+  emit('tap', res);
+  return res;
 }
 
 function queueStrike(mult, kind) {
@@ -754,7 +640,7 @@ function startBonusRound(reward) {
     // A second offer while a round is still running adds to it instead of replacing it.
     b.reward = { coins: b.reward.coins + reward.coins, xp: b.reward.xp + reward.xp };
   } else {
-    R.bonusRound = { need: 5, done: 0, reward: { coins: reward.coins, xp: reward.xp } };
+    R.bonusRound = { need: BONUS_TAPS, done: 0, reward: { coins: reward.coins, xp: reward.xp } };
   }
   S.bonusRound = R.bonusRound;
   emit('bonusRound', R.bonusRound);

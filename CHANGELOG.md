@@ -3,6 +3,13 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.7.0
+- Math is gone. Fights now use the tap pad: monsters pop up on a cave wall inside a shrinking ring, and you tap them before the ring closes. Each tap is a strike and +1 combo; tap in the first half of the ring for a PERFECT (40% harder). A monster that escapes cuts your combo by 20%.
+- The combo multiplies all your damage, including the miner's own swings, up to x6. The higher it is, the faster the rings close (1.6s at x1, about 0.6s at x4) and the more monsters show at once, so your multiplier settles wherever your reactions hold up.
+- Active play is now far stronger than idle: in the balance sim an active player reaches about B95 in 15 minutes against B32 left idle. Golden Drill (the idle capstone) drops from x2.5 to x1.5.
+- Quests and achievements are about tapping now: "Tap N monsters", "Land N PERFECT taps", higher combo goals, and new achievements for taps and for reaching x2, x3, x4.5 and x6. Old math quests are replaced on load; achievements you already claimed keep their trophies.
+- Renamed for the tap pad: Power Tap (was Brain Amp), Quick Hands, Tap strike; Iron Mind now softens escapes; Overdrive lands a MEGA strike every 25th tap. The "Double it" bonus round is 20 taps in a row without an escape.
+
 ## v1.6.0
 - Pets merge all the way to Singularity. Up to Mythic it still takes 3 copies; past that each step takes more: 5 Mythic make an Exotic, then 7, 9, 11, 13 and 15.
 - Auto-salvage can be set to any rarity, from Commons up to "Eclipse and below" (in More and on the auto-roll card). It never scraps an upgrade over the gear you have equipped.
