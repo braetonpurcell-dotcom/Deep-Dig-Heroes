@@ -58,3 +58,15 @@ On the phone, the game backs up your progress before every update and once a day
 ## Credits
 
 Jersey 10 font by the Soft Type Project Authors, under the SIL Open Font License 1.1 (`fonts/OFL.txt`).
+
+## Test copy (beta)
+
+`beta/` is a separate copy of the game for trying changes before they go live:
+https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/beta/
+
+- It has its own save (stored under a `ddh-beta:` prefix), its own offline copy and its own home-screen icon ("Dig BETA"), so it can't touch the real save.
+- It never posts to the leaderboard. A small pink BETA tag sits in the bottom-left corner.
+- Pushing changes inside `beta/` does not create a release.
+
+`node tools/beta.js reset` replaces `beta/` with a fresh copy of the live game.
+`node tools/beta.js promote` copies the game files from `beta/` over the live game; then release as usual (bump `js/version.js`, run `node tools/stamp-version.js`, add a CHANGELOG section).
