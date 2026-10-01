@@ -237,6 +237,7 @@ function rotateGoal(dt) {
 }
 
 function updateProblem() {
+  applyTapMode();
   const p = R.prob;
   if (!p) return;
   $('#pQ').textContent = p.text;
@@ -1064,7 +1065,7 @@ function buildMore() {
     ${settingRow('Vibration', toggleBtn('vibe'), 'Android only. iPhones do not allow web vibration.')}
     ${settingRow('Juice', segBtns('juice', [['low', 'Low'], ['med', 'Med'], ['high', 'High']]), 'How strong hits, freezes and particles feel.')}
     ${settingRow('Screen shake', toggleBtn('shake'))}
-    ${settingRow('Answer with', segBtns('answer', [['keypad', 'Keypad'], ['choices', 'Choices']]), 'The keypad trains your brain harder.')}
+    ${settingRow('Fight with', segBtns('answer', [['tap', 'Tap pad'], ['keypad', 'Math keypad'], ['choices', 'Math choices']]), 'Tap pad: tap monsters before their ring closes. Math: solve problems.')}
     ${settingRow('Math difficulty', segBtns('mathMode', [['adaptive', 'Adaptive'], ['fixed', 'Fixed']]), fixed ? MATH_TIERS[S.settings.mathTier] : 'Gets harder as you get faster.')}
     ${fixed ? settingRow('Fixed level', `<div class="seg"><button data-act="mathTier" data-v="-1">−</button><button class="on">Lv ${S.settings.mathTier}</button><button data-act="mathTier" data-v="1">+</button></div>`) : ''}
     ${settingRow('Auto-salvage', `<button class="btn small" data-act="autoScrap">${salvageLabel(S.settings.autoSalvage)}</button>`, 'Scrap new gear at or below this rarity. Tap to change. Upgrades over your equipped gear are always kept.')}

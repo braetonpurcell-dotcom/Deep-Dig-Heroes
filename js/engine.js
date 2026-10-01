@@ -239,7 +239,7 @@ function hydrate(obj) {
   for (const k of MINIGAME_IDS) s.mg[k] = nonNeg(s.mg[k]);
   // Settings.
   const st = s.settings;
-  if (!['keypad', 'choices'].includes(st.answer)) st.answer = 'keypad';
+  if (!['keypad', 'choices', 'tap'].includes(st.answer)) st.answer = 'keypad';
   if (!['adaptive', 'fixed'].includes(st.mathMode)) st.mathMode = 'adaptive';
   if (!['low', 'med', 'high'].includes(st.juice)) st.juice = 'high';
   st.shake = st.shake !== false;
@@ -300,7 +300,8 @@ function computeStats() {
   st.dps = st.hit * st.aps * (1 + st.critChance * (st.critMult - 1));
   st.strikeMult = (1 + 0.1 * up('brain')) * (1 + 0.2 * sk('quickwit')) * (1 + add.strike);
   st.comboPer = 0.05 + 0.01 * sk('adrenaline');
-  st.comboCap = 20 + 4 * sk('momentum');
+  // The tap pad's own difficulty caps the combo, so it can climb far past the math cap.
+  st.comboCap = (S.settings.answer === 'tap' ? TAP_COMBO_CAP : 20) + 4 * sk('momentum');
   st.comboKeep = 0.5 + 0.1 * sk('ironmind');
   st.decay = 6 + 2 * sk('focus');
   st.bossMult = 1 + 0.3 * sk('executioner');
@@ -731,6 +732,38 @@ function skipProblem() {
   if (R.bonusRound) bonus = finishBonusRound(false);
   newProblem();
   emit('answer', { ok: false, skipped: true, answer: p.answer, text: p.text, bonus });
+}
+
+// ---------- tap pad ----------
+const TAP_COMBO_CAP = 100; // 6x at the base 5% per stack
+const TAP_STRIKE = 0.45; // taps come ~5x as often as math answers, so each strike is smaller
+const TAP_KEEP = 0.8; // an escaped monster keeps 80% of the streak
+
+function tapHit(quality) {
+  const perfect = quality >= 0.5;
+  S.math.streak++;
+  R.lastAnswer = R.time;
+  R.decayAcc = 0;
+  if (S.math.streak > S.stats.bestStreak) S.stats.bestStreak = S.math.streak;
+  let mult = TAP_STRIKE * ST.strikeMult * (perfect ? 1.4 : 1);
+  const mega = ST.overdrive && S.math.streak % 25 === 0;
+  if (mega) mult *= 5;
+  queueStrike(mult, mega ? 'mega' : perfect ? 'quick' : 'strike');
+  gainXp(xpUnit(S.run.floor) * 0.3 * ST.xpMult);
+  track('streak', 0, S.math.streak);
+  let bonus = null;
+  if (R.bonusRound) {
+    R.bonusRound.done++;
+    if (R.bonusRound.done >= R.bonusRound.need) bonus = finishBonusRound(true);
+  }
+  return { perfect, mega, streak: S.math.streak, bonus };
+}
+
+function tapMiss() {
+  const before = S.math.streak;
+  S.math.streak = Math.floor(S.math.streak * TAP_KEEP);
+  if (R.bonusRound) finishBonusRound(false);
+  return before - S.math.streak;
 }
 
 function queueStrike(mult, kind) {
