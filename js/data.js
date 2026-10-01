@@ -1,25 +1,67 @@
 'use strict';
 // Game data tables. Tuning numbers live here and in the formulas at the top of engine.js.
 
+// `odds` is the base chance as "1 in N" before luck. Common takes whatever is left.
+// Above Mythic the tiers are huge power spikes: a Singularity carries a run ~15 floors past its wall.
 const RARITY = [
-  { key: 'common', name: 'Common', color: '#a7adbb', weight: 600 },
-  { key: 'rare', name: 'Rare', color: '#4aa8ff', weight: 250 },
-  { key: 'epic', name: 'Epic', color: '#b76dff', weight: 105 },
-  { key: 'legendary', name: 'Legendary', color: '#ffb52e', weight: 38 },
-  { key: 'mythic', name: 'Mythic', color: '#ff4d6d', weight: 7 },
+  { key: 'common', name: 'Common', color: '#a7adbb' },
+  { key: 'rare', name: 'Rare', color: '#4aa8ff', odds: 4 },
+  { key: 'epic', name: 'Epic', color: '#b76dff', odds: 10 },
+  { key: 'legendary', name: 'Legendary', color: '#ffb52e', odds: 26 },
+  { key: 'mythic', name: 'Mythic', color: '#ff4d6d', odds: 143 },
+  { key: 'exotic', name: 'Exotic', color: '#2ff0c4', odds: 500 },
+  { key: 'divine', name: 'Divine', color: '#fff4a8', odds: 2500 },
+  { key: 'celestial', name: 'Celestial', color: '#7fd4ff', odds: 10000 },
+  { key: 'cosmic', name: 'Cosmic', color: '#ff6bd6', odds: 50000 },
+  { key: 'eclipse', name: 'Eclipse', color: '#9b6bff', odds: 250000 },
+  { key: 'singularity', name: 'Singularity', color: '#ffffff', odds: 1000000 },
 ];
-const RARITY_MULT = [1, 1.8, 3, 5, 8]; // gear stat multiplier
-const PET_POWER = [1, 2.2, 4.5, 9, 18]; // pet stat multiplier
+{
+  let rest = 1;
+  for (const r of RARITY) if (r.odds) { r.weight = 1 / r.odds; rest -= r.weight; }
+  RARITY[0].weight = rest;
+}
+const TOP_RARITY = RARITY.length - 1;
+const ULTRA = 5; // Exotic and above: big reveals, auras, no pity
+const MERGE_MAX = 4; // pets merge up to Mythic; anything above only comes from cases
+const RARITY_MULT = [1, 1.8, 3, 5, 8, 14, 25, 45, 80, 140, 250]; // gear stat multiplier
+const PET_POWER = [1, 2.2, 4.5, 9, 18, 30, 50, 85, 140, 230, 380]; // pet stat multiplier
+// Luck and sub-stats only creep up past Mythic: the huge jumps are for damage and coins,
+// otherwise one lucky pull would snowball into more lucky pulls.
+const SUB_MULT = [1, 1.8, 3, 5, 8, 9, 10, 11, 12, 13, 14];
 
-// Index 0 is the starter pick you carry before finding gear.
+// Index 0 is the starter pick you carry before finding gear. Drops are made of the material
+// for your deepest floor this run (a new one every MATERIAL_FLOORS floors), so there is always
+// a better version of every item further down.
 const MATERIALS = [
   { name: 'Rusty', color: '#8d939e' },
   { name: 'Copper', color: '#e08a4a' },
+  { name: 'Tin', color: '#b9c2c9' },
+  { name: 'Bronze', color: '#c48a3a' },
+  { name: 'Cobalt', color: '#4f7bd9' },
   { name: 'Iron', color: '#cfd6df' },
+  { name: 'Steel', color: '#8fa6bf' },
+  { name: 'Silver', color: '#e9eef4' },
+  { name: 'Rose Gold', color: '#f2a58c' },
   { name: 'Gold', color: '#ffd23f' },
+  { name: 'Platinum', color: '#f4f8ff' },
+  { name: 'Jade', color: '#4fd98a' },
+  { name: 'Ruby', color: '#ff3b5c' },
   { name: 'Crystal', color: '#7ff6ff' },
+  { name: 'Sapphire', color: '#4a74ff' },
+  { name: 'Obsidian', color: '#5b4a86' },
+  { name: 'Magma', color: '#ff6a2a' },
   { name: 'Void', color: '#c46cff' },
+  { name: 'Mithril', color: '#c4fff2' },
+  { name: 'Starmetal', color: '#fff6c0' },
+  { name: 'Dragonbone', color: '#f2e2bd' },
+  { name: 'Eternium', color: '#ff9cf0' },
 ];
+const MATERIAL_FLOORS = 10;
+// Each material step multiplies item stats by a quarter-power of the stat's growth, e.g. damage
+// x1.26 every 10 floors. Four steps equal one case tier (the old Copper, Iron, Gold, Crystal, Void).
+let MATERIAL_STEP = 0.25;
+const MATERIALS_PER_CASE = 4;
 
 const BIOMES = [
   {
@@ -156,13 +198,14 @@ const SLOTS = {
 };
 const SLOT_IDS = Object.keys(SLOTS);
 const SUB_POOL = ['aps', 'crit', 'critdmg', 'xp', 'strike', 'dmg', 'coin', 'luck'];
-const SUB_COUNT = [0, 1, 1, 2, 3];
+const SUB_COUNT = [0, 1, 1, 2, 3, 3, 4, 4, 4, 5, 5];
+// CS2-style wear: first a band is picked with these shares, then a float inside the band.
 const WEAR = [
-  { max: 0.07, name: 'Factory New' },
-  { max: 0.15, name: 'Minimal Wear' },
-  { max: 0.38, name: 'Field-Tested' },
-  { max: 0.45, name: 'Well-Worn' },
-  { max: 1.01, name: 'Battle-Scarred' },
+  { min: 0, max: 0.07, name: 'Factory New', short: 'FN', share: 0.03 },
+  { min: 0.07, max: 0.15, name: 'Minimal Wear', short: 'MW', share: 0.24 },
+  { min: 0.15, max: 0.38, name: 'Field-Tested', short: 'FT', share: 0.33 },
+  { min: 0.38, max: 0.45, name: 'Well-Worn', short: 'WW', share: 0.24 },
+  { min: 0.45, max: 1, name: 'Battle-Scarred', short: 'BS', share: 0.16 },
 ];
 const MAX_ITEM_LEVEL = 10;
 const BAG_SIZE = 60;
@@ -177,14 +220,17 @@ const PETS = {
 };
 const PET_IDS = Object.keys(PETS);
 
+// Better cases make their items from deeper materials (+4 materials per case tier above Copper).
+// `chest` is the material used to draw the case.
 const CASES = [
-  { tier: 1, name: 'Copper Crate', base: 40, prestige: 0 },
-  { tier: 2, name: 'Iron Case', base: 160, prestige: 1 },
-  { tier: 3, name: 'Gold Case', base: 650, prestige: 2 },
-  { tier: 4, name: 'Crystal Case', base: 2600, prestige: 3 },
-  { tier: 5, name: 'Void Case', base: 10000, prestige: 5 },
+  { tier: 1, name: 'Copper Crate', base: 20, prestige: 0, chest: 1 },
+  { tier: 2, name: 'Iron Case', base: 80, prestige: 1, chest: 5 },
+  { tier: 3, name: 'Gold Case', base: 320, prestige: 2, chest: 9 },
+  { tier: 4, name: 'Crystal Case', base: 1300, prestige: 3, chest: 13 },
+  { tier: 5, name: 'Void Case', base: 5000, prestige: 5, chest: 17 },
 ];
-const CASE_INFLATION = 1.035; // each case bought with coins this run costs 3.5% more
+let CASE_INFLATION = 1.005; // each case bought with coins this run costs 0.5% more
+const AUTO_ROLL_MS = 450; // auto-roll speed while the game is open
 const PET_CHANCE = 0.3;
 const EPIC_PITY = 10;
 const LEGENDARY_PITY = 60;
@@ -251,6 +297,12 @@ const ACHIEVEMENTS = [
   { id: 'd2', name: 'Purple Haze', desc: 'Find an Epic drop', test: statAtLeast('bestDrop', 2), keys: 1 },
   { id: 'd3', name: 'Golden Glow', desc: 'Find a Legendary drop', test: statAtLeast('bestDrop', 3), keys: 3 },
   { id: 'd4', name: 'Red Alert', desc: 'Find a Mythic drop', test: statAtLeast('bestDrop', 4), keys: 6 },
+  { id: 'd5', name: 'Exotic Taste', desc: 'Find an Exotic drop', test: statAtLeast('bestDrop', 5), keys: 8 },
+  { id: 'd6', name: 'Divine Light', desc: 'Find a Divine drop', test: statAtLeast('bestDrop', 6), keys: 12 },
+  { id: 'd7', name: 'Starstruck', desc: 'Find a Celestial drop', test: statAtLeast('bestDrop', 7), keys: 16 },
+  { id: 'd8', name: 'Cosmic Luck', desc: 'Find a Cosmic drop', test: statAtLeast('bestDrop', 8), keys: 20 },
+  { id: 'd9', name: 'Total Eclipse', desc: 'Find an Eclipse drop', test: statAtLeast('bestDrop', 9), keys: 30 },
+  { id: 'd10', name: 'One in a Million', desc: 'Find a Singularity drop', test: statAtLeast('bestDrop', 10), keys: 50 },
   { id: 'b5', name: 'Boss Hunter', desc: 'Defeat 5 bosses', test: statAtLeast('bosses', 5), keys: 1 },
   { id: 'b25', name: 'Boss Slayer', desc: 'Defeat 25 bosses', test: statAtLeast('bosses', 25), keys: 3 },
   { id: 'b100', name: 'Boss Nightmare', desc: 'Defeat 100 bosses', test: statAtLeast('bosses', 100), keys: 6 },
@@ -263,7 +315,8 @@ const ACHIEVEMENTS = [
   { id: 'm50', name: 'Menagerie', desc: 'Merge 50 pets', test: statAtLeast('merges', 50), keys: 6 },
   { id: 'col15', name: 'Collector', desc: 'Fill 15 index entries', test: () => collectionCount() >= 15, keys: 2 },
   { id: 'col30', name: 'Curator', desc: 'Fill 30 index entries', test: () => collectionCount() >= 30, keys: 4 },
-  { id: 'col45', name: 'Completionist', desc: 'Fill all 45 index entries', test: () => collectionCount() >= 45, keys: 10 },
+  { id: 'col45', name: 'Archivist', desc: 'Fill 45 index entries', test: () => collectionCount() >= 45, keys: 10 },
+  { id: 'col70', name: 'Completionist', desc: 'Fill 70 index entries', test: () => collectionCount() >= 70, keys: 25 },
   { id: 'q1', name: 'Daily Grind', desc: 'Finish all daily quests once', test: statAtLeast('dailyDone', 1), keys: 2 },
   { id: 'q7', name: 'Habit Formed', desc: 'Finish all daily quests on 7 days', test: statAtLeast('dailyDone', 7), keys: 6 },
   { id: 'l7', name: 'Week Streak', desc: 'Log in 7 days in a row', test: statAtLeast('bestLogin', 7), keys: 4 },

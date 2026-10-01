@@ -128,6 +128,15 @@ const SFX = {
     [0, 4, 7, 12].forEach((s, i) => tone(523.25 * Math.pow(2, (s + n) / 12), 0.18, 'square', 0.18, 0, i * 0.035, false));
     noise(0.2, 0.15, 4000, 0.05);
   },
+  // Exotic and up: a rising arpeggio over a held chord, longer and brighter for rarer tiers.
+  ultra(r) {
+    const steps = 6 + 2 * (r - ULTRA);
+    for (let i = 0; i < steps; i++) tone(scaleNote(i + 5, 392), 0.22, 'square', 0.16, 0, 0.6 + i * 0.07, false);
+    const end = 0.6 + steps * 0.07;
+    [0, 4, 7, 12, 16].slice(0, 3 + Math.min(2, r - ULTRA)).forEach(st =>
+      tone(523.25 * Math.pow(2, st / 12), 0.9 + 0.15 * (r - ULTRA), 'sawtooth', 0.1, 0, end, false));
+    noise(0.6 + 0.1 * (r - ULTRA), 0.18, 5000, end);
+  },
   pop() {
     tone(rand(700, 1000), 0.03, 'triangle', 0.12);
   },
@@ -149,7 +158,7 @@ const SFX = {
   reveal(r) {
     // Fanfare matches the real rarity: a Common gets a plain click, not a win jingle.
     if (r <= 0) { tone(660, 0.05, 'triangle', 0.2); return; }
-    const base = [392, 440, 523, 659, 784][r];
+    const base = [392, 440, 523, 659, 784][Math.min(r, 4)];
     const notes = r >= 3 ? [1, 1.25, 1.5, 2, 2.5] : r >= 2 ? [1, 1.25, 1.5, 2] : [1, 1.5];
     notes.forEach((m, i) => tone(base * m, 0.16, r >= 3 ? 'sawtooth' : 'square', 0.22, 0, i * 0.08));
     if (r >= 3) noise(0.4, 0.2, 3000, 0.1);

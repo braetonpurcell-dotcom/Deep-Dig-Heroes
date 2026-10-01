@@ -464,20 +464,21 @@ function buildCases() {
       <div>Epic+ guaranteed in <b>${epicPityLeft()}</b></div>
       <div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - S.pity.leg)}</b></div></div>
     <div class="odds" style="margin-top:6px">${RARITY.map((r, i) =>
-      `<span class="tc${i}">${r.name} ${(odds[i] * 100).toFixed(odds[i] < 0.01 ? 2 : 1)}%</span>`).join('')}</div>
-    <div class="small muted" style="margin-top:4px">Luck ${fmtPct(Math.max(0, ST.luck))} · 3 in 10 drops are pets</div></div>`;
+      `<span class="tc${i}">${r.name} ${oddsShort(1 / odds[i])}</span>`).join('')}</div>
+    <div class="small muted" style="margin-top:4px">Luck ${fmtPct(Math.max(0, ST.luck))} · 3 in 10 drops are pets · gear wear: FN 3%, MW 24%, FT 33%, WW 24%, BS 16%</div></div>`;
+  h += autoCardHtml();
   h += `<div class="card casecard"><div class="chest"><img src="${chestUrl(best)}" alt=""></div><div>
       <b>Free ${CASES[best - 1].name}</b><div class="small muted" id="freeTimer">${ready ? 'Ready now' : 'Next in ' + fmtClock((S.freeCrateAt - Date.now()) / 1000)}</div>
       <div class="casebtns"><button class="btn good" data-act="openFree" ${ready ? '' : 'disabled'}>Open free crate</button></div></div></div>`;
   for (const c of CASES) {
     if (!caseUnlocked(c)) {
       h += `<div class="card casecard" style="opacity:.55"><div class="chest"><img src="${chestUrl(c.tier)}" alt=""></div><div>
-        <b>${c.name}</b><div class="small muted">Unlocks at prestige ${c.prestige}. Stats roughly ${Math.pow(3, c.tier - 1)}× a Copper Crate.</div></div></div>`;
+        <b>${c.name}</b><div class="small muted">Unlocks at prestige ${c.prestige}. Its items are made ${plural(MATERIALS_PER_CASE * (c.tier - 1), 'material')} deeper than a Copper Crate's, about ${Math.pow(2.5, c.tier - 1).toFixed(1).replace('.0', '')}× the damage.</div></div></div>`;
       continue;
     }
     const cost = caseCost(c);
     h += `<div class="card casecard"><div class="chest"><img src="${chestUrl(c.tier)}" alt=""></div><div>
-      <b>${c.name}</b> <span class="small muted">Tier ${c.tier}</span>
+      <b>${c.name}</b> <span class="small muted">· ${MATERIALS[dropMaterial(c.tier)].name} gear</span>
       <div class="casebtns">
         <button class="btn gold" data-act="openCase" data-t="${c.tier}" data-n="1" data-cost="${cost}">Open ${costHtml(cost)}</button>
         <button class="btn gold" data-act="openCase" data-t="${c.tier}" data-n="10" data-cost="${cost * 10}">×10 ${costHtml(cost * 10)}</button>
@@ -506,6 +507,12 @@ function refreshCaseButtons() {
 
 function refreshCases() {
   refreshCaseButtons();
+  const card = $('#autoCard');
+  if (card && !UI.auto) {
+    const c = CASES[autoTier() - 1];
+    const key = caseCost(c) + '|' + (S.coins >= caseCost(c));
+    if (key !== UI.autoKey || !card.childElementCount) { UI.autoKey = key; renderAutoBox(); }
+  }
   for (const b of $$('#tab-cases [data-act="openKey"]')) b.disabled = S.keys < 1;
   const ft = $('#freeTimer');
   if (ft) {
@@ -517,24 +524,36 @@ function refreshCases() {
   }
 }
 
+// Odds as "1/83K" on tiles and "1 in 83,333" on the reveal.
+function oddsShort(n) {
+  if (!isFinite(n)) return '1/∞';
+  if (n < 1000) return '1/' + Math.round(n);
+  const unit = n < 1e6 ? ['K', 1e3] : ['M', 1e6];
+  const v = n / unit[1];
+  return '1/' + (v < 10 ? String(Math.round(v * 10) / 10) : String(Math.round(v))) + unit[0];
+}
+function oddsLong(n) { return '1 in ' + Math.round(n).toLocaleString('en-US'); }
+
 function dropView(d) {
-  if (d.kind === 'pet') return { img: petUrl(d.sp), r: d.r, label: PETS[d.sp].name };
+  if (d.kind === 'pet') return { img: petUrl(d.sp, false, d.r), r: d.r, label: PETS[d.sp].name, odds: d.odds };
   const it = d.item;
-  return { img: gearUrl(it.slot, it.t, it.r), r: it.r, label: SLOTS[it.slot].name };
+  return { img: gearUrl(it.slot, it.t, it.r), r: it.r, label: SLOTS[it.slot].name, odds: d.odds, wear: WEAR[wearIndex(it.fl)].short };
 }
 
+// Reel filler rolled with the real odds, so what slides past is what the case really holds.
 function decoy(tier, forceR = null) {
   const r = forceR == null ? weightedIndex(rarityWeights(0)) : forceR;
   if (Math.random() < PET_CHANCE) {
     const sp = weightedPick(PET_IDS, id => PETS[id].weight);
-    return { img: petUrl(sp), r, label: PETS[sp].name };
+    return { img: petUrl(sp, false, r), r, label: PETS[sp].name, odds: dropOdds(r) };
   }
   const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight);
-  return { img: gearUrl(slot, tier, r), r, label: SLOTS[slot].name };
+  const fl = rollFloat();
+  return { img: gearUrl(slot, dropMaterial(tier), r), r, label: SLOTS[slot].name, odds: dropOdds(r, fl), wear: WEAR[wearIndex(fl)].short };
 }
 
 function tileHtml(v, extra = '') {
-  return `<div class="tile rc${v.r} ${extra}"><img src="${v.img}" alt=""><small>${v.label}</small></div>`;
+  return `<div class="tile rc${v.r} ${extra}">${v.wear ? `<span class="wear-tag">${v.wear}</span>` : ''}${v.odds ? `<span class="odds-tag">${oddsShort(v.odds)}</span>` : ''}<img src="${v.img}" alt=""><small>${v.label}</small></div>`;
 }
 
 function caseLabel(ctx) {
@@ -568,10 +587,9 @@ function showReel(drops, ctx) {
   for (let i = 0; i < N; i++) entries.push(decoy(ctx.tier));
   const win = drops[0];
   entries[WIN] = dropView(win);
-  if (win.r < 3 && Math.random() < 0.45) {
-    const side = Math.random() < 0.65 ? 1 : -1;
-    entries[WIN + side] = decoy(ctx.tier, Math.random() < 0.75 ? 3 : 4);
-  }
+  // Honest reel: the neighbours are real rolls. About 1 reel in 15 shows one Exotic-or-better
+  // sliding past early, so you know they exist, but never right next to the winner.
+  if (Math.random() < 1 / 15) entries[WIN - randi(5, 16)] = decoy(ctx.tier, weightedIndex(rarityWeights(ULTRA)));
   const html = `<h2>${escapeHtml(caseLabel(ctx))}</h2>
     <div class="reelwrap" id="reelWrap"><div class="reel" id="reel">${entries.map(e => tileHtml(e)).join('')}</div><div class="marker"></div></div>
     <div id="reelResult" class="result"><p class="small muted" style="text-align:center">Tap the reel to skip</p></div>`;
@@ -584,7 +602,8 @@ function showReel(drops, ctx) {
       const land = WIN * TILE + rand(6, 70);
       const target = -(land - W / 2);
       const start = rand(-20, 0);
-      const dur = 4600;
+      // Rarer wins crawl in slower, so the last few tiles build suspense.
+      const dur = 4600 + (win.r >= ULTRA ? Math.min(4000, 800 * (win.r - ULTRA + 1)) : 0);
       const t0 = performance.now();
       let lastIdx = -1;
       let done = false;
@@ -632,9 +651,9 @@ function dropDetailHtml(d) {
     const inParty = petEquippedCount(d.sp, d.r) > 0;
     const full = S.pets.eq.length >= petSlots();
     const where = inParty ? 'In your party.' : full ? 'Party full: swap pets in Bag › Pets.' : '';
-    const merge = d.r < 4 ? 'Merge 3 into the next rarity.' : 'Top rarity.';
+    const merge = d.r < MERGE_MAX ? 'Merge 3 into the next rarity.' : '';
     return `<div class="rname tc${d.r}">${RARITY[d.r].name} ${def.name}</div>
-      <div class="rsub">${petBonusText(d.sp, d.r)}</div>
+      ${pullOddsHtml(d)}<div class="rsub">${petBonusText(d.sp, d.r)}</div>
       <div class="rsub">You own ${S.pets.inv[d.sp][d.r]}. ${where} ${merge}</div>`;
   }
   const it = d.item;
@@ -650,14 +669,23 @@ function dropDetailHtml(d) {
       + itemStats(eq).map(s => `<div class="statline small muted"><span>${STATS[s.k].name}</span><span>${statVal(s.k, s.v)}</span></div>`).join('');
   }
   return `<div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}</div>
-    <div class="rsub">${wearHtml(it)}</div>${lines}${note}${cmp}`;
+    ${pullOddsHtml(d)}<div class="rsub">${wearHtml(it)}</div>${lines}${note}${cmp}`;
+}
+
+function pullOddsHtml(d) {
+  if (!isFinite(d.odds)) return '';
+  const wear = d.kind === 'gear' ? ' ' + WEAR[wearIndex(d.item.fl)].short : '';
+  const what = d.kind === 'pet' ? 'pet' : SLOTS[d.item.slot].name.toLowerCase();
+  const rec = d.recordAll ? 'Your rarest pull ever!' : d.record ? `Your rarest ${what} yet!` : '';
+  return `<div class="pull-odds tc${d.r}">${RARITY[d.r].name}${wear} · ${oddsLong(d.odds)}</div>${rec ? `<div class="rsub record">${rec}</div>` : ''}`;
 }
 
 function revealResult(drops, ctx) {
   const win = drops[0];
   releaseToasts();
   SFX.reveal(win.r);
-  if (win.r >= 2) vibrate(win.r >= 3 ? [40, 50, 40, 50, 120] : [30, 40, 60]);
+  if (win.r >= ULTRA) celebrate(win.r);
+  else if (win.r >= 2) vibrate(win.r >= 3 ? [40, 50, 40, 50, 120] : [30, 40, 60]);
   if (win.r >= 3) toast(`${RARITY[win.r].name} drop!`, 'gold');
   let h = dropDetailHtml(win);
   const extra = drops.slice(1);
@@ -705,7 +733,8 @@ function showMulti(drops, ctx) {
         releaseToasts();
         SFX.reveal(best);
         if (best >= 2) vibrate([30, 40, 80]);
-        const counts = [0, 0, 0, 0, 0];
+        if (best >= ULTRA) celebrate(best);
+        const counts = RARITY.map(() => 0);
         views.forEach(v => counts[v.r]++);
         const equipped = drops.filter(d => d.autoEquipped).length;
         const salvaged = drops.filter(d => d.salvaged).reduce((a, d) => a + d.salvaged, 0);
@@ -716,6 +745,7 @@ function showMulti(drops, ctx) {
           ${equipped ? `<div class="rsub" style="color:var(--good)">${plural(equipped, 'item')} equipped in empty slots</div>` : ''}
           ${salvaged ? `<div class="rsub">Auto-salvaged for ${salvaged} scrap</div>` : ''}
           ${room.length ? `<div class="rsub">Bag full: scrapped ${plural(room.length, 'weaker item')} (+${roomScrap} scrap) to make room</div>` : ''}
+          ${drops.some(d => d.recordAll) ? '<div class="rsub record">New rarest pull ever!</div>' : ''}
           <div class="rsub">Check the Bag tab to compare and equip.</div>
           <div class="mbtns">${againButton(ctx)}<button class="btn" data-act="close">Close</button></div>`;
         if (UI.modalOpts) UI.modalOpts.dismissable = true;
@@ -766,7 +796,7 @@ function gearViewHtml() {
 
 function partyBonusText() {
   const add = {};
-  for (const p of S.pets.eq) for (const k in PETS[p.sp].stats) add[k] = (add[k] || 0) + PETS[p.sp].stats[k] * PET_POWER[p.r];
+  for (const p of S.pets.eq) for (const k in PETS[p.sp].stats) add[k] = (add[k] || 0) + PETS[p.sp].stats[k] * petPower(k, p.r);
   const parts = Object.entries(add).map(([k, v]) => statText(k, v));
   return parts.length ? parts.join(', ') : 'none yet';
 }
@@ -785,7 +815,7 @@ function petsViewHtml() {
       continue;
     }
     h += `<button class="petslot full rc${p.r}" data-act="unequipPet" data-i="${i}" aria-label="Send ${PETS[p.sp].name} back">
-      <img src="${petUrl(p.sp)}" alt=""><small>${RARITY[p.r].name}</small></button>`;
+      <img src="${petUrl(p.sp, false, p.r)}" alt=""><small>${RARITY[p.r].name}</small></button>`;
   }
   h += `</div><div class="small muted" style="margin-top:6px">Party bonus: ${partyBonusText()}. Tap a party pet to send it back.</div></div>`;
   const merges = mergeablePets();
@@ -799,10 +829,10 @@ function petsViewHtml() {
     any = true;
     h += `<div class="card petrow"><div class="pic"><img src="${petUrl(sp)}" alt=""></div><div>
       <b>${PETS[sp].name}</b> <span class="small muted">${petBonusText(sp, 0)} at Common</span><div class="chips">`;
-    for (let r = 0; r < 5; r++) {
+    for (let r = 0; r < RARITY.length; r++) {
       if (!inv[r]) continue;
       const eqn = petEquippedCount(sp, r);
-      const canMerge = r < 4 && inv[r] - eqn >= 3;
+      const canMerge = r < MERGE_MAX && inv[r] - eqn >= 3;
       h += `<button class="pchip rc${r} ${eqn ? 'eq' : ''}" data-act="pet" data-sp="${sp}" data-r="${r}">${RARITY[r].name} ×${inv[r]}${canMerge ? ' · merge' : ''}</button>`;
     }
     h += '</div></div></div>';
@@ -812,24 +842,36 @@ function petsViewHtml() {
   return h;
 }
 
+function bestPullLine(label, b) {
+  if (!b) return `<div class="statline"><span>${label}</span><span class="muted">None yet</span></div>`;
+  let what;
+  if (b.sp) what = `${RARITY[b.r].name} ${PETS[b.sp].name}`;
+  else what = `${RARITY[b.r].name} ${WEAR[wearIndex(b.fl)].short} ${MATERIALS[b.t] ? MATERIALS[b.t].name : ''} ${SLOTS[b.slot] ? SLOTS[b.slot].name : ''}`;
+  return `<div class="statline"><span>${label}</span><span><span class="tc${b.r}">${what}</span> · ${oddsLong(b.odds)}</span></div>`;
+}
+
 function indexViewHtml() {
   const n = collectionCount();
-  let h = `<div class="card small">Found <b>${n}/45</b>. Each entry adds +1% damage and coins forever (now ${fmtPct(n * COLLECTION_BONUS)}).</div>`;
+  const total = (PET_IDS.length + SLOT_IDS.length) * RARITY.length;
+  let h = `<div class="card"><h3>Rarest pulls</h3>${bestPullLine('All-time', S.best.all)}
+    ${SLOT_IDS.map(sl => bestPullLine(SLOTS[sl].name, S.best[sl])).join('')}${bestPullLine('Pet', S.best.pet)}
+    <div class="small muted" style="margin-top:4px">Kept forever, even through prestige. Odds include the wear and your luck at the time.</div></div>`;
+  h += `<div class="card small">Found <b>${n}/${total}</b>. Each entry adds +1% damage and coins forever (now ${fmtPct(n * COLLECTION_BONUS)}).</div>`;
   h += '<div class="h3">Pets</div>';
   for (const sp of PET_IDS) {
     h += '<div class="index">';
-    for (let r = 0; r < 5; r++) {
+    for (let r = 0; r < RARITY.length; r++) {
       const got = S.coll[`pet:${sp}:${r}`];
-      h += `<div class="rc${r} ${got ? 'got' : ''}" title="${got ? RARITY[r].name + ' ' + PETS[sp].name : '???'}"><img src="${petUrl(sp, !got)}" alt=""></div>`;
+      h += `<div class="rc${r} ${got ? 'got' : ''}" title="${got ? RARITY[r].name + ' ' + PETS[sp].name : '???'}"><img src="${petUrl(sp, !got, r)}" alt=""></div>`;
     }
     h += '</div>';
   }
   h += '<div class="h3">Gear</div>';
   for (const slot of SLOT_IDS) {
     h += '<div class="index">';
-    for (let r = 0; r < 5; r++) {
+    for (let r = 0; r < RARITY.length; r++) {
       const got = S.coll[`gear:${slot}:${r}`];
-      h += `<div class="rc${r} ${got ? 'got' : ''}" title="${got ? RARITY[r].name + ' ' + SLOTS[slot].name : '???'}"><img src="${gearUrl(slot, Math.min(5, r + 1), r, !got)}" alt=""></div>`;
+      h += `<div class="rc${r} ${got ? 'got' : ''}" title="${got ? RARITY[r].name + ' ' + SLOTS[slot].name : '???'}"><img src="${gearUrl(slot, Math.min(MATERIALS.length - 1, 1 + 2 * r), r, !got)}" alt=""></div>`;
     }
     h += '</div>';
   }
@@ -858,7 +900,8 @@ function showItem(id) {
   actions += '<button class="btn" data-act="close">Close</button>';
   openModal(`<div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}${it.lv ? ' +' + it.lv : ''}</div>
-    <div class="rsub">Tier ${it.t} · ${wearHtml(it)}</div>
+    <div class="rsub">${MATERIALS[it.t].name} (B${(it.t - 1) * MATERIAL_FLOORS + 1}+ material) · ${wearHtml(it)}</div>
+    <div class="rsub">${RARITY[it.r].name} ${WEAR[wearIndex(it.fl)].short} pulls are ${oddsLong(dropOdds(it.r, it.fl))} with your luck</div>
     ${lines}<div class="rsub">Reforging adds +10% to every stat (max +${MAX_ITEM_LEVEL}).</div></div>${cmp}
     <div class="mbtns">${actions}</div>`, { dismissable: true });
 }
@@ -868,14 +911,14 @@ function showPet(sp, r) {
   const eqn = petEquippedCount(sp, r);
   const avail = n - eqn;
   const canAdd = avail > 0 && S.pets.eq.length < petSlots();
-  const canMerge = r < 4 && avail >= 3;
-  openModal(`<div class="result"><div style="text-align:center"><img src="${petUrl(sp)}" alt="" style="width:64px;image-rendering:pixelated"></div>
+  const canMerge = r < MERGE_MAX && avail >= 3;
+  openModal(`<div class="result"><div style="text-align:center"><img src="${petUrl(sp, false, r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${r}">${RARITY[r].name} ${PETS[sp].name}</div>
     <div class="rsub">${petBonusText(sp, r)}</div>
-    <div class="rsub">You own ${n}${eqn ? `, ${eqn} in your party` : ''}${r < 4 ? `. Merge 3 into a ${RARITY[r + 1].name} (${petBonusText(sp, r + 1)}).` : '.'}</div></div>
+    <div class="rsub">You own ${n}${eqn ? `, ${eqn} in your party` : ''}${r < MERGE_MAX ? `. Merge 3 into a ${RARITY[r + 1].name} (${petBonusText(sp, r + 1)}).` : r >= ULTRA ? '. Only found in cases.' : '.'}</div></div>
     <div class="mbtns">
       <button class="btn good" data-act="petToParty" data-sp="${sp}" data-r="${r}" ${canAdd ? '' : 'disabled'}>${S.pets.eq.length >= petSlots() ? 'Party full' : 'Add to party'}</button>
-      ${r < 4 ? `<button class="btn purple" data-act="mergePet" data-sp="${sp}" data-r="${r}" ${canMerge ? '' : 'disabled'}>Merge 3</button>` : ''}
+      ${r < MERGE_MAX ? `<button class="btn purple" data-act="mergePet" data-sp="${sp}" data-r="${r}" ${canMerge ? '' : 'disabled'}>Merge 3</button>` : ''}
       <button class="btn" data-act="close">Close</button></div>`, { dismissable: true });
 }
 
@@ -972,6 +1015,7 @@ function buildMore() {
     <div class="big">+${gain} cores</div><div class="small muted">You have ${S.cores} (+${S.cores * 10}% damage)</div></div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
     ${S.prestiges < 3 ? `<div class="small">Prestige ${S.prestiges < 1 ? 1 : 3} adds a pet slot.</div>` : ''}
+    <div class="small">Every prestige also adds +${Math.round(PRESTIGE_LUCK * 100)}% luck to every case, forever.</div>
     <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : 'Reach B25 to prestige'}</button></div>`;
 
   const st = S.stats;
@@ -1090,7 +1134,7 @@ on('bossDown', ({ keys, name }) => {
 on('treasure', () => toast('Treasure Mole caught! +1 key', 'gold', 'key'));
 on('questDone', ({ text }) => { toast('Quest complete: ' + text, 'good', 'scroll'); SFX.claim(); });
 on('achievement', a => { toast('Achievement: ' + a.name, 'gold', 'trophy'); SFX.claim(); });
-on('collection', ({ count }) => toast(`New index entry ${count}/45: +1% damage and coins`, 'purple index', 'star'));
+on('collection', ({ count }) => toast(`New index entry ${count}/${(PET_IDS.length + SLOT_IDS.length) * RARITY.length}: +1% damage and coins`, 'purple index', 'star'));
 on('bestFloor', ({ floor }) => {
   const u = UPGRADES.find(x => x.unlock === floor);
   if (u) toast('New Forge upgrade: ' + u.name, 'good', 'anvil');
@@ -1115,6 +1159,7 @@ function handleAction(el) {
   const d = el.dataset;
   switch (a) {
     case 'close': closeModal(); break;
+    case 'autoResume': closeModal(); startAutoRoll(); break;
     case 'buyAmt': S.settings.buyAmt = d.v; buildForge(); break;
     case 'buy':
       if (buyUpgrade(d.id)) { SFX.buy(); buildForge(); updateHud(); } else SFX.error();
@@ -1131,6 +1176,11 @@ function handleAction(el) {
     case 'openCase': startOpen(Number(d.t), 'coins', Number(d.n)); break;
     case 'openKey': startOpen(Number(d.t), 'key', 1); break;
     case 'openFree': startOpen(bestCaseTier(), 'free', 1); break;
+    case 'autoStart': startAutoRoll(); break;
+    case 'autoStop': stopAutoRoll(); break;
+    case 'autoCase': cycleAutoCase(); break;
+    case 'autoStopAt': S.settings.autoStop = S.settings.autoStop >= TOP_RARITY ? 2 : S.settings.autoStop + 1; SFX.click(); renderAutoBox(); break;
+    case 'autoScrap': S.settings.autoSalvage = (S.settings.autoSalvage + 1) % 5; SFX.click(); renderAutoBox(); break;
     case 'again': {
       const lo = UI.lastOpen;
       closeModal();
@@ -1269,6 +1319,7 @@ function askPrestige() {
     <span>You keep</span><span>gear, pets, keys, scrap</span><span>You reset</span><span>coins, floor, Forge, level, skills</span></div>
     ${nextCase ? `<p class="small">Unlocks the ${nextCase.name}.</p>` : ''}
     ${S.prestiges === 0 || S.prestiges === 2 ? '<p class="small">Adds a pet slot.</p>' : ''}
+    <p class="small">Luck +${Math.round(PRESTIGE_LUCK * 100)}% on every case.</p>
     <div class="mbtns"><button class="btn purple" data-act="doPrestige">Prestige</button><button class="btn" data-act="close">Not yet</button></div>`, { dismissable: true });
 }
 
@@ -1473,4 +1524,130 @@ function uiTick(dt) {
     UI.nextBreak = R.session + S.settings.breakMin * 60;
     queueModal(showBreakReminder);
   }
+}
+
+// ---------- auto-roll ----------
+// Opens cases back to back while the game is open (it pauses in the background), and stops on a
+// pull at or above the chosen rarity, or when coins run out.
+const SALVAGE_LABELS = ['Off', 'Commons', 'Rare and below', 'Epic and below', 'Legendary and below'];
+
+function autoCases() { return CASES.filter(caseUnlocked); }
+function autoTier() {
+  const ok = autoCases();
+  if (!UI.autoTier || !ok.some(c => c.tier === UI.autoTier)) UI.autoTier = ok[ok.length - 1].tier;
+  return UI.autoTier;
+}
+function cycleAutoCase() {
+  const ok = autoCases();
+  const i = ok.findIndex(c => c.tier === autoTier());
+  UI.autoTier = ok[(i + 1) % ok.length].tier;
+  SFX.click();
+  renderAutoBox();
+}
+
+function autoCardHtml() { return '<div class="card" id="autoCard"></div>'; }
+
+function renderAutoBox() {
+  const box = $('#autoCard');
+  if (!box) return;
+  const a = UI.auto;
+  const c = CASES[(a ? a.tier : autoTier()) - 1];
+  const stop = S.settings.autoStop;
+  let h = `<div class="row"><b class="grow">Auto-roll</b><span class="small muted">${(1000 / AUTO_ROLL_MS).toFixed(1)} cases/s while the game is open</span></div>`;
+  if (!a) {
+    const cost = caseCost(c);
+    h += `<div class="autoopts">
+        <button class="btn small" data-act="autoCase">${c.name}</button>
+        <button class="btn small" data-act="autoStopAt">Stop at <span class="tc${stop}">${RARITY[stop].name}+</span></button>
+        <button class="btn small" data-act="autoScrap">Scrap: ${SALVAGE_LABELS[S.settings.autoSalvage]}</button></div>
+      <button class="btn gold wide" data-act="autoStart" ${S.coins < cost ? 'disabled' : ''}>Start · ${costHtml(cost)} per case</button>`;
+  } else {
+    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${c.name}: <b>${fmt(a.n)}</b> opened · ${fmt(a.spent)} coins · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
+      <div class="odds">${a.counts.map((n, r) => (n ? `<span class="tc${r}">${fmt(n)} ${RARITY[r].name}</span>` : '')).join('')}</div>
+      <div class="autorecent">${a.recent.map(v => tileHtml(v, 'mini')).join('')}</div>
+      ${a.best ? `<div class="small">Best this session: <span class="tc${a.best.r}">${RARITY[a.best.r].name}</span> · ${oddsLong(a.best.odds)}</div>` : ''}
+      <button class="btn bad wide" data-act="autoStop">Stop</button>`;
+  }
+  box.innerHTML = h;
+}
+
+function startAutoRoll() {
+  if (UI.auto) return;
+  audioUnlock();
+  const tier = autoTier();
+  if (S.coins < caseCost(CASES[tier - 1])) { SFX.error(); toast('Not enough coins yet.', 'bad'); return; }
+  UI.auto = { tier, n: 0, spent: 0, counts: RARITY.map(() => 0), recent: [], best: null, paused: false };
+  clearInterval(UI.autoTimer);
+  UI.autoTimer = setInterval(autoRollTick, AUTO_ROLL_MS);
+  SFX.buy();
+  renderAutoBox();
+}
+
+function stopAutoRoll(msg) {
+  if (!UI.auto) return;
+  clearInterval(UI.autoTimer);
+  const a = UI.auto;
+  UI.auto = null;
+  UI.autoKey = '';
+  if (msg) toast(msg, 'gold', 'coin');
+  else if (a.n) toast(`Auto-roll: ${plural(a.n, 'case')} opened`, 'gold');
+  renderAutoBox();
+}
+
+function autoRollTick() {
+  const a = UI.auto;
+  if (!a) return;
+  const wasPaused = a.paused;
+  a.paused = document.hidden;
+  if (a.paused) { if (!wasPaused) renderAutoBox(); return; }
+  if (UI.modalOpen) return;
+  const c = CASES[a.tier - 1];
+  const cost = caseCost(c);
+  if (S.coins < cost) { stopAutoRoll(`Auto-roll stopped: out of coins after ${plural(a.n, 'case')}.`); return; }
+  const drops = openCase(a.tier, 'coins', 1);
+  if (!drops) { stopAutoRoll(); return; }
+  a.n++;
+  a.spent += cost;
+  let top = drops[0];
+  for (const d of drops) {
+    a.counts[d.r]++;
+    a.recent.unshift(dropView(d));
+    if (!a.best || d.odds > a.best.odds) a.best = { r: d.r, odds: d.odds };
+    if (d.r > top.r) top = d;
+  }
+  a.recent.length = Math.min(a.recent.length, 5);
+  if (top.r >= 2) SFX.reveal(Math.min(top.r, 4));
+  else SFX.tick(0.4);
+  updateHud();
+  if (top.r >= S.settings.autoStop) {
+    stopAutoRoll();
+    showFound(drops, top, a.tier);
+    return;
+  }
+  if (top.r >= ULTRA) celebrate(top.r);
+  renderAutoBox();
+}
+
+// The pull that stopped auto-roll gets the full reveal.
+function showFound(drops, top, tier) {
+  const ordered = [top, ...drops.filter(d => d !== top)];
+  UI.lastOpen = { tier, method: 'coins', n: 1 };
+  openModal(`<h2>Auto-roll found</h2>
+    <div class="foundtile">${tileHtml(dropView(top), 'win')}</div>
+    <div id="reelResult" class="result"></div>`, { dismissable: false });
+  revealResult(ordered, { tier, method: 'coins' });
+  const btns = $('#reelResult .mbtns');
+  if (btns) btns.insertAdjacentHTML('afterbegin', '<button class="btn gold" data-act="autoResume">Keep auto-rolling</button>');
+}
+
+// Full-screen flash for Exotic and up: the rarer the pull, the longer and louder.
+function celebrate(r) {
+  const el = document.createElement('div');
+  el.className = `celebrate rc${r}`;
+  el.style.setProperty('--dur', (1.6 + 0.3 * (r - ULTRA)) + 's');
+  el.innerHTML = `<div class="cele-name tc${r}">${RARITY[r].name.toUpperCase()}</div><div class="cele-sub">${oddsLong(RARITY[r].odds)} rarity</div>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2400 + 300 * (r - ULTRA));
+  SFX.ultra(r);
+  vibrate(r >= 8 ? [80, 40, 80, 40, 80, 40, 300] : r >= 6 ? [60, 40, 60, 40, 200] : [50, 40, 150]);
 }

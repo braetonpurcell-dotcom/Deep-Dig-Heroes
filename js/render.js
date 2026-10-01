@@ -408,7 +408,8 @@ function drawPets() {
   const ctx = CV.ctx;
   S.pets.eq.forEach((p, i) => {
     const def = PETS[p.sp];
-    const spr = petSprite(p.sp);
+    const spr = petSprite(p.sp, p.r);
+    const pad = spr.fxPad || 0;
     // Four party slots (after prestige 3) must all fit between the miner and the left edge.
     const x = HERO_X - 12 - i * 9;
     const phase = R.time * (def.fly ? 5 : 3) + i * 1.7;
@@ -418,7 +419,7 @@ function drawPets() {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fillRect(x + 2, GROUND_Y, 6, 1);
     }
-    ctx.drawImage(spr, Math.round(x), Math.round(y));
+    ctx.drawImage(spr, Math.round(x) - pad, Math.round(y) - pad);
     if (p.r >= 2 && Math.sin(R.time * 4 + i) > 0.85) {
       ctx.fillStyle = RARITY[p.r].color;
       ctx.fillRect(Math.round(x + rand(0, 10)), Math.round(y + rand(0, 10)), 1, 1);
@@ -446,7 +447,9 @@ function drawHero() {
   ctx.save();
   ctx.translate(hx + 12.5, hy + 11.5);
   ctx.rotate(a);
-  ctx.drawImage(pickSprite(it ? it.t : 0), -5.5, -11.5);
+  const pk = gearSprite('pick', it ? it.t : 0, it ? it.r : 0);
+  const pad = pk.fxPad || 0;
+  ctx.drawImage(pk, -5.5 - pad, -11.5 - pad);
   ctx.restore();
   if (S.math.streak > 0) {
     if (S.math.streak > SCN.lastStreak) SCN.comboPop = 0.15;
@@ -454,6 +457,27 @@ function drawHero() {
     drawText('×' + comboMult().toFixed(2), hx + 8, hy - 9 - lift, '#ffcc4d', 1, 'center');
   }
   SCN.lastStreak = S.math.streak;
+  heroAura(hx, hy);
+}
+
+// Exotic-or-better gear or pets give the miner a rising aura in that rarity's colors.
+function topEquippedRarity() {
+  let r = -1;
+  for (const slot of SLOT_IDS) if (S.gear.eq[slot]) r = Math.max(r, S.gear.eq[slot].r);
+  for (const p of S.pets.eq) r = Math.max(r, p.r);
+  return r;
+}
+function heroAura(hx, hy) {
+  const r = topEquippedRarity();
+  if (r < ULTRA || R.paused) return;
+  const gap = 0.32 / (r - ULTRA + 1);
+  if (R.time - (SCN.auraT || 0) < gap) return;
+  SCN.auraT = R.time;
+  const colors = RARITY_FX[r] || [RARITY[r].color, shade(RARITY[r].color, 0.6)];
+  SCN.parts.push({
+    x: hx + rand(1, 15), y: hy + rand(4, 17), vx: rand(-3, 3), vy: rand(-14, -6),
+    t: 0, life: rand(0.6, 1.1), color: pick(colors), g: -4, size: 1,
+  });
 }
 
 function drawEnemy(biome) {

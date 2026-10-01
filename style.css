@@ -26,6 +26,16 @@
   --r2: #b76dff;
   --r3: #ffb52e;
   --r4: #ff4d6d;
+  --r5: #2ff0c4;
+  --r6: #fff4a8;
+  --r7: #7fd4ff;
+  --r8: #ff6bd6;
+  --r9: #9b6bff;
+  --r10: #ffffff;
+  --g7: #7fd4ff, #ffffff, #b8a6ff, #7fd4ff;
+  --g8: #ff6bd6, #7f6bff, #3be8ff, #ff6bd6;
+  --g9: #ffd27a, #9b6bff, #5a2fa0, #ffd27a;
+  --g10: #ff4d4d, #ffb84d, #fff34d, #4dff88, #4dd2ff, #a64dff, #ff4dd2, #ff4d4d;
   --brawler: #ff6b5a;
   --tycoon: #ffcc4d;
   --gambler: #b76dff;
@@ -355,7 +365,7 @@ button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
 .petslot img { width: 36px; image-rendering: pixelated; }
 .petslot.lockedslot { opacity: .35; }
 .petslot small { position: absolute; bottom: 2px; font-size: 10px; color: var(--dim); }
-.index { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.index { display: grid; grid-template-columns: repeat(11, 1fr); gap: 2px; margin-bottom: 3px; }
 .index div { aspect-ratio: 1; display: grid; place-items: center; background: var(--ink); border: 2px solid var(--line); border-bottom: 3px solid var(--rc); }
 .index div.got { background: var(--raise); background: color-mix(in srgb, var(--rc) 15%, var(--panel)); }
 .index img { width: 70%; image-rendering: pixelated; }
@@ -440,7 +450,46 @@ input[type="text"] {
 @keyframes toastIn { from { transform: translateY(-8px); opacity: 0; } }
 
 .rc0 { --rc: var(--r0); } .rc1 { --rc: var(--r1); } .rc2 { --rc: var(--r2); } .rc3 { --rc: var(--r3); } .rc4 { --rc: var(--r4); }
+.rc5 { --rc: var(--r5); } .rc6 { --rc: var(--r6); } .rc7 { --rc: var(--r7); } .rc8 { --rc: var(--r8); } .rc9 { --rc: var(--r9); } .rc10 { --rc: var(--r10); }
 .tc0 { color: var(--r0); } .tc1 { color: var(--r1); } .tc2 { color: var(--r2); } .tc3 { color: var(--r3); } .tc4 { color: var(--r4); }
+.tc5 { color: var(--r5); } .tc6 { color: var(--r6); } .tc7 { color: var(--r7); } .tc8 { color: var(--r8); } .tc9 { color: var(--r9); } .tc10 { color: var(--r10); }
+
+/* Rarity effects grow with the tier: Mythic+ items glow, Exotic+ pulse, Celestial+ get a moving
+   multi-color background and name, Singularity cycles through the whole rainbow. */
+:is(.tile, .bagtile, .index div, .pchip, .ptile):is(.rc4, .rc5, .rc6, .rc7, .rc8, .rc9, .rc10) img { filter: drop-shadow(0 0 3px var(--rc)); }
+:is(.tile, .bagtile, .index div.got, .pchip, .ptile):is(.rc5, .rc6, .rc7, .rc8, .rc9, .rc10) { box-shadow: 0 0 10px -2px var(--rc), inset 0 0 12px -6px var(--rc); }
+:is(.tile, .bagtile, .index div, .ptile):is(.rc5, .rc6, .rc7, .rc8, .rc9, .rc10) img { animation: rarityPulse 1.6s ease-in-out infinite; }
+.rc7 { --grad: var(--g7); } .rc8 { --grad: var(--g8); } .rc9 { --grad: var(--g9); } .rc10 { --grad: var(--g10); }
+:is(.tile, .bagtile, .index div.got, .ptile):is(.rc7, .rc8, .rc9, .rc10) {
+  background: linear-gradient(120deg, var(--grad));
+  background-size: 300% 300%;
+  animation: rarityShift 4s linear infinite;
+  border-color: var(--rc);
+}
+:is(.tile, .bagtile, .index div.got, .ptile):is(.rc7, .rc8, .rc9, .rc10)::before {
+  content: ''; position: absolute; inset: 0; background: rgba(13, 9, 20, .62); pointer-events: none;
+}
+:is(.tile, .bagtile, .index div.got, .ptile):is(.rc7, .rc8, .rc9, .rc10) > :is(img, small) { position: relative; }
+:is(.tile, .bagtile) > :is(.odds-tag, .wear-tag, .lv, .tr, .new) { z-index: 1; }
+.rc10:is(.tile, .bagtile, .index div.got, .ptile) img { animation: rarityPulse 1.6s ease-in-out infinite, rainbowSpin 3s linear infinite; }
+.tc7, .tc8, .tc9, .tc10 {
+  background: linear-gradient(90deg, var(--grad));
+  background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: rarityShift 3s linear infinite;
+}
+.tc7 { --grad: var(--g7); } .tc8 { --grad: var(--g8); } .tc9 { --grad: var(--g9); } .tc10 { --grad: var(--g10); }
+.tc5, .tc6 { text-shadow: 0 0 6px var(--r5); }
+.tc6 { text-shadow: 0 0 8px #fff4a8; }
+@keyframes rarityPulse { 50% { filter: drop-shadow(0 0 6px var(--rc)) brightness(1.25); } }
+@keyframes rarityShift { from { background-position: 0% 50%; } to { background-position: 300% 50%; } }
+@keyframes rainbowSpin { to { filter: drop-shadow(0 0 5px #fff) hue-rotate(360deg); } }
+.tile.tile.win { box-shadow: 0 0 0 3px var(--rc), 0 0 24px var(--rc); }
+.tile.win:is(.rc7, .rc8, .rc9, .rc10) { animation: winpop .5s steps(4) 1 forwards, rarityShift 4s linear infinite; }
+.index div { position: relative; }
+.odds-tag { font-size: 10px; line-height: 1; padding: 1px 3px; background: rgba(0, 0, 0, .45); color: var(--fg); white-space: nowrap; }
+.tile .odds-tag { position: absolute; top: 2px; right: 2px; }
+.tile .wear-tag { position: absolute; top: 2px; left: 2px; font-size: 10px; color: var(--dim); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
@@ -532,3 +581,24 @@ input[type="text"] {
 .mg-keys { font-size: 20px; color: var(--gold); }
 .wear-up { color: var(--good); }
 .wear-down { color: var(--bad); }
+
+/* Auto-roll and big pulls */
+.autoopts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.autorecent { display: flex; gap: 4px; margin: 6px 0; overflow: hidden; }
+.tile.mini { width: 58px; height: 66px; }
+.tile.mini img { width: 28px; }
+.tile.mini small { font-size: 9px; }
+.tile.mini .odds-tag, .tile.mini .wear-tag { font-size: 8px; }
+.foundtile { display: grid; place-items: center; padding: 8px 0; }
+.pull-odds { text-align: center; font-size: 20px; margin: 2px 0; }
+.rsub.record { color: var(--gold); text-align: center; }
+.celebrate {
+  position: fixed; inset: 0; z-index: 70; pointer-events: none;
+  display: grid; place-content: center; text-align: center;
+  background: radial-gradient(circle, color-mix(in srgb, var(--rc) 55%, transparent), transparent 70%);
+  animation: celeFade var(--dur, 1.8s) ease-out forwards;
+}
+.cele-name { font-size: 54px; line-height: 1; letter-spacing: 2px; filter: drop-shadow(0 0 10px var(--rc)); animation: celePop .5s steps(5) 1; }
+.cele-sub { color: #fff; font-size: 16px; text-shadow: 0 1px 0 #000; }
+@keyframes celeFade { 0% { opacity: 0; } 8% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes celePop { 0% { transform: scale(.4); } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }

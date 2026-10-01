@@ -3,6 +3,18 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.5.0
+- Six new rarities above Mythic: Exotic (1 in 500), Divine (1 in 2,500), Celestial (1 in 10,000), Cosmic (1 in 50,000), Eclipse (1 in 250,000) and Singularity (1 in 1,000,000). Their damage and coin stats are huge jumps (a Singularity pickaxe can carry a run about 15 floors past its wall), while luck and side stats only creep up so one lucky pull can't snowball.
+- Every item on the case reel shows its odds, combining rarity and wear the way CS2 does: wear is picked as Factory New 3%, Minimal Wear 24%, Field-Tested 33%, Well-Worn 24%, Battle-Scarred 16%. A Divine Factory New is 1 in 83,333; a Factory New Singularity is 1 in 33 million.
+- 21 materials, a new one every 10 floors of your deepest floor, so there is always a better version of every item further down. Old items keep their name and power.
+- Auto-roll: opens cases back to back (about 2 a second) while the game is open, pauses in the background, scraps low rarities if you want, and stops on the rarity you pick or when coins run out.
+- Cases cost half as much and the price only rises 0.5% per case instead of 3.5%, so hundreds of rolls are possible.
+- Rarest pulls per slot and all-time, kept forever through prestige (Bag › Index). Every prestige also adds +10% luck.
+- Honest reel: the items next to the winner are real rolls. About 1 reel in 15 shows a super-rare sliding past early, never right next to the winner.
+- Rarity art: rarer items get more color. Rare+ trims, Legendary+ inlays, Mythic+ glowing outlines, Exotic+ sparkles and pulsing, Celestial+ moving multi-color sheens and names, Singularity the full rainbow. Exotic+ gear or pets give your miner an aura.
+- Exotic+ pulls get a full-screen reveal, a fanfare and a long buzz, and the reel slows down more the rarer the win.
+- New achievements for each new rarity, and the index grows to 99 entries.
+
 ## v1.4.0
 - While a boss waits for you, your miner keeps farming that floor's regular enemies instead of standing still. Tap Fight boss whenever you're ready; the boss steps in and the duel starts. Offline earnings use the same floor.
 - Gear no longer shows the raw float number. Items show their wear and what it does to their stats instead, e.g. "Factory New · +18% stats" in green or "Battle-Scarred · -15% stats" in red.

@@ -536,22 +536,127 @@ function crownSprite() {
   return sprite('crown', { y: '#ffcc4d', r: '#ff4d6d', b: '#62c9ff' }, 'crown');
 }
 
-function petSprite(sp) {
-  return sprite(PET_SPRITE[sp], PET_PALETTES[sp], sp);
+// Pets get the same rarity glow as gear from Mythic up.
+function petSprite(sp, r = 0) {
+  const base = sprite(PET_SPRITE[sp], PET_PALETTES[sp], sp);
+  if (r < 4) return base;
+  const key = `petfx|${sp}|${r}`;
+  let c = spriteCache.get(key);
+  if (!c) { c = decorateSprite(base, r, hashStr(key)); spriteCache.set(key, c); }
+  return c;
+}
+
+// ---------- rarity art ----------
+// The rarer an item, the more color it gets, Roblox-style:
+//   Rare+ handle/trim in the rarity color, Legendary+ bright inlays, Mythic+ a glowing outline,
+//   Exotic+ sparkles, Celestial+ a multi-color sheen, Singularity the full rainbow.
+const RARITY_FX = {
+  7: ['#7fd4ff', '#ffffff', '#b8a6ff'],
+  8: ['#ff6bd6', '#7f6bff', '#3be8ff'],
+  9: ['#ffd27a', '#9b6bff', '#2a1748'],
+  10: ['#ff4d4d', '#ffb84d', '#fff34d', '#4dff88', '#4dd2ff', '#a64dff', '#ff4dd2'],
+};
+function gradientAt(colors, t) {
+  const x = clamp(t, 0, 0.9999) * (colors.length - 1);
+  const i = Math.floor(x);
+  return mix(colors[i], colors[Math.min(i + 1, colors.length - 1)], x - i);
+}
+
+function basePalette(slot, tier, r) {
+  const mat = MATERIALS[tier].color;
+  const rc = RARITY[r].color;
+  const trim = r >= 1 ? mix('#9a6a3a', rc, 0.55) : '#9a6a3a';
+  if (slot === 'pick') {
+    return { m: mat, M: r >= 3 ? mix(shade(mat, 0.45), rc, 0.6) : shade(mat, 0.45), n: shade(mat, -0.35), w: trim, W: r >= 2 ? shade(rc, -0.2) : '#6e4520' };
+  }
+  if (slot === 'helm') {
+    return { m: mat, w: r >= 3 ? mix(shade(mat, 0.6), rc, 0.6) : shade(mat, 0.6), L: r >= 2 ? shade(rc, 0.5) : '#fff7c2', d: r >= 1 ? mix(shade(mat, -0.45), rc, 0.45) : shade(mat, -0.45) };
+  }
+  return { m: mat, M: r >= 3 ? mix(shade(mat, 0.5), rc, 0.5) : shade(mat, 0.5), g: rc, G: shade(rc, 0.6) };
 }
 
 function gearSprite(slot, tier, rarity) {
-  const mat = MATERIALS[tier].color;
-  if (slot === 'pick') return pickSprite(tier);
-  if (slot === 'helm') {
-    return sprite('helm', { m: mat, w: shade(mat, 0.6), L: '#fff7c2', d: shade(mat, -0.45) }, 'helm' + tier);
+  const key = `gearfx|${slot}|${tier}|${rarity}`;
+  let c = spriteCache.get(key);
+  if (c) return c;
+  const base = buildSprite(PX[slot], basePalette(slot, tier, rarity));
+  c = rarity >= 4 ? decorateSprite(base, rarity, hashStr(key)) : base;
+  spriteCache.set(key, c);
+  return c;
+}
+
+// Mythic and up: a padded copy with a sheen, a glowing outline and sparkles.
+const FX_PAD = 2;
+function decorateSprite(src, r, seed) {
+  const w = src.width;
+  const h = src.height;
+  const W = w + FX_PAD * 2;
+  const H = h + FX_PAD * 2;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d');
+  g.drawImage(src, FX_PAD, FX_PAD);
+  const img = g.getImageData(0, 0, W, H);
+  const d = img.data;
+  const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : d[(y * W + x) * 4 + 3]);
+  const solid = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) solid[i] = d[i * 4 + 3] > 0 ? 1 : 0;
+  const [or, og, ob] = hexToRgb(OUTLINE);
+  const colors = RARITY_FX[r];
+  const glowAt = (x, y) => (colors ? gradientAt(colors, (x + y) / (W + H)) : RARITY[r].color);
+  // Multi-color sheen over the item's own colors (outline pixels stay dark).
+  if (colors) {
+    const amt = r === 9 ? 0.35 : r >= 10 ? 0.6 : 0.5;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (!d[i + 3] || (d[i] === or && d[i + 1] === og && d[i + 2] === ob)) continue;
+      const [tr, tg, tb] = hexToRgb(glowAt(x, y));
+      d[i] = lerp(d[i], tr, amt); d[i + 1] = lerp(d[i + 1], tg, amt); d[i + 2] = lerp(d[i + 2], tb, amt);
+    }
   }
-  const gem = RARITY[rarity].color;
-  return sprite('charm', { m: mat, M: shade(mat, 0.5), g: gem, G: shade(gem, 0.6) }, 'charm' + tier + '|' + rarity);
+  // Glow rings around the silhouette: one ring for Mythic, two from Divine up.
+  const rings = r >= 6 ? 2 : 1;
+  let edge = solid;
+  for (let ring = 0; ring < rings; ring++) {
+    const next = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (edge[y * W + x] || at(x, y)) continue;
+      let near = false;
+      for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < W && ny < H && edge[ny * W + nx] && (ring > 0 || dx === 0 || dy === 0)) { near = true; break; }
+      }
+      if (!near) continue;
+      next[y * W + x] = 1;
+      const [tr, tg, tb] = hexToRgb(glowAt(x, y));
+      const i = (y * W + x) * 4;
+      d[i] = tr; d[i + 1] = tg; d[i + 2] = tb;
+      d[i + 3] = ring === 0 ? (r >= 6 ? 230 : 170) : 90;
+    }
+    for (let i = 0; i < W * H; i++) if (next[i]) edge[i] = 1;
+  }
+  // Sparkles: a few bright pixels in the padding, more for rarer tiers.
+  if (r >= ULTRA) {
+    const rng = mulberry32(seed);
+    const n = r - 3;
+    for (let k = 0; k < n * 2; k++) {
+      const x = Math.floor(rng() * W);
+      const y = Math.floor(rng() * H);
+      const i = (y * W + x) * 4;
+      if (d[i + 3] > 200) continue;
+      const [tr, tg, tb] = hexToRgb(k % 2 ? '#ffffff' : glowAt(x, y));
+      d[i] = tr; d[i + 1] = tg; d[i + 2] = tb; d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  c.fxPad = FX_PAD;
+  return c;
 }
 
 function chestSprite(tier) {
-  const mat = MATERIALS[tier].color;
+  const mat = MATERIALS[CASES[tier - 1].chest].color;
   const body = tier === 1 ? '#7a4a2a' : shade(mat, -0.45);
   return sprite('chest', { m: mat, M: shade(mat, 0.5), b: body, d: shade(body, -0.4), y: '#ffcc4d' }, 'chest' + tier);
 }
@@ -578,9 +683,9 @@ function spriteUrl(canvas, scale = 4, key = null) {
 function iconUrl(name) {
   return spriteUrl(iconSprite(name), 4, 'icon:' + name);
 }
-function petUrl(sp, locked = false) {
-  const s = petSprite(sp);
-  return spriteUrl(locked ? silhouette(s, '#2e2440') : s, 4, 'pet:' + sp + (locked ? ':l' : ''));
+function petUrl(sp, locked = false, r = 0) {
+  const s = petSprite(sp, r);
+  return spriteUrl(locked ? silhouette(s, '#2e2440') : s, 4, 'pet:' + sp + ':' + r + (locked ? ':l' : ''));
 }
 function gearUrl(slot, tier, rarity, locked = false) {
   const s = gearSprite(slot, tier, rarity);

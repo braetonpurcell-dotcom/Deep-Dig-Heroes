@@ -3,7 +3,7 @@
 // Nothing here touches the DOM. Visual and UI code listens through on()/emit().
 
 const SAVE_KEY = 'ddh-save-v1';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 const KILLS_PER_FLOOR = 6;
 const BOSS_TIME = 45; // duel length: mini-games take longer than math answers
 const DUEL_LIVES = 3;
@@ -16,6 +16,7 @@ const ENTER_TIME = 0.25;
 const TREASURE_CHANCE = 1 / 35;
 const TREASURE_TIME = 10;
 const COMBO_FADE_STEP = 0.8; // seconds per lost stack once the combo starts fading
+const PRESTIGE_LUCK = 0.1; // every prestige makes every case a little luckier, forever
 
 // ---------- formulas ----------
 // Balance knobs. Enemy health grows a little faster than coins, so every run
@@ -68,7 +69,7 @@ function freshRun() {
 
 function freshState() {
   const inv = {};
-  for (const id of PET_IDS) inv[id] = [0, 0, 0, 0, 0];
+  for (const id of PET_IDS) inv[id] = RARITY.map(() => 0);
   return {
     v: SAVE_VERSION, created: Date.now(), savedAt: 0, lastSeen: Date.now(),
     coins: 0, keys: 0, scrap: 0, cores: 0, trophies: 0, prestiges: 0, nextId: 1,
@@ -78,6 +79,7 @@ function freshState() {
     pets: { inv, eq: [] },
     pity: { epic: 0, leg: 0 },
     coll: {},
+    best: {}, // rarest pull per slot (pick, helm, charm, pet) and overall; kept through prestige
     daily: { day: '', streak: 0, claimed: true },
     quests: { day: '', list: [], bonus: false },
     ach: { done: {}, claimed: {} },
@@ -92,7 +94,7 @@ function freshState() {
     },
     settings: {
       sound: true, vibe: true, answer: 'keypad', mathMode: 'adaptive', mathTier: 3,
-      autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true,
+      autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA,
     },
   };
 }
@@ -128,8 +130,21 @@ const nonNegInt = (v, d = 0) => (Number.isInteger(v) && v >= 0 ? v : d);
 
 // Fill in anything a save from an older version is missing and repair impossible values,
 // so a damaged save never leaves the game stuck on a black screen.
+// Version 1 had 5 materials (Copper, Iron, Gold, Crystal, Void). They keep their name and
+// their power in the 21-material list, where they sit at 1, 5, 9, 13 and 17.
+function migrateSave(obj) {
+  if (!obj || typeof obj !== 'object' || (obj.v || 1) >= 2) return obj;
+  const remap = it => { if (it && Number.isInteger(it.t) && it.t >= 1 && it.t <= 5) it.t = 1 + MATERIALS_PER_CASE * (it.t - 1); };
+  const g = obj.gear || {};
+  if (g.eq && typeof g.eq === 'object') Object.values(g.eq).forEach(remap);
+  if (Array.isArray(g.bag)) g.bag.forEach(remap);
+  obj.v = 2;
+  return obj;
+}
+
 function hydrate(obj) {
-  const s = deepMerge(freshState(), obj || {});
+  const s = deepMerge(freshState(), migrateSave(obj) || {});
+  s.v = SAVE_VERSION;
   const now = Date.now();
   for (const k of ['coins', 'keys', 'scrap', 'cores', 'trophies', 'prestiges']) s[k] = nonNeg(s[k]);
   s.nextId = nonNegInt(s.nextId, 1);
@@ -177,13 +192,12 @@ function hydrate(obj) {
   // Pets: inventory counts, then a party that only holds pets you actually own.
   for (const id of PET_IDS) {
     const arr = s.pets.inv[id];
-    if (!Array.isArray(arr) || arr.length !== 5) s.pets.inv[id] = [0, 0, 0, 0, 0];
-    else s.pets.inv[id] = arr.map(n => nonNegInt(n));
+    s.pets.inv[id] = RARITY.map((_, r) => nonNegInt(Array.isArray(arr) ? arr[r] : 0));
   }
   const slots = 2 + (s.prestiges >= 1 ? 1 : 0) + (s.prestiges >= 3 ? 1 : 0);
   const used = {};
   s.pets.eq = (Array.isArray(s.pets.eq) ? s.pets.eq : []).filter(p => {
-    if (!p || !PETS[p.sp] || !Number.isInteger(p.r) || p.r < 0 || p.r > 4) return false;
+    if (!p || !PETS[p.sp] || !Number.isInteger(p.r) || p.r < 0 || p.r > TOP_RARITY) return false;
     const key = p.sp + ':' + p.r;
     used[key] = (used[key] || 0) + 1;
     return used[key] <= s.pets.inv[p.sp][p.r];
@@ -198,11 +212,16 @@ function hydrate(obj) {
   else for (const q of list) q.prog = clamp(q.prog, 0, q.target);
   for (const k of ['done', 'claimed']) if (!s.ach[k] || typeof s.ach[k] !== 'object') s.ach[k] = {};
   if (!s.coll || typeof s.coll !== 'object') s.coll = {};
+  if (!s.best || typeof s.best !== 'object') s.best = {};
+  for (const k of Object.keys(s.best)) {
+    const b = s.best[k];
+    if (!b || !Number.isInteger(b.r) || b.r < 0 || b.r > TOP_RARITY || !isFinite(b.odds) || b.odds < 1) delete s.best[k];
+  }
   // Stats.
   const fresh = freshState().stats;
   for (const k of Object.keys(fresh)) {
     if (k === 'days') { if (!s.stats.days || typeof s.stats.days !== 'object') s.stats.days = {}; }
-    else if (k === 'bestDrop') { if (!Number.isInteger(s.stats[k]) || s.stats[k] < -1 || s.stats[k] > 4) s.stats[k] = -1; }
+    else if (k === 'bestDrop') { if (!Number.isInteger(s.stats[k]) || s.stats[k] < -1 || s.stats[k] > TOP_RARITY) s.stats[k] = -1; }
     else if (!isFinite(s.stats[k]) || s.stats[k] < 0) s.stats[k] = fresh[k];
   }
   s.stats.bestFloor = Math.max(s.stats.bestFloor, run.maxFloor);
@@ -225,6 +244,7 @@ function hydrate(obj) {
   st.shake = st.shake !== false;
   st.mathTier = Number.isInteger(st.mathTier) ? clamp(st.mathTier, 1, 12) : 3;
   st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, 4) : 0;
+  st.autoStop = Number.isInteger(st.autoStop) ? clamp(st.autoStop, 2, TOP_RARITY) : ULTRA;
   st.breakMin = nonNeg(st.breakMin);
   if (!['1', '10', 'max'].includes(String(st.buyAmt))) st.buyAmt = '1';
   else st.buyAmt = String(st.buyAmt);
@@ -264,7 +284,7 @@ function computeStats() {
   }
   for (const p of S.pets.eq) {
     const def = PETS[p.sp];
-    for (const k in def.stats) add[k] += def.stats[k] * PET_POWER[p.r];
+    for (const k in def.stats) add[k] += def.stats[k] * petPower(k, p.r);
   }
   const trophy = 1 + TROPHY_BONUS * S.trophies;
   const coll = 1 + COLLECTION_BONUS * collectionCount();
@@ -289,7 +309,7 @@ function computeStats() {
     * (1 + 0.02 * branchPoints('tycoon')) * (1 + 0.003 * sk('compound') * S.run.maxFloor)
     * trophy * coll * st.boost;
   st.xpMult = (1 + 0.1 * up('scholar')) * (1 + add.xp);
-  st.luck = add.luck + 0.1 * sk('lucky') + 0.02 * branchPoints('gambler');
+  st.luck = add.luck + 0.1 * sk('lucky') + 0.02 * branchPoints('gambler') + PRESTIGE_LUCK * S.prestiges;
   st.caseDiscount = 0.06 * sk('haggler');
   st.epicPity = EPIC_PITY - 2 * sk('pity');
   st.scrapMult = 1 + 0.25 * sk('scrapper');
@@ -949,9 +969,13 @@ function caseCost(c) {
 }
 function freeCrateReady() { return Date.now() >= S.freeCrateAt; }
 
+// Luck has diminishing returns (it can never pass 10), and lifts the ultra tiers more gently
+// than the first five, so even a huge Luck stat leaves a Singularity a long chase.
+function effectiveLuck() { const l = Math.max(0, ST.luck); return (10 * l) / (l + 10); }
+function luckPower(i) { return 0.35 * Math.min(i, 4) + 0.08 * Math.max(0, i - 4); }
 function rarityWeights(minR = 0) {
-  const L = 1 + Math.max(0, ST.luck);
-  return RARITY.map((r, i) => (i < minR ? 0 : r.weight * Math.pow(L, 0.35 * i) * (i >= 3 ? ST.jackpot : 1)));
+  const L = 1 + effectiveLuck();
+  return RARITY.map((r, i) => (i < minR ? 0 : r.weight * Math.pow(L, luckPower(i)) * (i >= 3 ? ST.jackpot : 1)));
 }
 
 function rarityOdds() {
@@ -971,22 +995,55 @@ function rollRarity(minR = 0) {
   return r;
 }
 
+// Material for your deepest floor this run, plus four per case tier above the Copper Crate.
+function materialForFloor(f) { return clamp(1 + Math.floor((f - 1) / MATERIAL_FLOORS), 1, MATERIALS.length - 1); }
+function dropMaterial(caseTier) { return clamp(materialForFloor(S.run.maxFloor) + MATERIALS_PER_CASE * (caseTier - 1), 1, MATERIALS.length - 1); }
+
+// CS2-style float: pick a wear band by its share, then a float inside that band.
+function rollFloat(rng = Math.random) {
+  const w = WEAR[weightedIndex(WEAR.map(x => x.share), rng)];
+  return Math.round((w.min + rng() * (w.max - w.min)) * 10000) / 10000;
+}
+function wearIndex(fl) { const i = WEAR.findIndex(w => fl < w.max); return i < 0 ? WEAR.length - 1 : i; }
+
+// "1 in N" for a drop as the reel shows it: rarity odds with your current luck, times the
+// wear band's share for gear. Pets have no wear.
+function dropOdds(r, fl = null) {
+  const p = rarityOdds()[r] * (fl == null ? 1 : WEAR[wearIndex(fl)].share);
+  return p > 0 ? 1 / p : Infinity;
+}
+
 function rollDrop(tier, minR = 0) {
   const r = rollRarity(minR);
   if (Math.random() < PET_CHANCE) {
-    return { kind: 'pet', sp: weightedPick(PET_IDS, id => PETS[id].weight), r };
+    return { kind: 'pet', sp: weightedPick(PET_IDS, id => PETS[id].weight), r, odds: dropOdds(r) };
   }
   const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight);
   const main = SLOTS[slot].main;
   const subs = shuffle(SUB_POOL.filter(k => k !== main))
     .slice(0, SUB_COUNT[r])
     .map(k => ({ k, roll: Math.round(rand(0.7, 1.3) * 1000) / 1000 }));
-  const item = { id: S.nextId++, slot, r, t: tier, fl: Math.round(Math.random() * 10000) / 10000, lv: 0, subs, isNew: true };
-  return { kind: 'gear', r, item };
+  const fl = rollFloat();
+  const item = { id: S.nextId++, slot, r, t: dropMaterial(tier), fl, lv: 0, subs, isNew: true };
+  return { kind: 'gear', r, item, odds: dropOdds(r, fl) };
+}
+
+// Rarest pulls are kept forever, per slot and overall.
+function recordPull(d) {
+  if (!isFinite(d.odds)) return;
+  const key = d.kind === 'pet' ? 'pet' : d.item.slot;
+  const entry = d.kind === 'pet'
+    ? { r: d.r, odds: Math.round(d.odds), sp: d.sp, at: Date.now() }
+    : { r: d.r, odds: Math.round(d.odds), fl: d.item.fl, t: d.item.t, slot: d.item.slot, at: Date.now() };
+  const better = !S.best[key] || entry.odds > S.best[key].odds;
+  if (better) S.best[key] = entry;
+  if (!S.best.all || entry.odds > S.best.all.odds) { S.best.all = { ...entry, kind: d.kind }; d.recordAll = true; }
+  if (better) d.record = true;
 }
 
 function grantDrop(d) {
   if (d.r > S.stats.bestDrop) S.stats.bestDrop = d.r;
+  recordPull(d);
   if (d.kind === 'pet') {
     S.pets.inv[d.sp][d.r]++;
     markCollection('pet', d.sp, d.r);
@@ -1066,27 +1123,30 @@ function openCase(tier, method = 'coins', count = 1, minR = 0) {
 }
 
 // ---------- gear ----------
+const SCRAP_BY_RARITY = [2, 5, 15, 45, 150, 400, 1000, 2500, 6000, 15000, 40000];
+function materialScale(t) { return 1 + (t - 1) / MATERIALS_PER_CASE; }
 function quality(fl) { return 1.2 - 0.4 * fl; }
 function wearName(fl) { return (WEAR.find(w => fl < w.max) || WEAR[WEAR.length - 1]).name; }
-function statValue(k, r, t, mult) {
+function statValue(k, r, t, mult, sub = false) {
   const s = STATS[k];
-  return s.base * RARITY_MULT[r] * Math.pow(s.tier, t - 1) * mult;
+  const rm = sub || k === 'luck' ? SUB_MULT[r] : RARITY_MULT[r];
+  return s.base * rm * Math.pow(s.tier, (t - 1) * MATERIAL_STEP) * mult;
 }
 function itemStats(it) {
   const lv = 1 + 0.1 * it.lv;
   const q = quality(it.fl);
   const main = SLOTS[it.slot].main;
   const out = [{ k: main, v: statValue(main, it.r, it.t, q * lv), main: true }];
-  for (const s of it.subs) out.push({ k: s.k, v: statValue(s.k, it.r, it.t, q * s.roll * lv) * 0.5 });
+  for (const s of it.subs) out.push({ k: s.k, v: statValue(s.k, it.r, it.t, q * s.roll * lv, true) * 0.5 });
   return out;
 }
 function itemName(it) { return `${MATERIALS[it.t].name} ${SLOTS[it.slot].name}`; }
 function scrapValue(it) {
   const st = ST || { scrapMult: 1 };
-  return Math.ceil([2, 5, 15, 45, 150][it.r] * it.t * st.scrapMult * (1 + it.lv * 0.5));
+  return Math.ceil(SCRAP_BY_RARITY[it.r] * materialScale(it.t) * st.scrapMult * (1 + it.lv * 0.5));
 }
 function reforgeCost(it) {
-  return Math.ceil(8 * Math.pow(it.lv + 1, 1.6) * Math.pow(it.t, 1.3) * [1, 1.5, 2, 3, 4][it.r]);
+  return Math.ceil(8 * Math.pow(it.lv + 1, 1.6) * Math.pow(materialScale(it.t), 1.3) * [1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10][it.r]);
 }
 
 function findItem(id) {
@@ -1163,6 +1223,8 @@ function markItemsSeen() {
 }
 
 // ---------- pets ----------
+// Pet luck follows the gentle curve past Mythic, like gear luck.
+function petPower(k, r) { return k === 'luck' && r > 4 ? PET_POWER[4] * SUB_MULT[r] / SUB_MULT[4] : PET_POWER[r]; }
 function petSlots() { return 2 + (S.prestiges >= 1 ? 1 : 0) + (S.prestiges >= 3 ? 1 : 0); }
 function petEquippedCount(sp, r) { return S.pets.eq.filter(p => p.sp === sp && p.r === r).length; }
 function petAvailable(sp, r) { return S.pets.inv[sp][r] - petEquippedCount(sp, r); }
@@ -1182,7 +1244,7 @@ function unequipPet(i) {
 }
 
 function mergePet(sp, r) {
-  if (r >= 4 || petAvailable(sp, r) < 3) return false;
+  if (r >= MERGE_MAX || petAvailable(sp, r) < 3) return false;
   S.pets.inv[sp][r] -= 3;
   S.pets.inv[sp][r + 1]++;
   markCollection('pet', sp, r + 1);
@@ -1195,19 +1257,19 @@ function mergePet(sp, r) {
 
 function mergeAllPets() {
   let n = 0;
-  for (const sp of PET_IDS) for (let r = 0; r < 4; r++) while (mergePet(sp, r)) n++;
+  for (const sp of PET_IDS) for (let r = 0; r < MERGE_MAX; r++) while (mergePet(sp, r)) n++;
   return n;
 }
 
 function mergeablePets() {
   let n = 0;
-  for (const sp of PET_IDS) for (let r = 0; r < 4; r++) if (petAvailable(sp, r) >= 3) n++;
+  for (const sp of PET_IDS) for (let r = 0; r < MERGE_MAX; r++) if (petAvailable(sp, r) >= 3) n++;
   return n;
 }
 
 function petBonusText(sp, r) {
   const def = PETS[sp];
-  return Object.entries(def.stats).map(([k, v]) => `${fmtPct(v * PET_POWER[r])} ${STATS[k].name.toLowerCase()}`).join(', ');
+  return Object.entries(def.stats).map(([k, v]) => `${fmtPct(v * petPower(k, r))} ${STATS[k].name.toLowerCase()}`).join(', ');
 }
 
 // ---------- index (collection) ----------
