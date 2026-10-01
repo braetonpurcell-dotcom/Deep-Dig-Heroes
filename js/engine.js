@@ -77,7 +77,8 @@ function freshState() {
     pets: { inv, eq: [] },
     pity: { epic: 0, leg: 0 },
     pace: 0, // tap pad pace you settled at last session
-    profile: { name: '' },
+    profile: { name: '', pid: '' },
+    lb: { sentKey: '', sentAt: 0 }, // last scores sent to the leaderboard
     feedback: [], // notes sent from the Feedback button, with the player's own follow-up comments
     fbSeen: {}, // replies already read, per feedback id
     coll: {},
@@ -178,6 +179,9 @@ function hydrate(obj) {
   s.pace = isFinite(s.pace) ? clamp(s.pace, 0, 1) : 0;
   if (typeof s.profile.name !== 'string') s.profile.name = '';
   s.profile.name = s.profile.name.slice(0, 20);
+  if (typeof s.profile.pid !== 'string') s.profile.pid = '';
+  if (!s.lb || typeof s.lb.sentKey !== 'string') s.lb = { sentKey: '', sentAt: 0 };
+  s.lb.sentAt = nonNeg(s.lb.sentAt);
   const okText = x => x && typeof x.id === 'string' && typeof x.text === 'string';
   s.feedback = (Array.isArray(s.feedback) ? s.feedback : []).filter(okText).slice(0, 50).map(i => ({
     id: i.id, type: String(i.type || 'other'), text: i.text, at: nonNeg(i.at), sent: !!i.sent,

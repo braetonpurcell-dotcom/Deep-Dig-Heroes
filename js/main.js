@@ -226,6 +226,7 @@ function boot(hotData) {
   registerSW();
   loadReplies();
   flushFeedback();
+  setTimeout(() => sendScore(false), 5000);
   window.DDH_BOOTED = true;
 }
 

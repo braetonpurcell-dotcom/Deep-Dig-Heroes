@@ -18,3 +18,17 @@ the player's name, add comments for follow-ups, and copy replies into `feedback/
 
 The form's `formResponse` URL and entry ids are in `FEEDBACK_FORM` in `js/feedback.js`. The form must stay
 published to "Anyone with the link", without sign-in or email collection, or the game's notes are refused.
+
+## Leaderboard
+
+Scores use the same form with type `score`: Feedback ID is the player's id and Message is a JSON payload
+(floor, mult, combo, prestiges, rare + proof: play, taps, kills, bosses, cases). A "Leaderboard" tab in the
+response sheet keeps only score rows:
+
+```
+=QUERY('Form Responses 1'!A:G, "select A, B, C, E, G where D = 'score'", 1)
+```
+
+That tab alone is published to the web as CSV; its URL goes in `LEADERBOARD_CSV` in `js/leaderboard.js`.
+Feedback messages stay private because only the Leaderboard tab is published. The game keeps each player's
+best values from the rows that pass `lbValid`.

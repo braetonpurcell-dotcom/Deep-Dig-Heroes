@@ -21,6 +21,7 @@ const ASSETS = [
   './js/ui.js' + V,
   './js/minigames.js' + V,
   './js/feedback.js' + V,
+  './js/leaderboard.js' + V,
   './js/tappad.js' + V,
   './js/main.js' + V,
   './manifest.json',

@@ -114,6 +114,7 @@ function saveName(then) {
   closeModal();
   toast(`Hi, ${v}!`, 'good');
   if (then === 'feedback') openFeedback();
+  if (then === 'board') openBoard();
   if (UI.tab === 'more') buildMore();
 }
 

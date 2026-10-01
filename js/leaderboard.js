@@ -1,0 +1,176 @@
+'use strict';
+// Leaderboard. Scores are never typed in: the game reads them from the player's own save and sends
+// them through the feedback Google Form as type "score" (on start-up with signal, when a best
+// improves, and on Refresh). A "Leaderboard" tab in the response sheet lists only score rows and is
+// published as CSV, which the game reads back. Every entry carries proof from the save (play time,
+// taps, kills...) and entries that don't add up are left off the board.
+
+// Published CSV of the sheet's Leaderboard tab (File > Share > Publish to web).
+let LEADERBOARD_CSV = null;
+
+const LB_CATS = [
+  { k: 'floor', name: 'Floor', fmt: v => 'B' + v },
+  { k: 'mult', name: 'Mult', fmt: v => '×' + v.toFixed(2) },
+  { k: 'combo', name: 'Combo', fmt: v => fmt(v) },
+  { k: 'rare', name: 'Rarest', fmt: (v, e) => e.rareLabel || oddsLong(v) },
+  { k: 'prestiges', name: 'Prestige', fmt: v => fmt(v) },
+];
+const LB = { rows: null, loadedAt: 0, cat: 'floor', loading: false };
+const LB_AUTO_GAP = 120; // seconds between automatic sends
+
+function playerId() {
+  if (!S.profile.pid) S.profile.pid = 'p-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  return S.profile.pid;
+}
+
+// The player's scores, straight from the save, plus the proof they're checked against.
+function scorePayload() {
+  const st = S.stats;
+  const best = S.best.all;
+  let rareLabel = '';
+  if (best) {
+    const what = best.sp ? PETS[best.sp].name : (SLOTS[best.slot] ? SLOTS[best.slot].name : '');
+    const wear = best.fl != null ? ' ' + WEAR[wearIndex(best.fl)].short : '';
+    rareLabel = `${RARITY[best.r].name}${wear} ${what} · 1 in ${fmt(best.odds)}`;
+  }
+  return {
+    v: 1, pid: playerId(), name: playerName(),
+    floor: st.bestFloor, mult: Math.round(st.bestMult * 100) / 100, combo: st.bestStreak, prestiges: S.prestiges,
+    rare: best ? best.odds : 0, rareR: best ? best.r : -1, rareLabel,
+    play: Math.round(st.playTime), taps: st.taps, kills: st.kills, bosses: st.bosses, cases: st.cases,
+  };
+}
+function scoreKey(p) { return [p.name, p.floor, p.mult.toFixed(1), p.combo, p.prestiges, p.rare].join('|'); }
+
+async function sendScore(force = false) {
+  if (!FEEDBACK_FORM || !playerName() || !navigator.onLine) return false;
+  const p = scorePayload();
+  const key = scoreKey(p);
+  const now = Date.now();
+  if (!force && (key === S.lb.sentKey || now - S.lb.sentAt < LB_AUTO_GAP * 1000)) return false;
+  const ok = await postEntry({ id: p.pid, type: 'score', text: JSON.stringify(p) });
+  if (ok) { S.lb.sentKey = key; S.lb.sentAt = now; saveLocal(); }
+  return ok;
+}
+
+// Does an entry add up? Checked against its own proof, so typed-in or edited numbers fall out.
+function lbValid(e) {
+  const num = x => typeof x === 'number' && isFinite(x) && x >= 0;
+  if (!e || typeof e.pid !== 'string' || typeof e.name !== 'string' || !e.name.trim()) return false;
+  if (![e.floor, e.mult, e.combo, e.prestiges, e.rare, e.play, e.taps, e.kills, e.cases].every(num)) return false;
+  if (e.floor < 1 || e.floor > 5000 || e.mult < 1) return false;
+  if (e.combo > e.taps + 1) return false; // a combo is built from taps
+  if (e.mult > 1 + 0.08 * Math.min(e.combo, 120) + 0.01) return false; // best skills: x10.6 at most
+  if (e.kills < 5 * (e.floor - 1)) return false; // every floor takes 6 kills
+  if (e.taps > e.play * 8 + 50) return false; // nobody taps 8 times a second for a whole session
+  if (e.rare > 0 && (e.cases < 1 || e.rare > 1e9)) return false;
+  return true;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+// One row per player: the best of everything they've sent, from entries that pass the checks.
+function buildBoard(csv) {
+  const rows = parseCsv(csv);
+  const head = (rows.shift() || []).map(h => h.trim().toLowerCase());
+  const col = head.indexOf('message');
+  const byPid = {};
+  for (const r of rows) {
+    let e;
+    try { e = JSON.parse(r[col]); } catch (err) { continue; }
+    if (!lbValid(e)) continue;
+    const cur = byPid[e.pid] || (byPid[e.pid] = { pid: e.pid, name: e.name, floor: 0, mult: 1, combo: 0, prestiges: 0, rare: 0, rareLabel: '' });
+    cur.name = e.name.slice(0, 20);
+    cur.floor = Math.max(cur.floor, e.floor);
+    cur.mult = Math.max(cur.mult, e.mult);
+    cur.combo = Math.max(cur.combo, e.combo);
+    cur.prestiges = Math.max(cur.prestiges, e.prestiges);
+    if (e.rare > cur.rare) { cur.rare = e.rare; cur.rareLabel = String(e.rareLabel || '').slice(0, 60); }
+  }
+  return Object.values(byPid);
+}
+
+async function loadBoard() {
+  if (!LEADERBOARD_CSV || LB.loading) return;
+  LB.loading = true;
+  try {
+    const res = await fetch(LEADERBOARD_CSV + (LEADERBOARD_CSV.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      LB.rows = buildBoard(await res.text());
+      LB.loadedAt = Date.now();
+      try { localStorage.setItem('ddh-board', JSON.stringify({ rows: LB.rows, at: LB.loadedAt })); } catch (e) { /* storage full */ }
+    }
+  } catch (e) {
+    /* offline: keep the last board */
+  }
+  LB.loading = false;
+}
+
+function boardHtml() {
+  const cat = LB_CATS.find(c => c.k === LB.cat);
+  const me = playerId();
+  // Your own row always reflects your save, even before the sheet catches up.
+  const mine = { ...scorePayload(), pid: me };
+  const rows = (LB.rows || []).filter(r => r.pid !== me);
+  if (playerName()) rows.push(mine);
+  rows.sort((a, b) => b[cat.k] - a[cat.k]);
+  const list = rows.filter(r => r[cat.k] > (cat.k === 'mult' ? 1 : 0)).slice(0, 50);
+  const ago = LB.loadedAt ? Math.max(0, Math.round((Date.now() - LB.loadedAt) / 60000)) : null;
+  return `<div class="seg lbcats">${LB_CATS.map(c => `<button data-lb="cat" data-v="${c.k}" class="${c.k === LB.cat ? 'on' : ''}">${c.name}</button>`).join('')}</div>
+    <div class="lblist">${list.length ? list.map((r, i) => `<div class="lbrow ${r.pid === me ? 'me' : ''}">
+        <span class="lbrank">${i + 1}</span><span class="lbname">${escapeHtml(r.name)}</span><span class="lbval">${escapeHtml(String(cat.fmt(r[cat.k], r)))}</span></div>`).join('')
+      : '<p class="small muted">No scores yet.</p>'}</div>
+    <p class="small muted">${!LEADERBOARD_CSV ? 'The leaderboard is being set up. Your scores are already being sent.'
+      : !playerName() ? 'Set your player name to join the board.'
+        : `Scores come straight from each player's save and update within about 5 minutes.${ago != null ? ` Board loaded ${ago ? ago + ' min ago' : 'just now'}.` : ''}`}</p>`;
+}
+
+function openBoard() {
+  if (!playerName()) { askName('board'); return; }
+  try {
+    const c = JSON.parse(localStorage.getItem('ddh-board') || 'null');
+    if (c && !LB.rows) { LB.rows = c.rows; LB.loadedAt = c.at; }
+  } catch (e) { /* no cached board */ }
+  openModal(`<h2>Leaderboard</h2><div id="lbBox">${boardHtml()}</div>
+    <div class="mbtns"><button class="btn gold" data-lb="refresh">Refresh</button><button class="btn" data-act="close">Close</button></div>`, { dismissable: true });
+  refreshBoard(false);
+}
+
+async function refreshBoard(force) {
+  const btn = $('[data-lb="refresh"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Refreshing…'; }
+  await sendScore(force);
+  await loadBoard();
+  const box = $('#lbBox');
+  if (box) box.innerHTML = boardHtml();
+  if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+}
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-lb]');
+  if (!el || el.disabled) return;
+  audioUnlock();
+  if (el.dataset.lb === 'open') openBoard();
+  else if (el.dataset.lb === 'cat') { LB.cat = el.dataset.v; $('#lbBox').innerHTML = boardHtml(); SFX.click(); }
+  else if (el.dataset.lb === 'refresh') { SFX.click(); refreshBoard(true); }
+});
+// Bests are checked about once a minute and sent when they improve (at most every 2 minutes).
+setInterval(() => { if (!document.hidden) sendScore(false); }, 60000);
+window.addEventListener('online', () => sendScore(false));
