@@ -6,7 +6,7 @@
 // taps, kills...) and entries that don't add up are left off the board.
 
 // Published CSV of the sheet's Leaderboard tab (File > Share > Publish to web).
-let LEADERBOARD_CSV = null;
+let LEADERBOARD_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQFMaBOgBS2H0XiefnEl6_wuGXrFBhBENY2QiadA3s2FS97xerx2l3wWABRLNM_iYi_onuPQ5Hmtwar/pub?gid=573941909&single=true&output=csv';
 
 const LB_CATS = [
   { k: 'floor', name: 'Floor', fmt: v => 'B' + v },

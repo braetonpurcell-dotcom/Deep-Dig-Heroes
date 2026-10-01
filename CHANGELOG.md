@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.9.4
+- The leaderboard is live: tap the trophy at the top right to see everyone's best floor, multiplier, combo, rarest pull and prestiges.
+
 ## v1.9.3
 - Leaderboard (trophy button at the top right): Floor, Mult, Combo, Rarest and Prestige rankings, with your own row highlighted. Nobody types scores: the game sends them straight from your save when it opens with signal, when one of your bests improves, and when you tap Refresh.
 - Every entry carries proof from the save (play time, taps, kills, cases) and entries that don't add up are left off the board, like a multiplier higher than the combo allows or a floor with too few kills.
