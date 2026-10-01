@@ -1,6 +1,6 @@
 'use strict';
-// Four brain mini-games in the mine's theme. They run in the Fight tab in place of the
-// math keypad, either as a boss duel (3 lives, each win strikes the boss) or as a rune
+// Four reflex and memory mini-games in the mine's theme. They run in the Fight tab in place of the
+// tap pad, either as a boss duel (3 lives, each win strikes the boss) or as a rune
 // challenge from a lucky ore (play until the first mistake, rewards grow with each round).
 
 const MG_INFO = {
@@ -41,7 +41,7 @@ function stopMinigame() {
   MG.active = null;
   $('#tab-fight').classList.remove('in-mg');
   $('#arena').innerHTML = '';
-  updateFight(true);
+  updateFight();
 }
 
 function mgShell(run) {

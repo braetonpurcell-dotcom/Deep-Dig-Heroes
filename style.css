@@ -204,18 +204,7 @@ button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
 .ticker.bad { color: var(--bad); }
 .ticker.gold { color: var(--gold); }
 .mathcard { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; transition: background .15s; }
-.mathcard.flash-good { background: #173a26; }
-.mathcard.flash-bad { background: #3f1620; animation: shakeX .25s steps(4); }
 @keyframes shakeX { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
-.problem { display: flex; align-items: baseline; justify-content: center; gap: 10px; font-size: clamp(22px, 7vw, 30px); font-weight: 700; white-space: nowrap; min-height: 38px; }
-.problem .q { font-variant-numeric: tabular-nums; }
-.problem .eq { color: var(--dim); }
-.problem .ans {
-  min-width: 2.2em; padding: 0 6px; text-align: center;
-  background: var(--ink); border: 2px solid var(--line-hi); color: var(--gold);
-  font-variant-numeric: tabular-nums;
-}
-.problem .ans.empty::after { content: "_"; animation: blink 1s steps(2) infinite; color: var(--dim); }
 @keyframes blink { 50% { opacity: 0; } }
 .mathmeta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
 .mult { font-size: 18px; font-weight: 700; color: var(--gold); min-width: 3.6em; font-variant-numeric: tabular-nums; }
@@ -228,17 +217,6 @@ button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
 .timer i.slow { background: var(--info); }
 .timer i.late { background: var(--line-hi); }
 .skip { min-height: 28px; padding: 2px 8px; font-size: 13px; background: transparent; border: 2px solid var(--line); clip-path: var(--notch); color: var(--dim); }
-.keypad { flex: 1 1 auto; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, minmax(38px, 1fr)); gap: 6px; min-height: 168px; max-height: 290px; }
-.keypad button, .choices button {
-  background: var(--raise); border: 2px solid var(--line-hi);
-  box-shadow: inset 0 -4px 0 rgba(0,0,0,.35);
-  clip-path: var(--notch);
-  font-size: 24px; font-weight: 700; padding: 0;
-  touch-action: none; /* a touch that starts on a key is a key press, never a scroll */
-}
-.keypad button:active, .choices button:active, .keypad button.press { background: #3a2d52; box-shadow: inset 0 -1px 0 rgba(0,0,0,.35); transform: translateY(1px); }
-.keypad button.fn { font-size: 16px; color: var(--dim); }
-.choices { flex: 1 1 auto; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; min-height: 150px; max-height: 260px; }
 
 /* ---------- Lists ---------- */
 .list { display: flex; flex-direction: column; gap: 6px; }
@@ -495,25 +473,20 @@ input[type="text"] {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 }
-/* Keep the whole keypad on screen on every common phone height. */
+/* Keep the fight tab on screen on every common phone height. */
 @media (max-height: 700px) {
   #cv { height: min(calc((100vw - 36px) * 0.6), 26svh, 300px); }
-  .keypad { grid-template-rows: repeat(4, minmax(36px, 1fr)); min-height: 162px; }
 }
 /* Short screens (iPhone SE, browsers with toolbars). */
 @media (max-height: 640px) {
   #app { gap: 4px; }
   #cv { height: min(calc((100vw - 36px) * 0.6), 21svh, 300px); }
   .mathcard { padding: 6px 10px; gap: 4px; }
-  .problem { min-height: 34px; font-size: clamp(20px, 6.5vw, 28px); }
-  .keypad { grid-template-rows: repeat(4, minmax(30px, 1fr)); min-height: 138px; }
-  .choices { min-height: 130px; }
   #tabs { padding-block: 4px 6px; }
   #tabs button { min-height: 40px; }
 }
 @media (max-height: 580px) {
   #cv { height: min(calc((100vw - 36px) * 0.6), 18svh, 300px); }
-  .keypad { grid-template-rows: repeat(4, minmax(28px, 1fr)); min-height: 130px; gap: 4px; }
   #tab-fight { gap: 4px; }
 }
 @supports not (height: 1svh) {
@@ -521,7 +494,7 @@ input[type="text"] {
   @media (max-height: 640px) { #cv { height: min(calc((100vw - 36px) * 0.6), 21vh, 300px); } }
   @media (max-height: 580px) { #cv { height: min(calc((100vw - 36px) * 0.6), 18vh, 300px); } }
 }
-/* Phone held sideways in a browser: scene on the left, panel on the right, so the keypad stays reachable. */
+/* Phone held sideways in a browser: scene on the left, panel on the right, so the tap pad stays reachable. */
 @media (orientation: landscape) and (max-height: 520px) {
   #app {
     display: grid; max-width: none; column-gap: 12px; row-gap: 4px;
@@ -540,15 +513,13 @@ input[type="text"] {
 @media (orientation: landscape) and (max-height: 360px) {
   #panel { padding-bottom: 0; }
   .tab { min-height: 0; }
-  .keypad { grid-template-rows: repeat(4, minmax(24px, 1fr)); min-height: 112px; gap: 4px; }
-  .keypad button { font-size: 18px; line-height: 1; }
   #tabs button { min-height: 32px; padding: 3px 0 2px; }
 }
 
 /* ---------- Mini-games ---------- */
 .arena { display: none; }
 #tab-fight.in-mg .arena { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-height: 0; }
-#tab-fight.in-mg #mathcard, #tab-fight.in-mg #keypad, #tab-fight.in-mg #choices, #tab-fight.in-mg #ticker { display: none !important; }
+#tab-fight.in-mg #combocard, #tab-fight.in-mg #tappad, #tab-fight.in-mg #ticker { display: none !important; }
 .mg-head { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
 .mg-title { font-size: 17px; color: var(--gold); }
 .mg-status { color: var(--dim); gap: 10px; }
@@ -621,10 +592,8 @@ input[type="text"] {
 .bagtools .btn { flex: 1 1 auto; }
 
 /* Tap pad */
-#tab-fight.in-tap #keypad, #tab-fight.in-tap #choices, #tab-fight.in-tap .problem, #tab-fight.in-tap .timer,
-#tab-fight.in-tap #skip, #tab-fight.in-tap .mathmeta > span:nth-of-type(3) { display: none !important; }
 .tappad {
-  position: relative; flex: 1 1 auto; min-height: 220px; overflow: hidden; touch-action: none; user-select: none;
+  position: relative; flex: 1 1 auto; min-height: 170px; overflow: hidden; touch-action: none; user-select: none;
   background-color: var(--ink); background-size: 100% 100%; image-rendering: pixelated;
   border: 2px solid var(--line-hi);
 }

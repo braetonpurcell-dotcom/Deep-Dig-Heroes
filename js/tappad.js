@@ -5,24 +5,15 @@
 
 const TAP = { on: false, targets: [], spawnT: 0.3, raf: 0, last: 0, bgKey: '', nextId: 1 };
 
-function tapActive() { return S.settings.answer === 'tap'; }
 
 // Everything scales with the current multiplier m (1x at no combo).
 function tapDifficulty() {
   const k = comboMult() - 1;
   return {
-    life: clamp(1.6 / (1 + 0.42 * k), 0.45, 1.6), // seconds before the ring closes
+    life: clamp(1.6 / (1 + 0.5 * k), 0.4, 1.6), // seconds before the ring closes: 1.6s at x1, 1.07s at x2, 0.64s at x4, 0.46s at x6
     max: clamp(1 + Math.floor(k * 1.25), 1, 6), // monsters on screen at once
     size: clamp(76 - 5 * k, 50, 76), // px
   };
-}
-
-function applyTapMode() {
-  const on = tapActive();
-  $('#tab-fight').classList.toggle('in-tap', on);
-  $('#tappad').hidden = !on;
-  if (on) tapStart();
-  else tapStop();
 }
 
 function tapStart() {
@@ -152,26 +143,15 @@ function tapPointer(e) {
     if (dd < t.size * 0.62 && dd < bestD) { best = t; bestD = dd; }
   }
   if (!best) { tapFloat(x, y, '·', 'dust'); SFX.pop(); return; }
-  const quality = 1 - best.age / best.life;
-  const res = tapHit(quality);
+  const res = tapHit(1 - best.age / best.life);
   tapRemove(best, 'hit');
   tapFloat(best.x, best.y - best.size / 2, res.perfect ? 'PERFECT' : 'HIT', res.perfect ? 'perfect' : 'good');
-  SFX.correct(res.streak);
-  vibrate(res.perfect ? 14 : 8);
-  if (res.bonus) emit('bonusDone', res.bonus);
 }
 
 function tapEscape(t) {
-  const lost = tapMiss();
+  const res = tapMiss();
   tapRemove(t, 'miss');
-  tapFloat(t.x, t.y - t.size / 2, lost ? `-${lost}` : 'MISS', 'miss');
-  if (lost >= 3) SFX.comboBreak();
-  else SFX.wrong();
-  vibrate(35);
+  tapFloat(t.x, t.y - t.size / 2, res.lost ? `-${res.lost}` : 'MISS', 'miss');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const pad = $('#tappad');
-  if (pad) pad.addEventListener('pointerdown', tapPointer);
-});
 on('floor', () => { if (TAP.on) tapBackground(); });

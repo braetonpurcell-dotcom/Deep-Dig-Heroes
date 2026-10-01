@@ -1,5 +1,5 @@
 'use strict';
-// HTML interface: HUD, tabs, the math keypad, modals, toasts and the case-opening reel.
+// HTML interface: HUD, tabs, the combo bar, modals, toasts and the case-opening reel.
 
 const UI = {
   tab: 'fight', bagView: 'gear', branch: 'brawler', skillInfo: null,
@@ -121,7 +121,7 @@ function showTab(name) {
 }
 
 function buildTab(name = UI.tab) {
-  if (name === 'fight') updateFight(true);
+  if (name === 'fight') updateFight();
   else if (name === 'forge') buildForge();
   else if (name === 'skills') buildSkills();
   else if (name === 'cases') buildCases();
@@ -236,29 +236,7 @@ function rotateGoal(dt) {
   t.className = 'ticker ' + kind;
 }
 
-function updateProblem() {
-  applyTapMode();
-  const p = R.prob;
-  if (!p) return;
-  $('#pQ').textContent = p.text;
-  $('#pEq').textContent = p.prompt === '?' ? '=' : p.prompt.replace(' ?', '');
-  updateAnswerBox();
-  const useChoices = S.settings.answer === 'choices';
-  $('#keypad').hidden = useChoices;
-  $('#choices').hidden = !useChoices;
-  if (useChoices) {
-    $('#choices').innerHTML = R.choices.map(v => `<button data-choice="${v}">${v}</button>`).join('');
-  }
-}
-
-function updateAnswerBox() {
-  const a = $('#pA');
-  a.textContent = R.input;
-  a.classList.toggle('empty', R.input === '');
-}
-
-function updateFight(full = false) {
-  if (full) updateProblem();
+function updateFight() {
   const streak = S.math.streak;
   const mult = $('#cMult');
   mult.textContent = '×' + comboMult().toFixed(2);
@@ -267,58 +245,23 @@ function updateFight(full = false) {
   fill.style.width = Math.min(100, (Math.min(streak, ST.comboCap) / ST.comboCap) * 100) + '%';
   fill.classList.toggle('fading', streak > 0 && R.time - R.lastAnswer > ST.decay - 2);
   $('#cStreak').textContent = `${streak}/${ST.comboCap}`;
-  $('#cLv').textContent = Math.floor(S.math.rating);
-  const p = R.prob;
-  if (p) {
-    const el = R.time - R.probStart;
-    const T = targetTime(p.tier);
-    const qT = T * 0.6;
-    const bar = $('#pTimer');
-    if (el < qT) { bar.style.width = (1 - el / qT) * 100 + '%'; bar.className = ''; }
-    else if (el < T) { bar.style.width = (1 - (el - qT) / (T - qT)) * 100 + '%'; bar.className = 'slow'; }
-    else { bar.style.width = '100%'; bar.className = 'late'; }
-  }
-  // The double-it progress lives in the ticker line, so the keypad never loses space to it.
+  // The double-it progress lives in the ticker line, so the tap pad never loses space to it.
   if (R.bonusRound && performance.now() >= UI.tickerUntil) {
     const t = $('#ticker');
-    const msg = `Double it: ${R.bonusRound.done}/${R.bonusRound.need} correct in a row, no mistakes`;
+    const msg = `Double it: ${R.bonusRound.done}/${R.bonusRound.need} taps in a row, no escapes`;
     if (t.textContent !== msg) { t.textContent = msg; t.className = 'ticker gold'; }
   }
 }
 
-function keyInput(k) {
-  if (!R.prob || UI.modalOpen || MG.active) return;
-  if (k === 'clear') R.input = '';
-  else if (k === 'back') R.input = R.input.slice(0, -1);
-  else {
-    if (R.input.length >= 6) return;
-    R.input += k;
-  }
-  updateAnswerBox();
-  const need = String(R.prob.answer).length;
-  if (/^\d$/.test(k) && R.input.length >= need) submitAnswer(Number(R.input));
-}
-
-on('problem', () => { if (UI.tab === 'fight') updateProblem(); });
-
-on('answer', res => {
-  const card = $('#mathcard');
-  card.classList.remove('flash-good', 'flash-bad');
-  void card.offsetWidth;
-  card.classList.add(res.ok ? 'flash-good' : 'flash-bad');
+on('tap', res => {
   if (res.ok) {
     SFX.correct(res.streak);
-    if (res.quick) SFX.quick();
-    vibrate(12);
-    const msg = res.mega ? `MEGA strike! Streak ${res.streak}`
-      : res.quick ? `Quick! ${res.dt.toFixed(1)}s, strike ×1.5`
-        : `Correct in ${res.dt.toFixed(1)}s`;
-    setTicker(msg, 'good', 1400);
+    vibrate(res.perfect ? 14 : 8);
+    if (res.mega) setTicker(`MEGA strike! Combo ${res.streak}`, 'good', 1400);
   } else {
-    SFX.wrong();
-    vibrate(60);
-    const lost = res.lost ? `, streak −${res.lost}` : '';
-    setTicker(res.skipped ? `Skipped: ${res.text} = ${res.answer}` : `${res.text} = ${res.answer}${lost}`, 'bad', 2600);
+    if (res.lost >= 3) SFX.comboBreak();
+    else SFX.wrong();
+    vibrate(35);
   }
   if (res.bonus) {
     if (res.bonus.won) {
@@ -328,7 +271,7 @@ on('answer', res => {
       toast('Bonus round missed. You kept the normal reward.', 'bad');
     }
   }
-  updateFight(true);
+  updateFight();
 });
 
 // ---------- forge ----------
@@ -1037,19 +980,18 @@ function buildMore() {
     <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : 'Reach B25 to prestige'}</button></div>`;
 
   const st = S.stats;
-  const tries = st.correct + st.wrong;
+  const tries = st.taps + st.escapes;
   const days = Object.keys(st.days).sort().slice(-7).reverse();
   h += `<div class="card"><h3>Stats</h3><div class="stats">
     <span>Played today</span><span>${fmtTime(st.days[dateKey()] || 0)}</span>
     <span>This session</span><span>${fmtTime(R.session)}</span>
     <span>Total play time</span><span>${fmtTime(st.playTime)}</span>
     <span>Deepest floor</span><span>B${st.bestFloor}</span>
-    <span>Problems solved</span><span>${fmt(st.correct)}</span>
-    <span>Accuracy</span><span>${tries ? ((st.correct / tries) * 100).toFixed(1) + '%' : '-'}</span>
-    <span>Average answer</span><span>${st.correct ? (st.answerTime / st.correct).toFixed(2) + 's' : '-'}</span>
-    <span>Fastest answer</span><span>${st.fastest ? st.fastest.toFixed(2) + 's' : '-'}</span>
-    <span>Best streak</span><span>${st.bestStreak}</span>
-    <span>Math level</span><span>${Math.floor(S.math.rating)} · ${MATH_TIERS[Math.floor(S.math.rating)]}</span>
+    <span>Monsters tapped</span><span>${fmt(st.taps)}</span>
+    <span>Tap accuracy</span><span>${tries ? ((st.taps / tries) * 100).toFixed(1) + '%' : '-'}</span>
+    <span>PERFECT taps</span><span>${st.taps ? ((st.perfects / st.taps) * 100).toFixed(0) + '%' : '-'}</span>
+    <span>Best combo</span><span>${st.bestStreak}</span>
+    <span>Best multiplier</span><span>×${st.bestMult.toFixed(2)}</span>
     <span>Enemies defeated</span><span>${fmt(st.kills)}</span>
     <span>Bosses defeated</span><span>${fmt(st.bosses)}</span>
     <span>Cases opened</span><span>${fmt(st.cases)}</span>
@@ -1059,15 +1001,11 @@ function buildMore() {
     <span>Prestiges</span><span>${S.prestiges}</span></div>
     ${days.length ? `<div class="h3" style="margin-top:10px">Last 7 days</div><div class="stats">${days.map(d => `<span>${d}</span><span>${fmtTime(st.days[d])}</span>`).join('')}</div>` : ''}</div>`;
 
-  const fixed = S.settings.mathMode === 'fixed';
   h += `<div class="card"><h3>Settings</h3>
     ${settingRow('Sound', toggleBtn('sound'))}
     ${settingRow('Vibration', toggleBtn('vibe'), 'Android only. iPhones do not allow web vibration.')}
     ${settingRow('Juice', segBtns('juice', [['low', 'Low'], ['med', 'Med'], ['high', 'High']]), 'How strong hits, freezes and particles feel.')}
     ${settingRow('Screen shake', toggleBtn('shake'))}
-    ${settingRow('Fight with', segBtns('answer', [['tap', 'Tap pad'], ['keypad', 'Math keypad'], ['choices', 'Math choices']]), 'Tap pad: tap monsters before their ring closes. Math: solve problems.')}
-    ${settingRow('Math difficulty', segBtns('mathMode', [['adaptive', 'Adaptive'], ['fixed', 'Fixed']]), fixed ? MATH_TIERS[S.settings.mathTier] : 'Gets harder as you get faster.')}
-    ${fixed ? settingRow('Fixed level', `<div class="seg"><button data-act="mathTier" data-v="-1">−</button><button class="on">Lv ${S.settings.mathTier}</button><button data-act="mathTier" data-v="1">+</button></div>`) : ''}
     ${settingRow('Auto-salvage', `<button class="btn small" data-act="autoScrap">${salvageLabel(S.settings.autoSalvage)}</button>`, 'Scrap new gear at or below this rarity. Tap to change. Upgrades over your equipped gear are always kept.')}
     ${settingRow('Keep screen awake', toggleBtn('wake'), 'Handy for idling. Uses more battery.')}
     ${settingRow('Break reminder', segBtns('breakMin', [[0, 'Off'], [30, '30m'], [60, '60m'], [90, '90m']]))}
@@ -1099,7 +1037,7 @@ function showWelcomeBack(res) {
     <p style="text-align:center">Your drill kept digging for ${fmtTime(res.capped)}${res.sec > res.capped ? ` (max ${fmtTime(ST.offlineCap)})` : ''}.</p>
     <div class="big-gain">${icon('coin', '')} +${fmt(res.coins)}</div>
     <div class="kv"><span>XP</span><span>+${fmt(res.xp)}</span><span>Enemies defeated</span><span>${fmt(res.kills)}</span><span>Offline rate</span><span>${Math.round(ST.offlineRate * 100)}%</span></div>
-    <p class="small muted">Double it: answer 5 problems in a row without a mistake.</p>
+    <p class="small muted">Double it: tap ${BONUS_TAPS} monsters in a row without one escaping.</p>
     <div class="mbtns"><button class="btn purple" data-act="startBonus">Double it</button><button class="btn good" data-act="close">Collect</button></div>`;
   UI.pendingBonus = { coins: res.coins, xp: res.xp };
   openModal(html, { dismissable: true });
@@ -1318,15 +1256,9 @@ function handleAction(el) {
       const cur = S.settings[d.k];
       S.settings[d.k] = typeof cur === 'number' ? Number(d.v) : d.v;
       if (d.k === 'breakMin') UI.nextBreak = R.session + Number(d.v) * 60;
-      if (d.k === 'answer' || d.k === 'mathMode') newProblem();
       buildMore();
       break;
     }
-    case 'mathTier':
-      S.settings.mathTier = clamp(S.settings.mathTier + Number(d.v), 1, 12);
-      newProblem();
-      buildMore();
-      break;
     case 'copySave': copySave(); break;
     case 'showImport': $('#importBox').hidden = false; $('#importText').focus(); break;
     case 'doImport': doImport(); break;
@@ -1402,7 +1334,6 @@ function doRestore(id) {
   makeBackup(JSON.parse(serialize()), 'Before restoring a backup');
   loadState(raw);
   saveNow();
-  newProblem();
   showTab('fight');
   toast('Backup restored', 'good');
 }
@@ -1427,7 +1358,6 @@ function doReset() {
   R.session = 0;
   saveNow();
   closeModal();
-  newProblem();
   showTab('fight');
   toast('Fresh start. Good luck down there.', 'good');
 }
@@ -1455,8 +1385,7 @@ function doImport() {
     const obj = parseCode(txt);
     loadState(obj);
     saveNow();
-    newProblem();
-    toast('Save loaded', 'good');
+      toast('Save loaded', 'good');
     showTab('fight');
   } catch (e) {
     toast(e.message || 'That code did not work', 'bad');
@@ -1477,36 +1406,10 @@ function bindInput() {
       showTab(tab.dataset.tab);
       return;
     }
-    const choice = e.target.closest('[data-choice]');
-    if (choice) {
-      audioUnlock();
-      if (R.prob && !UI.modalOpen) submitAnswer(Number(choice.dataset.choice));
-      return;
-    }
-    // Taps are handled on pointerdown. The click that follows the same press is ignored, however
-    // long the finger stayed down, so a key never types twice. Keyboard and assistive-tech
-    // activation have no pointerdown and still reach keyInput here.
-    const key = e.target.closest('[data-key]');
-    if (key) {
-      if (key._pressed) { key._pressed = false; return; }
-      keyInput(key.dataset.key);
-    }
   });
 
-  // Keypad on pointerdown so fast typing never waits for a click.
-  $('#keypad').addEventListener('pointerdown', e => {
-    const key = e.target.closest('[data-key]');
-    if (!key) return;
-    e.preventDefault();
-    key._pressed = true;
-    audioUnlock();
-    key.classList.add('press');
-    setTimeout(() => key.classList.remove('press'), 90);
-    keyInput(key.dataset.key);
-  });
-  $('#keypad').addEventListener('pointercancel', () => {
-    for (const k of $$('#keypad [data-key]')) k._pressed = false;
-  });
+  // The tap pad reacts on pointerdown so a fast tap never waits for a click.
+  $('#tappad').addEventListener('pointerdown', tapPointer);
 
   $('#modal').addEventListener('click', e => {
     if (e.target.id === 'modal' && UI.modalOpts && UI.modalOpts.dismissable) closeModal();
@@ -1524,16 +1427,10 @@ function bindInput() {
   $('#fFight').addEventListener('click', fightBoss);
   $('#arena').addEventListener('pointerdown', mgPointer);
   $('#fPrestige').addEventListener('click', () => { audioUnlock(); askPrestige(); });
-  $('#skip').addEventListener('click', () => { audioUnlock(); skipProblem(); });
 
   document.addEventListener('keydown', e => {
     if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
-    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.closest && e.target.closest('[data-key]')) e.target.closest('[data-key]')._pressed = false;
-    if (e.key === 'Escape' && UI.modalOpen && UI.modalOpts && UI.modalOpts.dismissable) { closeModal(); return; }
-    if (UI.tab !== 'fight' || UI.modalOpen) return;
-    if (/^\d$/.test(e.key)) { audioUnlock(); keyInput(e.key); e.preventDefault(); }
-    else if (e.key === 'Backspace') { keyInput('back'); e.preventDefault(); }
-    else if (e.key === 'Delete') { keyInput('clear'); e.preventDefault(); }
+    if (e.key === 'Escape' && UI.modalOpen && UI.modalOpts && UI.modalOpts.dismissable) closeModal();
   });
 }
 

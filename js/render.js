@@ -344,7 +344,7 @@ function comboRank(streak) {
   return r;
 }
 
-on('answer', res => {
+on('tap', res => {
   if (res.ok) {
     const r = comboRank(res.streak);
     if (r && r[0] === res.streak) {
@@ -359,8 +359,7 @@ on('answer', res => {
   } else if (res.lost >= 3) {
     SFX.comboBreak();
   }
-  if (res.ok && res.quick) addFloat('QUICK!', HERO_X + 8, GROUND_Y - 26, '#63e28a', 1, 0.8, -16);
-  if (res.ok && res.streak > 0 && res.streak % 10 === 0) {
+  if (res.ok && res.streak > 0 && res.streak % 25 === 0) {
     addFloat('STREAK ' + res.streak, HERO_X + 8, GROUND_Y - 36, '#ffcc4d', 1, 1.2, -10);
   }
   if (res.ok && res.streakRecord) addFloat('BEST STREAK!', HERO_X + 8, GROUND_Y - 44, '#63e28a', 1, 1.2, -8);

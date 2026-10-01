@@ -1,5 +1,5 @@
 // Offline support: serve from cache first, refresh the cache in the background.
-const CACHE = 'ddh-v10';
+const CACHE = 'ddh-v11';
 const FILES = [
   './',
   './index.html',

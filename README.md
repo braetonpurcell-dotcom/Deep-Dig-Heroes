@@ -1,6 +1,6 @@
 # Deep Dig Heroes
 
-A pixel-art idle miner for phones where mental math powers your attacks. It runs fully offline once it has loaded, with no accounts, ads or network calls.
+A pixel-art idle miner for phones where tapping monsters powers your attacks. It runs fully offline once it has loaded, with no accounts, ads or network calls.
 
 ## Play it offline on your phone
 
@@ -16,13 +16,13 @@ Run `node tools/build-single.js deep-dig-heroes.html` and send that file to your
 ## How it plays
 
 - **Dig and fight.** Your miner attacks on their own. Clear 6 enemies to go one floor deeper. Every 10th floor is a boss: tap Fight boss to duel it in a mini-game (3 lives, 45 seconds).
-- **Math strikes.** Answer problems on the keypad to strike. Each correct answer adds to your combo, and the combo multiplies all damage. Answers inside the green timer bar count as QUICK and hit 1.5× harder. Mistakes cut your streak. Difficulty adapts to how fast and accurate you are, from single-digit sums up to algebra.
+- **Tap strikes.** Monsters pop up on the tap pad inside a shrinking ring. Tap one before the ring closes to strike and add to your combo; tap in the first half for a PERFECT. A monster that escapes cuts the combo. The combo multiplies all damage up to ×6, and the higher it is, the faster the rings close and the more monsters show at once.
 - **Forge.** Spend coins on permanent upgrades for the current run. New upgrades unlock as you go deeper.
 - **Skills.** You earn 1 point per level. The tree has three branches: Brawler for active play, Tycoon for idle play and coins, and Gambler for luck and cases. Respec is free.
 - **Cases.** CS2-style spinning reels drop gear and pets in 5 rarities, from Common to Mythic. Pity timers guarantee Epic+ and Legendary+ drops. Gear has float values and random substats. Compare the numbers yourself to choose a build.
 - **Pets.** Pets follow you into the mine and add bonuses. Merge 3 of the same pet and rarity into 1 of the next rarity.
 - **Prestige.** From B25 you can collapse the mine to earn cores, each worth +10% damage forever. Prestiging also unlocks stronger case tiers and extra pet slots.
-- **Come-back rewards.** These include offline earnings (and you can double them by answering 5 problems in a row), a 7-day login streak, 3 daily quests, a free crate every 4 hours, 45 achievements and a 45-entry collection index.
+- **Come-back rewards.** These include offline earnings (and you can double them by tapping 20 monsters in a row), a 7-day login streak, 3 daily quests, a free crate every 4 hours, 45 achievements and a 45-entry collection index.
 - **Stats.** More → Stats shows play time per day. An optional break reminder is in Settings and is off by default.
 
 ## Code map
@@ -33,7 +33,8 @@ Run `node tools/build-single.js deep-dig-heroes.html` and send that file to your
 | `js/engine.js` | Rules and formulas. Balance knobs live in `TUNE` at the top |
 | `js/sprites.js` | Pixel art as text grids, built into canvases at startup |
 | `js/render.js` | The 160×96 pixel scene, bitmap font, particles and screen shake |
-| `js/ui.js` | HUD, tabs, the case reel, popups and keypad input |
+| `js/ui.js` | HUD, tabs, the case reel and popups |
+| `js/tappad.js` | The tap pad: spawning monsters, rings, hits and escapes |
 | `js/minigames.js` | The four mini-games, boss duels and rune challenges |
 | `js/main.js` | Boot, game loop, autosave, offline earnings and service worker |
 | `js/version.js` | The game version. Bump it for every release |
