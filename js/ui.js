@@ -1013,6 +1013,7 @@ function buildMore() {
     ${days.length ? `<div class="h3" style="margin-top:10px">Last 7 days</div><div class="stats">${days.map(d => `<span>${d}</span><span>${fmtTime(st.days[d])}</span>`).join('')}</div>` : ''}</div>`;
 
   h += `<div class="card"><h3>Settings</h3>
+    ${settingRow('Player name', `<button class="btn small" data-fb="name">${playerName() ? escapeHtml(playerName()) : 'Set name'}</button>`, 'Shown on the feedback you send.')}
     ${settingRow('Sound', toggleBtn('sound'))}
     ${settingRow('Vibration', toggleBtn('vibe'), 'Android only. iPhones do not allow web vibration.')}
     ${settingRow('Juice', segBtns('juice', [['low', 'Low'], ['med', 'Med'], ['high', 'High']]), 'How strong hits, freezes and particles feel.')}

@@ -619,3 +619,14 @@ input[type="text"] {
 .mathmeta .shield.on { color: #fff; background: color-mix(in srgb, var(--info) 55%, transparent); padding: 0 4px; }
 .tapfloat.safe { color: #fff; font-size: 18px; text-shadow: 0 0 6px var(--info), 0 1px 0 #000; }
 #tappad.shielded { box-shadow: inset 0 0 0 3px var(--info), inset 0 0 24px color-mix(in srgb, var(--info) 45%, transparent); }
+
+/* Feedback */
+.fbbtn { position: relative; min-height: 32px; padding: 3px 10px; font-size: 14px; background: var(--raise); border: 2px solid var(--line-hi); color: var(--fg); clip-path: var(--notch); }
+.fbbtn .dot { display: none; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; background: var(--bad); }
+.fbbtn.has-dot .dot { display: block; }
+#modal textarea, #modal input[type="text"] { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 8px; background: var(--ink); color: var(--fg); border: 2px solid var(--line-hi); resize: vertical; }
+.fbitem { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 2px solid var(--line); margin-bottom: 6px; }
+.fbtext { white-space: pre-wrap; word-break: break-word; }
+.fbreply { font-size: 14px; padding: 6px 8px; background: color-mix(in srgb, var(--info) 14%, var(--panel)); border-left: 3px solid var(--info); white-space: pre-wrap; word-break: break-word; }
+.fbreply.mine { background: var(--raise); border-left-color: var(--line-hi); }
+.fbreply .who { display: block; font-size: 12px; color: var(--dim); }

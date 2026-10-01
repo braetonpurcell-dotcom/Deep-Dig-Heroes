@@ -20,6 +20,7 @@ const ASSETS = [
   './js/render.js' + V,
   './js/ui.js' + V,
   './js/minigames.js' + V,
+  './js/feedback.js' + V,
   './js/tappad.js' + V,
   './js/main.js' + V,
   './manifest.json',
@@ -57,7 +58,9 @@ async function fromNetwork(req) {
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
-  if (new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.includes('/feedback/')) return; // replies are always fetched live
   if (req.mode === 'navigate') {
     event.respondWith(
       fromNetwork(req).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('./index.html')))

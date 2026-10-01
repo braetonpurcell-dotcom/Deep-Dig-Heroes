@@ -3,6 +3,11 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.9.0
+- Feedback button at the top right. Pick Bug, Idea or Other, type a note and tap Send. "Your feedback" lists everything you've sent, with replies from the developer under each one (a red dot means a new reply) and a Comment button to add to your own notes.
+- Player name: set the first time you open Feedback, or in More. It's attached to every note so the developer knows who said it.
+- Notes are saved on your phone and send whenever you're online. Until the feedback inbox is connected they wait on the phone.
+
 ## v1.8.2
 - Focus Shield: tap 15 monsters in a row without an escape to earn one ("Shield ready" on the combo bar). The next escape turns it on for 2.5 seconds (up to 4 near your peak); escapes while it's on are SAFE and cost no combo, so you can glance away to check your floor or score.
 - The multiplier ceiling follows the pace you've held over the last ~20 seconds, and near the ceiling an escape costs only 4% of your combo (10% lower down). In the playtest, looking away for 3 seconds at a good pace now costs about x0.05 instead of about x0.9.

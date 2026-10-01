@@ -82,6 +82,7 @@ function onVisibility() {
   }
   applyWakeLock();
   refreshAll(true);
+  if (away >= 60) { loadReplies(); flushFeedback(); }
 }
 
 async function applyWakeLock() {
@@ -223,6 +224,8 @@ function boot(hotData) {
   });
   cloudInit();
   registerSW();
+  loadReplies();
+  flushFeedback();
   window.DDH_BOOTED = true;
 }
 

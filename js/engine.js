@@ -77,6 +77,9 @@ function freshState() {
     pets: { inv, eq: [] },
     pity: { epic: 0, leg: 0 },
     pace: 0, // tap pad pace you settled at last session
+    profile: { name: '' },
+    feedback: [], // notes sent from the Feedback button, with the player's own follow-up comments
+    fbSeen: {}, // replies already read, per feedback id
     coll: {},
     best: {}, // rarest pull per slot (pick, helm, charm, pet) and overall; kept through prestige
     daily: { day: '', streak: 0, claimed: true },
@@ -173,6 +176,14 @@ function hydrate(obj) {
   if (!run.bossDone || typeof run.bossDone !== 'object') run.bossDone = {};
   s.math.streak = nonNegInt(s.math.streak);
   s.pace = isFinite(s.pace) ? clamp(s.pace, 0, 1) : 0;
+  if (typeof s.profile.name !== 'string') s.profile.name = '';
+  s.profile.name = s.profile.name.slice(0, 20);
+  const okText = x => x && typeof x.id === 'string' && typeof x.text === 'string';
+  s.feedback = (Array.isArray(s.feedback) ? s.feedback : []).filter(okText).slice(0, 50).map(i => ({
+    id: i.id, type: String(i.type || 'other'), text: i.text, at: nonNeg(i.at), sent: !!i.sent,
+    comments: (Array.isArray(i.comments) ? i.comments : []).filter(okText).map(c => ({ id: c.id, text: c.text, at: nonNeg(c.at), sent: !!c.sent })),
+  }));
+  if (!s.fbSeen || typeof s.fbSeen !== 'object') s.fbSeen = {};
   s.pity.epic = nonNegInt(s.pity.epic);
   s.pity.leg = nonNegInt(s.pity.leg);
   // Gear: drop anything unusable, keep ids unique.
