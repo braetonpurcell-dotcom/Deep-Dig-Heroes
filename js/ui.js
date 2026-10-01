@@ -378,11 +378,22 @@ function refreshForge() {
 }
 
 // ---------- skills ----------
-function skillInfoHtml(id, note = '') {
+// Why a skill can't take a point right now, or '' if it can.
+function skillBlock(id) {
+  const n = SKILL_INDEX[id];
+  if (skillRank(id) >= n.max) return 'Maxed out.';
+  if (branchPoints(n.branch) < TIER_REQ[n.tier]) return `Put ${TIER_REQ[n.tier]} points into this branch first.`;
+  if (S.run.sp <= 0) return 'No skill points left. Level up to earn more.';
+  return '';
+}
+
+function skillInfoHtml(id) {
   const n = SKILL_INDEX[id];
   const b = BRANCHES.find(x => x.id === n.branch);
-  return `<b style="color:${b.color}">${n.name}</b> <span class="muted">${skillRank(id)}/${n.max}</span><br>
-    <span class="small">${n.desc}</span>${note ? `<br><span class="small" style="color:var(--bad)">${note}</span>` : ''}`;
+  const block = skillBlock(id);
+  return `<div class="row"><div class="grow"><b style="color:${b.color}">${n.name}</b> <span class="muted">${skillRank(id)}/${n.max}</span><br>
+    <span class="small">${n.desc}</span>${block ? `<br><span class="small" style="color:var(--bad)">${block}</span>` : ''}</div>
+    ${block ? '' : `<button class="btn gold small" data-act="learnSkill" data-id="${id}">Learn +1</button>`}</div>`;
 }
 
 function buildSkills() {
@@ -395,7 +406,7 @@ function buildSkills() {
   h += `<div class="card branchhead"><span class="small">${b.blurb}</span><span class="small muted">Passive: ${b.passive} (now ${pts})</span></div>`;
   h += `<div class="card nodeinfo" id="nodeInfo">${UI.skillInfo && SKILL_INDEX[UI.skillInfo].branch === b.id
     ? skillInfoHtml(UI.skillInfo)
-    : '<span class="muted small">Tap a skill to put a point in it. Respec is free, so try different builds.</span>'}</div>`;
+    : '<span class="muted small">Tap a skill to read it, then press Learn to spend a point. Respec is free, so try different builds.</span>'}</div>`;
   h += '<div class="tiers">';
   for (let t = 0; t < 4; t++) {
     const nodes = b.nodes.filter(n => n.tier === t);
@@ -404,9 +415,9 @@ function buildSkills() {
       <div class="nodes ${nodes.length === 1 ? 'one' : ''}">`;
     for (const n of nodes) {
       const rank = skillRank(n.id);
-      const cls = [canLearn(n.id) ? 'can' : '', locked ? 'locked' : '', rank >= n.max ? 'maxed' : ''].join(' ');
-      h += `<button class="node ${cls}" style="--branch:${b.color}" data-act="skill" data-id="${n.id}">
-        <span class="nn">${n.name}</span>
+      const cls = [canLearn(n.id) ? 'can' : '', locked ? 'locked' : '', rank >= n.max ? 'maxed' : '', UI.skillInfo === n.id ? 'sel' : ''].join(' ');
+      h += `<button class="node ${cls}" style="--branch:${b.color}" data-act="skill" data-id="${n.id}" aria-pressed="${UI.skillInfo === n.id}">
+        <span class="nn">${n.name}</span><span class="nd">${n.desc}</span>
         <span class="pips">${Array.from({ length: n.max }, (_, i) => `<i class="${i < rank ? 'on' : ''}"></i>`).join('')}</span></button>`;
     }
     h += '</div>';
@@ -415,23 +426,18 @@ function buildSkills() {
   $('#tab-skills').innerHTML = h;
 }
 
+// Tapping a skill only selects it; points are spent with the Learn button.
 function tapSkill(id) {
-  const n = SKILL_INDEX[id];
   UI.skillInfo = id;
-  if (learnSkill(id)) {
-    SFX.buy();
-    buildSkills();
-    return;
-  }
-  let note = '';
-  if (skillRank(id) >= n.max) note = 'Maxed out.';
-  else if (branchPoints(n.branch) < TIER_REQ[n.tier]) note = `Put ${TIER_REQ[n.tier]} points into this branch first.`;
-  else if (S.run.sp <= 0) note = 'No skill points left. Level up to earn more.';
+  SFX.click();
   buildSkills();
-  if (note) {
-    $('#nodeInfo').innerHTML = skillInfoHtml(id, note);
-    SFX.error();
-  }
+}
+
+function doLearnSkill(id) {
+  UI.skillInfo = id;
+  if (learnSkill(id)) SFX.buy();
+  else SFX.error();
+  buildSkills();
 }
 
 // ---------- cases ----------
@@ -1102,6 +1108,7 @@ function handleAction(el) {
       break;
     case 'branch': UI.branch = d.v; buildSkills(); break;
     case 'skill': tapSkill(d.id); break;
+    case 'learnSkill': doLearnSkill(d.id); break;
     case 'respec': {
       const n = respecSkills();
       toast(n ? `Refunded ${plural(n, 'point')}` : 'Nothing to refund', '');
@@ -1128,6 +1135,8 @@ function handleAction(el) {
       closeModal();
       break;
     case 'salvage': {
+      const f = findItem(Number(d.id));
+      if (f && f.it.r >= 2 && !d.ok) { askSalvage(f.it); break; }
       const v = salvageItem(Number(d.id));
       if (v) { SFX.coin(); toast(`+${v} scrap`, '', 'scrap'); }
       closeModal();
@@ -1139,6 +1148,8 @@ function handleAction(el) {
       break;
     }
     case 'salvageBelow': {
+      if (!d.ok) { askSalvageBelow(Number(d.r)); break; }
+      closeModal();
       const r = salvageBelow(Number(d.r));
       toast(r.n ? `Salvaged ${plural(r.n, 'item')} for ${r.total} scrap` : 'Nothing to salvage', r.n ? '' : 'bad', 'scrap');
       buildBag();
@@ -1246,6 +1257,23 @@ function askPrestige() {
     ${nextCase ? `<p class="small">Unlocks the ${nextCase.name}.</p>` : ''}
     ${S.prestiges === 0 || S.prestiges === 2 ? '<p class="small">Adds a pet slot.</p>' : ''}
     <div class="mbtns"><button class="btn purple" data-act="doPrestige">Prestige</button><button class="btn" data-act="close">Not yet</button></div>`, { dismissable: true });
+}
+
+function askSalvage(it) {
+  openModal(`<h2>Scrap this item?</h2>
+    <p style="text-align:center"><span class="tc${it.r}">${RARITY[it.r].name} ${itemName(it)}${it.lv ? ' +' + it.lv : ''}</span> turns into ${scrapValue(it)} scrap. This can't be undone.</p>
+    <div class="mbtns"><button class="btn bad" data-act="salvage" data-id="${it.id}" data-ok="1">Scrap it</button><button class="btn" data-act="close">Keep it</button></div>`, { dismissable: true });
+}
+
+function askSalvageBelow(r) {
+  const items = S.gear.bag.filter(it => it.r < r);
+  if (!items.length) { toast('Nothing to salvage', 'bad', 'scrap'); return; }
+  const total = items.reduce((a, it) => a + scrapValue(it), 0);
+  const names = r > 1 ? 'Common and Rare' : 'Common';
+  const leveled = items.filter(it => it.lv > 0).length;
+  openModal(`<h2>Scrap ${plural(items.length, 'item')}?</h2>
+    <p style="text-align:center">Every ${names} item in your bag turns into ${total} scrap. Equipped gear is safe.${leveled ? ` ${leveled} of them ${leveled === 1 ? 'is' : 'are'} reforged.` : ''} This can't be undone.</p>
+    <div class="mbtns"><button class="btn bad" data-act="salvageBelow" data-r="${r}" data-ok="1">Scrap ${items.length}</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
 }
 
 function askRestore(id) {
