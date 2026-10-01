@@ -57,6 +57,7 @@ async function sendScore(force = false) {
 function lbValid(e) {
   const num = x => typeof x === 'number' && isFinite(x) && x >= 0;
   if (!e || typeof e.pid !== 'string' || typeof e.name !== 'string' || !e.name.trim()) return false;
+  if (/delete me/i.test(e.name)) return false; // setup test entries
   if (![e.floor, e.mult, e.combo, e.prestiges, e.rare, e.play, e.taps, e.kills, e.cases].every(num)) return false;
   if (e.floor < 1 || e.floor > 5000 || e.mult < 1) return false;
   if (e.combo > e.taps + 1) return false; // a combo is built from taps

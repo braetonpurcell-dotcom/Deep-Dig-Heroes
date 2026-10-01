@@ -3,6 +3,10 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.9.5
+- The Feedback button is now a small "F" next to the leaderboard trophy, so the top bar stays one row and the game no longer gets pushed down on narrow phones.
+- Setup test entries ("delete me") are left off the leaderboard.
+
 ## v1.9.4
 - The leaderboard is live: tap the trophy at the top right to see everyone's best floor, multiplier, combo, rarest pull and prestiges.
 

@@ -87,6 +87,15 @@ img.ic { image-rendering: pixelated; image-rendering: crisp-edges; width: 18px; 
 /* ---------- HUD ---------- */
 #hud { display: flex; flex-direction: column; gap: 4px; flex: none; }
 .hud-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-width: 0; }
+.hud-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* Narrow phones: tighter counters so they stay on one line next to the two buttons. */
+@media (max-width: 400px) {
+  .hud-top > .hud-row { gap: 2px 8px; }
+  .hud-top .res { gap: 3px; font-size: 14px; }
+  .hud-top .res.coins b { font-size: 16px; }
+  .hud-top { gap: 6px; }
+}
+.hud-top > .hud-row { flex: 1 1 auto; }
 .res { display: flex; align-items: center; gap: 5px; font-size: 15px; white-space: nowrap; }
 .res b { font-weight: 700; font-variant-numeric: tabular-nums; }
 .res.coins b { color: var(--gold); font-size: 18px; }
@@ -621,9 +630,12 @@ input[type="text"] {
 #tappad.shielded { box-shadow: inset 0 0 0 3px var(--info), inset 0 0 24px color-mix(in srgb, var(--info) 45%, transparent); }
 
 /* Feedback */
-.fbbtn { position: relative; min-height: 32px; padding: 3px 10px; font-size: 14px; background: var(--raise); border: 2px solid var(--line-hi); color: var(--fg); clip-path: var(--notch); }
-.fbbtn .dot { display: none; position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; background: var(--bad); }
-.fbbtn.has-dot .dot { display: block; }
+/* Leaderboard and Feedback: two small square buttons that stay on the top row. */
+.hudbtns { display: flex; gap: 4px; flex: none; margin-left: auto; }
+.hudbtn { position: relative; width: 30px; height: 30px; padding: 0; display: grid; place-items: center; font-size: 17px; line-height: 1; background: var(--raise); border: 2px solid var(--line-hi); color: var(--fg); clip-path: var(--notch); }
+.hudbtn img { width: 17px; }
+.hudbtn .dot { display: none; position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; background: var(--bad); }
+.hudbtn.has-dot .dot { display: block; }
 #modal textarea, #modal input[type="text"] { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 8px; background: var(--ink); color: var(--fg); border: 2px solid var(--line-hi); resize: vertical; }
 .fbitem { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel); border: 2px solid var(--line); margin-bottom: 6px; }
 .fbtext { white-space: pre-wrap; word-break: break-word; }
@@ -632,8 +644,6 @@ input[type="text"] {
 .fbreply .who { display: block; font-size: 12px; color: var(--dim); }
 
 /* Leaderboard */
-.lbbtn { padding: 3px 7px; }
-.lbbtn img { width: 18px; }
 .lbcats { flex-wrap: wrap; }
 .lblist { display: flex; flex-direction: column; gap: 3px; max-height: 50vh; overflow-y: auto; }
 .lbrow { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px; background: var(--panel); border: 2px solid var(--line); }
