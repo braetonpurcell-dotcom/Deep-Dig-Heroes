@@ -23,7 +23,7 @@ const RARITY = [
 }
 const TOP_RARITY = RARITY.length - 1;
 const ULTRA = 5; // Exotic and above: big reveals, auras, no pity
-const MERGE_MAX = 4; // pets merge up to Mythic; anything above only comes from cases
+const MERGE_MAX = 10; // pets merge all the way up; past Mythic each step takes more copies (see mergeCost)
 const RARITY_MULT = [1, 1.8, 3, 5, 8, 14, 25, 45, 80, 140, 250]; // gear stat multiplier
 const PET_POWER = [1, 2.2, 4.5, 9, 18, 30, 50, 85, 140, 230, 380]; // pet stat multiplier
 // Luck and sub-stats only creep up past Mythic: the huge jumps are for damage and coins,

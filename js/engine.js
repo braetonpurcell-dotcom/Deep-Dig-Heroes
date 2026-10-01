@@ -94,7 +94,7 @@ function freshState() {
     },
     settings: {
       sound: true, vibe: true, answer: 'keypad', mathMode: 'adaptive', mathTier: 3,
-      autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA,
+      autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA, bagSort: 'new',
     },
   };
 }
@@ -244,7 +244,8 @@ function hydrate(obj) {
   if (!['low', 'med', 'high'].includes(st.juice)) st.juice = 'high';
   st.shake = st.shake !== false;
   st.mathTier = Number.isInteger(st.mathTier) ? clamp(st.mathTier, 1, 12) : 3;
-  st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, 4) : 0;
+  st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, TOP_RARITY) : 0;
+  if (!['new', 'rarity', 'best'].includes(st.bagSort)) st.bagSort = 'new';
   st.autoStop = Number.isInteger(st.autoStop) ? clamp(st.autoStop, 2, TOP_RARITY) : ULTRA;
   st.breakMin = nonNeg(st.breakMin);
   if (!['1', '10', 'max'].includes(String(st.buyAmt))) st.buyAmt = '1';
@@ -1060,7 +1061,8 @@ function grantDrop(d) {
     d.autoEquipped = true;
     return;
   }
-  if (it.r < S.settings.autoSalvage) {
+  // Auto-scrap never throws away an upgrade over what you have equipped in that slot.
+  if (it.r < S.settings.autoSalvage && !isUpgrade(it)) {
     const v = scrapValue(it);
     S.scrap += v;
     d.salvaged = v;
@@ -1082,6 +1084,11 @@ function grantDrop(d) {
     d.madeRoom = { name: `${RARITY[old.r].name} ${itemName(old)}${old.lv ? ' +' + old.lv : ''}`, scrap: v };
   }
   S.gear.bag.unshift(it);
+}
+
+function isUpgrade(it) {
+  const eq = S.gear.eq[it.slot];
+  return !eq || itemStats(it)[0].v > itemStats(eq)[0].v;
 }
 
 function itemRank(it) { return it.r * 1000 + it.t * 20 + it.lv; }
@@ -1235,6 +1242,9 @@ function markItemsSeen() {
 }
 
 // ---------- pets ----------
+// Copies needed to merge up from rarity r: 3 up to Mythic, then 5 for Mythic -> Exotic, 7, 9...
+function mergeCost(r) { return r < 4 ? 3 : 5 + 2 * (r - 4); }
+
 // Pet luck follows the gentle curve past Mythic, like gear luck.
 function petPower(k, r) { return k === 'luck' && r > 4 ? PET_POWER[4] * SUB_MULT[r] / SUB_MULT[4] : PET_POWER[r]; }
 function petSlots() { return 2 + (S.prestiges >= 1 ? 1 : 0) + (S.prestiges >= 3 ? 1 : 0); }
@@ -1256,8 +1266,9 @@ function unequipPet(i) {
 }
 
 function mergePet(sp, r) {
-  if (r >= MERGE_MAX || petAvailable(sp, r) < 3) return false;
-  S.pets.inv[sp][r] -= 3;
+  const need = mergeCost(r);
+  if (r >= MERGE_MAX || petAvailable(sp, r) < need) return false;
+  S.pets.inv[sp][r] -= need;
   S.pets.inv[sp][r + 1]++;
   markCollection('pet', sp, r + 1);
   S.stats.merges++;
@@ -1275,7 +1286,7 @@ function mergeAllPets() {
 
 function mergeablePets() {
   let n = 0;
-  for (const sp of PET_IDS) for (let r = 0; r < MERGE_MAX; r++) if (petAvailable(sp, r) >= 3) n++;
+  for (const sp of PET_IDS) for (let r = 0; r < MERGE_MAX; r++) if (petAvailable(sp, r) >= mergeCost(r)) n++;
   return n;
 }
 

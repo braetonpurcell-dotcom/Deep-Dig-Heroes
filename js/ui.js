@@ -651,7 +651,7 @@ function dropDetailHtml(d) {
     const inParty = petEquippedCount(d.sp, d.r) > 0;
     const full = S.pets.eq.length >= petSlots();
     const where = inParty ? 'In your party.' : full ? 'Party full: swap pets in Bag › Pets.' : '';
-    const merge = d.r < MERGE_MAX ? 'Merge 3 into the next rarity.' : '';
+    const merge = d.r < MERGE_MAX ? `Merge ${mergeCost(d.r)} into the next rarity.` : '';
     return `<div class="rname tc${d.r}">${RARITY[d.r].name} ${def.name}</div>
       ${pullOddsHtml(d)}<div class="rsub">${petBonusText(d.sp, d.r)}</div>
       <div class="rsub">You own ${S.pets.inv[d.sp][d.r]}. ${where} ${merge}</div>`;
@@ -779,19 +779,32 @@ function gearViewHtml() {
   }
   h += '</div>';
   h += `<div class="row small">${icon('scrap', '')}<span><b>${fmt(S.scrap)}</b> scrap · bag ${S.gear.bag.length}/${BAG_SIZE}</span></div>
-    <div class="mbtns"><button class="btn small" data-act="salvageBelow" data-r="1">Salvage Commons</button>
-    <button class="btn small" data-act="salvageBelow" data-r="2">Salvage Commons + Rares</button></div>`;
+    <div class="bagtools">
+      <button class="btn small" data-act="bulkPick">${salvageLabel(bulkR())} ▸</button>
+      <button class="btn small bad" data-act="salvageBelow" data-r="${bulkR()}">Salvage</button>
+      <button class="btn small" data-act="bagSort">Sort: ${BAG_SORT_LABEL[S.settings.bagSort]}</button></div>`;
   if (!S.gear.bag.length) {
     h += '<div class="card muted small">Your bag is empty. Open cases to find pickaxes, helmets and charms. Compare the numbers and equip the best ones.</div>';
   } else {
     h += '<div class="baggrid">';
-    for (const it of S.gear.bag) {
+    for (const it of sortedBag()) {
       h += `<button class="bagtile rc${it.r}" data-act="item" data-id="${it.id}" aria-label="${RARITY[it.r].name} ${itemName(it)}">
         <img src="${gearUrl(it.slot, it.t, it.r)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
     }
     h += '</div>';
   }
   return h;
+}
+
+const BAG_SORT_LABEL = { new: 'Newest', rarity: 'Rarity', best: 'Best by type' };
+function bulkR() { return clamp(UI.bulkR || 1, 1, TOP_RARITY); }
+// The bag is shown sorted; the stored order (newest first) is left alone.
+function sortedBag() {
+  const bag = S.gear.bag.slice();
+  const mode = S.settings.bagSort;
+  if (mode === 'rarity') bag.sort((a, b) => b.r - a.r || b.t - a.t || b.lv - a.lv);
+  else if (mode === 'best') bag.sort((a, b) => SLOT_IDS.indexOf(a.slot) - SLOT_IDS.indexOf(b.slot) || itemStats(b)[0].v - itemStats(a)[0].v);
+  return bag;
 }
 
 function partyBonusText() {
@@ -819,7 +832,7 @@ function petsViewHtml() {
   }
   h += `</div><div class="small muted" style="margin-top:6px">Party bonus: ${partyBonusText()}. Tap a party pet to send it back.</div></div>`;
   const merges = mergeablePets();
-  h += `<div class="row"><div class="grow small muted">Merge 3 of the same pet and rarity into 1 of the next rarity.</div>
+  h += `<div class="row"><div class="grow small muted">Merge copies of the same pet and rarity into 1 of the next rarity: 3 up to Mythic, then 5, 7, 9, 11, 13, 15.</div>
     <button class="btn good small" data-act="mergeAll" ${merges ? '' : 'disabled'}>Merge all</button></div>`;
   h += '<div class="petgrid">';
   let any = false;
@@ -832,7 +845,7 @@ function petsViewHtml() {
     for (let r = 0; r < RARITY.length; r++) {
       if (!inv[r]) continue;
       const eqn = petEquippedCount(sp, r);
-      const canMerge = r < MERGE_MAX && inv[r] - eqn >= 3;
+      const canMerge = r < MERGE_MAX && inv[r] - eqn >= mergeCost(r);
       h += `<button class="pchip rc${r} ${eqn ? 'eq' : ''}" data-act="pet" data-sp="${sp}" data-r="${r}">${RARITY[r].name} ×${inv[r]}${canMerge ? ' · merge' : ''}</button>`;
     }
     h += '</div></div></div>';
@@ -915,14 +928,14 @@ function showPet(sp, r) {
   const eqn = petEquippedCount(sp, r);
   const avail = n - eqn;
   const canAdd = avail > 0 && S.pets.eq.length < petSlots();
-  const canMerge = r < MERGE_MAX && avail >= 3;
+  const canMerge = r < MERGE_MAX && avail >= mergeCost(r);
   openModal(`<div class="result"><div style="text-align:center"><img src="${petUrl(sp, false, r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${r}">${RARITY[r].name} ${PETS[sp].name}</div>
     <div class="rsub">${petBonusText(sp, r)}</div>
-    <div class="rsub">You own ${n}${eqn ? `, ${eqn} in your party` : ''}${r < MERGE_MAX ? `. Merge 3 into a ${RARITY[r + 1].name} (${petBonusText(sp, r + 1)}).` : r >= ULTRA ? '. Only found in cases.' : '.'}</div></div>
+    <div class="rsub">You own ${n}${eqn ? `, ${eqn} in your party` : ''}${r < MERGE_MAX ? `. Merge ${mergeCost(r)} into a ${RARITY[r + 1].name} (${petBonusText(sp, r + 1)}).` : '. Top rarity.'}</div></div>
     <div class="mbtns">
       <button class="btn good" data-act="petToParty" data-sp="${sp}" data-r="${r}" ${canAdd ? '' : 'disabled'}>${S.pets.eq.length >= petSlots() ? 'Party full' : 'Add to party'}</button>
-      ${r < MERGE_MAX ? `<button class="btn purple" data-act="mergePet" data-sp="${sp}" data-r="${r}" ${canMerge ? '' : 'disabled'}>Merge 3</button>` : ''}
+      ${r < MERGE_MAX ? `<button class="btn purple" data-act="mergePet" data-sp="${sp}" data-r="${r}" ${canMerge ? '' : 'disabled'}>Merge ${mergeCost(r)}</button>` : ''}
       <button class="btn" data-act="close">Close</button></div>`, { dismissable: true });
 }
 
@@ -1054,7 +1067,7 @@ function buildMore() {
     ${settingRow('Answer with', segBtns('answer', [['keypad', 'Keypad'], ['choices', 'Choices']]), 'The keypad trains your brain harder.')}
     ${settingRow('Math difficulty', segBtns('mathMode', [['adaptive', 'Adaptive'], ['fixed', 'Fixed']]), fixed ? MATH_TIERS[S.settings.mathTier] : 'Gets harder as you get faster.')}
     ${fixed ? settingRow('Fixed level', `<div class="seg"><button data-act="mathTier" data-v="-1">−</button><button class="on">Lv ${S.settings.mathTier}</button><button data-act="mathTier" data-v="1">+</button></div>`) : ''}
-    ${settingRow('Auto-salvage', segBtns('autoSalvage', [[0, 'Off'], [1, 'Com'], [2, 'Rare'], [3, 'Epic']]), 'Scrap new gear at or below this rarity.')}
+    ${settingRow('Auto-salvage', `<button class="btn small" data-act="autoScrap">${salvageLabel(S.settings.autoSalvage)}</button>`, 'Scrap new gear at or below this rarity. Tap to change. Upgrades over your equipped gear are always kept.')}
     ${settingRow('Keep screen awake', toggleBtn('wake'), 'Handy for idling. Uses more battery.')}
     ${settingRow('Break reminder', segBtns('breakMin', [[0, 'Off'], [30, '30m'], [60, '60m'], [90, '90m']]))}
   </div>`;
@@ -1184,7 +1197,20 @@ function handleAction(el) {
     case 'autoStop': stopAutoRoll(); break;
     case 'autoCase': cycleAutoCase(); break;
     case 'autoStopAt': S.settings.autoStop = S.settings.autoStop >= TOP_RARITY ? 2 : S.settings.autoStop + 1; SFX.click(); renderAutoBox(); break;
-    case 'autoScrap': S.settings.autoSalvage = (S.settings.autoSalvage + 1) % 5; SFX.click(); renderAutoBox(); break;
+    case 'autoScrap':
+      S.settings.autoSalvage = (S.settings.autoSalvage + 1) % (TOP_RARITY + 1);
+      SFX.click();
+      renderAutoBox();
+      if (UI.tab === 'more') buildMore();
+      break;
+    case 'bulkPick': UI.bulkR = (bulkR() % TOP_RARITY) + 1; SFX.click(); buildBag(); break;
+    case 'bagSort': {
+      const order = ['new', 'rarity', 'best'];
+      S.settings.bagSort = order[(order.indexOf(S.settings.bagSort) + 1) % order.length];
+      SFX.click();
+      buildBag();
+      break;
+    }
     case 'again': {
       const lo = UI.lastOpen;
       closeModal();
@@ -1349,7 +1375,7 @@ function askSalvageBelow(r) {
   const kept = S.gear.bag.filter(it => it.r < r && it.locked).length;
   if (!items.length) { toast('Nothing to salvage', 'bad', 'scrap'); return; }
   const total = items.reduce((a, it) => a + scrapValue(it), 0);
-  const names = r > 1 ? 'Common and Rare' : 'Common';
+  const names = r === 1 ? 'Common' : `${RARITY[r - 1].name} or lower`;
   const leveled = items.filter(it => it.lv > 0).length;
   openModal(`<h2>Scrap ${plural(items.length, 'item')}?</h2>
     <p style="text-align:center">Every ${names} item in your bag turns into ${total} scrap. Equipped${kept ? ` and ${kept} locked` : ''} gear is safe.${leveled ? ` ${leveled} of them ${leveled === 1 ? 'is' : 'are'} reforged.` : ''} This can't be undone.</p>
@@ -1545,7 +1571,8 @@ function uiTick(dt) {
 // ---------- auto-roll ----------
 // Opens cases back to back while the game is open (it pauses in the background), and stops on a
 // pull at or above the chosen rarity, or when coins run out.
-const SALVAGE_LABELS = ['Off', 'Commons', 'Rare and below', 'Epic and below', 'Legendary and below'];
+// "Off", "Commons", "Rare and below" ... "Eclipse and below" for a scrap-below-rarity threshold.
+function salvageLabel(n) { return n <= 0 ? 'Off' : n === 1 ? 'Commons' : `${RARITY[n - 1].name} and below`; }
 
 function autoCases() { return CASES.filter(caseUnlocked); }
 function autoTier() {
@@ -1575,7 +1602,7 @@ function renderAutoBox() {
     h += `<div class="autoopts">
         <button class="btn small" data-act="autoCase">${c.name}</button>
         <button class="btn small" data-act="autoStopAt">Stop at <span class="tc${stop}">${RARITY[stop].name}+</span></button>
-        <button class="btn small" data-act="autoScrap">Scrap: ${SALVAGE_LABELS[S.settings.autoSalvage]}</button></div>
+        <button class="btn small" data-act="autoScrap">Scrap: ${salvageLabel(S.settings.autoSalvage)}</button></div>
       <button class="btn gold wide" data-act="autoStart" ${S.coins < cost ? 'disabled' : ''}>Start · ${costHtml(cost)} per case</button>`;
   } else {
     h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${c.name}: <b>${fmt(a.n)}</b> opened · ${fmt(a.spent)} coins · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>

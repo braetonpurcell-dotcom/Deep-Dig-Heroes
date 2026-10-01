@@ -3,6 +3,11 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.6.0
+- Pets merge all the way to Singularity. Up to Mythic it still takes 3 copies; past that each step takes more: 5 Mythic make an Exotic, then 7, 9, 11, 13 and 15.
+- Auto-salvage can be set to any rarity, from Commons up to "Eclipse and below" (in More and on the auto-roll card). It never scraps an upgrade over the gear you have equipped.
+- Bag tools: pick any rarity for bulk Salvage (locked items are always kept) and sort the bag by Newest, Rarity or Best by type.
+
 ## v1.5.1
 - Lock button on every item (top right of the item popup). Locked items can't be salvaged, are skipped by the bulk Salvage buttons, and are never scrapped to make room in a full bag. Locked items show a small padlock in the bag.
 

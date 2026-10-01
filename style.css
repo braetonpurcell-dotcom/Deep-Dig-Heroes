@@ -616,3 +616,6 @@ input[type="text"] {
 .lockbtn.on { border-color: var(--gold); color: var(--gold); background: color-mix(in srgb, var(--gold) 15%, var(--raise)); }
 .bagtile .lk { position: absolute; left: 2px; bottom: 2px; z-index: 1; line-height: 0; }
 .bagtile .lk img { width: 11px; image-rendering: pixelated; }
+
+.bagtools { display: flex; flex-wrap: wrap; gap: 6px; }
+.bagtools .btn { flex: 1 1 auto; }
