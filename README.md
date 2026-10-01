@@ -43,4 +43,4 @@ Saves go to `localStorage` every 5 seconds and when the app is hidden. When the 
 
 ## Credits
 
-Pixelify Sans font by the Pixelify Sans Project Authors, under the SIL Open Font License 1.1 (`fonts/OFL.txt`).
+Jersey 10 font by the Soft Type Project Authors, under the SIL Open Font License 1.1 (`fonts/OFL.txt`).

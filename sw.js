@@ -1,11 +1,11 @@
 // Offline support: serve from cache first, refresh the cache in the background.
-const CACHE = 'ddh-v1';
+const CACHE = 'ddh-v2';
 const FILES = [
   './',
   './index.html',
   './style.css',
   './manifest.json',
-  './fonts/PixelifySans-latin.woff2',
+  './fonts/Jersey10-latin.woff2',
   './js/util.js',
   './js/data.js',
   './js/sprites.js',

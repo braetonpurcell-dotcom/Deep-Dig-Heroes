@@ -15,8 +15,8 @@ if (!out) {
 
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 const html = read('index.html');
-const font = fs.readFileSync(path.join(root, 'fonts/PixelifySans-latin.woff2')).toString('base64');
-const css = read('style.css').replace('url("fonts/PixelifySans-latin.woff2")', `url(data:font/woff2;base64,${font})`);
+const font = fs.readFileSync(path.join(root, 'fonts/Jersey10-latin.woff2')).toString('base64');
+const css = read('style.css').replace('url("fonts/Jersey10-latin.woff2")', `url(data:font/woff2;base64,${font})`);
 const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
 const js = scripts.map(f => `// ---- ${f}\n${read(f)}`).join('\n');
 

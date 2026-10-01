@@ -944,7 +944,7 @@ function buildMore() {
     <div id="importBox" hidden><textarea id="importText" aria-label="Paste a save code" placeholder="Paste a code that starts with DDH1."></textarea>
     <div class="mbtns" style="margin-top:6px"><button class="btn good" data-act="doImport">Load this save</button></div></div>
     <div class="mbtns" style="margin-top:8px"><button class="btn bad" data-act="askReset">Reset game</button></div></div>`;
-  h += '<div class="card small muted">Deep Dig Heroes v1. Font: Pixelify Sans, SIL Open Font License. Works offline once it has loaded.</div>';
+  h += '<div class="card small muted">Deep Dig Heroes v1. Font: Jersey 10, SIL Open Font License. Works offline once it has loaded.</div>';
   $('#tab-more').innerHTML = h;
 }
 
