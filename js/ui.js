@@ -301,7 +301,7 @@ on('answer', res => {
   if (res.ok) {
     SFX.correct(res.streak);
     if (res.quick) SFX.quick();
-    vibrate(8);
+    vibrate(12);
     const msg = res.mega ? `MEGA strike! Streak ${res.streak}`
       : res.quick ? `Quick! ${res.dt.toFixed(1)}s, strike ×1.5`
         : `Correct in ${res.dt.toFixed(1)}s`;
@@ -994,6 +994,8 @@ function buildMore() {
   h += `<div class="card"><h3>Settings</h3>
     ${settingRow('Sound', toggleBtn('sound'))}
     ${settingRow('Vibration', toggleBtn('vibe'), 'Android only. iPhones do not allow web vibration.')}
+    ${settingRow('Juice', segBtns('juice', [['low', 'Low'], ['med', 'Med'], ['high', 'High']]), 'How strong hits, freezes and particles feel.')}
+    ${settingRow('Screen shake', toggleBtn('shake'))}
     ${settingRow('Answer with', segBtns('answer', [['keypad', 'Keypad'], ['choices', 'Choices']]), 'The keypad trains your brain harder.')}
     ${settingRow('Math difficulty', segBtns('mathMode', [['adaptive', 'Adaptive'], ['fixed', 'Fixed']]), fixed ? MATH_TIERS[S.settings.mathTier] : 'Gets harder as you get faster.')}
     ${fixed ? settingRow('Fixed level', `<div class="seg"><button data-act="mathTier" data-v="-1">−</button><button class="on">Lv ${S.settings.mathTier}</button><button data-act="mathTier" data-v="1">+</button></div>`) : ''}

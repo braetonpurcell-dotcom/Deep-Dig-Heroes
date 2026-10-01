@@ -146,7 +146,7 @@ function roundReaction(run) {
       done = true;
       run.lose('Too slow. Tap the moment it glows.');
     }, 1500);
-  }, rand(1000, 2800));
+  }, rand(1500, 4000));
   run.onTap = () => {
     if (done) return;
     done = true;
@@ -181,7 +181,7 @@ function roundSequence(run) {
   const step = Math.max(300, 560 - run.level * 25);
   let watching = true;
   mgNote('Watch…');
-  seq.forEach((c, k) => mgLater(run, () => { lit(cells[c], step * 0.6); SFX.tick(k / len); }, 300 + k * step));
+  seq.forEach((c, k) => mgLater(run, () => { lit(cells[c], step * 0.6); SFX.mgNote(c); }, 300 + k * step));
   mgLater(run, () => { watching = false; mgNote(`Your turn: ${len} crystals`); }, 300 + len * step);
   let pos = 0;
   run.onTap = t => {
@@ -194,7 +194,7 @@ function roundSequence(run) {
       return;
     }
     pos++;
-    SFX.tick(pos / len);
+    SFX.mgNote(i);
     if (pos === len) run.win(1 + 0.08 * (len - 3), len, `${len} in a row`);
   };
 }
@@ -204,7 +204,7 @@ function roundNumber(run) {
   const digits = 2 + run.level;
   let num = String(randi(1, 9));
   while (num.length < digits) num += randi(0, 9);
-  const showMs = 900 + 450 * digits;
+  const showMs = 1000 + 600 * digits;
   mgStage().innerHTML = `<div class="mg-number">${num}</div><div class="timer"><i id="mgFade" style="width:100%"></i></div>`;
   requestAnimationFrame(() => {
     const bar = $('#mgFade');
@@ -270,6 +270,7 @@ function fightBoss() {
 }
 
 on('spawn', e => { if (e.boss) setTimeout(updateFloorBar, ENTER_TIME * 1000 + 50); });
+on('consolation', ({ coins }) => toast(`Consolation ore: +${fmt(coins)} coins`, 'gold', 'coin'));
 on('duelMiss', () => { if (MG.active) mgStatus(MG.active); });
 on('duelEnd', ({ won }) => {
   if (MG.active && MG.active.mode === 'duel') stopMinigame();

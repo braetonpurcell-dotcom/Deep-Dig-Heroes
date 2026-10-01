@@ -9,7 +9,7 @@ const ENEMY_X = 66;
 
 const CV = { el: null, ctx: null, k: 2 };
 const SCN = {
-  scroll: 0, stepT: 0, step: false, shake: 0,
+  scroll: 0, stepT: 0, step: false, shake: 0, trauma: 0, rank: null, lastRank: 0, halfBoss: null,
   floats: [], parts: [], dying: [], banner: null,
   slash: 0, slashKind: '', lastFloatT: 0, comboPop: 0, lastStreak: 0,
   layers: new Map(),
@@ -195,6 +195,7 @@ function addFloat(text, x, y, color, s = 1, life = 0.8, vy = -18) {
 }
 
 function addParticles(x, y, n, colors, speed = 40, life = 0.5, gravity = 120, size = 1) {
+  n = Math.max(1, Math.round(n * juice()));
   for (let i = 0; i < n; i++) {
     const a = rand(0, Math.PI * 2);
     const v = rand(speed * 0.4, speed);
@@ -206,7 +207,20 @@ function addParticles(x, y, n, colors, speed = 40, life = 0.5, gravity = 120, si
   if (SCN.parts.length > 220) SCN.parts.splice(0, SCN.parts.length - 220);
 }
 
-function shake(amount) { SCN.shake = Math.max(SCN.shake, amount); }
+// Juice level scales every effect. Research on 3,000 players found both none and extreme
+// juice hurt enjoyment, so Low/Med/High is offered and High is the default.
+function juice() { return { low: 0.35, med: 0.7, high: 1 }[S.settings.juice] || 1; }
+
+// Trauma-based shake: hits add trauma, the offset is trauma squared, it decays in ~0.25 s.
+function shake(amount) {
+  SCN.trauma = Math.min(1, SCN.trauma + 0.1 + amount * 0.12);
+}
+
+// Freeze the world for a moment so a hit lands with weight (capped so it never reads as lag).
+function hitStop(ms) {
+  if (S.settings.juice === 'low' || R.sim) return;
+  R.hitstop = Math.max(R.hitstop, Math.min(120, ms * juice()) / 1000);
+}
 
 function banner(text, sub = '', color = '#ffcc4d', life = 2) {
   SCN.banner = { text, sub, color, t: 0, life };
@@ -244,16 +258,28 @@ on('damage', ({ d, kind, enemy }) => {
     addFloat(fmt(d) + '!', cx + rand(-6, 6), top - 4, '#ffcc4d', 1, 0.9);
     addParticles(cx - 4, top + box.h * 0.5, 5, enemyColors(enemy), 45, 0.45);
     shake(1);
+    hitStop(35);
     SFX.crit();
   } else if (kind === 'mega') {
     addFloat('MEGA ' + fmt(d), cx, top - 8, '#ff5ad2', 2, 1.3, -12);
     addParticles(cx, top + box.h / 2, 26, ['#ff5ad2', '#ffffff', '#62c9ff'], 80, 0.8);
     shake(4);
+    hitStop(100);
+    vibrate([20, 30, 20, 30, 45]);
   } else {
     const color = kind === 'critstrike' ? '#ff9a3d' : '#62c9ff';
     addFloat(fmt(d) + (kind === 'critstrike' ? '!' : ''), cx, top - 7, color, 2, 1.0, -14);
     addParticles(cx, top + box.h / 2, 10, [color, '#ffffff'], 60, 0.55);
     shake(2);
+    hitStop(kind === 'critstrike' ? 70 : 35);
+    if (kind === 'critstrike') vibrate([15, 40, 25]);
+  }
+  if (enemy.boss && SCN.halfBoss !== enemy && enemy.hp > 0 && enemy.hp < enemy.max / 2) {
+    // Halfway through a boss: a clear "phase change" beat.
+    SCN.halfBoss = enemy;
+    banner('ENRAGED', 'HALF HEALTH LEFT', '#ff9a3d', 1.4);
+    shake(3);
+    SFX.rankUp(-5);
   }
 });
 
@@ -272,6 +298,7 @@ on('kill', ({ enemy }) => {
   addParticles(box.x + box.w / 2, box.y + box.h / 2, enemy.boss ? 40 : 14, enemyColors(enemy), enemy.boss ? 90 : 55, 0.6);
   addParticles(box.x + box.w / 2, box.y + box.h / 2, enemy.boss ? 16 : 5, ['#ffcc4d', '#fff2b0'], 50, 0.7, 60);
   shake(enemy.boss ? 5 : 1.5);
+  hitStop(enemy.boss ? 120 : 60);
   SFX.kill();
   if (enemy.boss) vibrate([30, 40, 60]);
 });
@@ -310,7 +337,28 @@ on('record', ({ floor }) => {
   banner('NEW RECORD', 'DEEPEST EVER: B' + floor, '#63e28a', 2.2);
 });
 
+const RANKS = [[5, 'C', '#62c9ff'], [10, 'B', '#63e28a'], [25, 'A', '#ffcc4d'], [50, 'S', '#ff5ad2'], [100, 'SS', '#ff4d6d']];
+function comboRank(streak) {
+  let r = null;
+  for (const x of RANKS) if (streak >= x[0]) r = x;
+  return r;
+}
+
 on('answer', res => {
+  if (res.ok) {
+    const r = comboRank(res.streak);
+    if (r && r[0] === res.streak) {
+      // Rank-up moment: fixed reward feel (no random bonus), flash, chord and a beat of freeze.
+      SCN.rank = { text: 'RANK ' + r[1], color: r[2], t: 0 };
+      SFX.rankUp(RANKS.indexOf(r) * 2);
+      hitStop(90);
+      shake(2);
+      vibrate([20, 30, 40]);
+      addParticles(HERO_X + 8, GROUND_Y - 20, 24, [r[2], '#ffffff'], 70, 0.8, 40);
+    }
+  } else if (res.lost >= 3) {
+    SFX.comboBreak();
+  }
   if (res.ok && res.quick) addFloat('QUICK!', HERO_X + 8, GROUND_Y - 26, '#63e28a', 1, 0.8, -16);
   if (res.ok && res.streak > 0 && res.streak % 10 === 0) {
     addFloat('STREAK ' + res.streak, HERO_X + 8, GROUND_Y - 36, '#ffcc4d', 1, 1.2, -10);
@@ -328,16 +376,30 @@ on('oreCollect', ({ x, y, res }) => {
 
 // Taps on the canvas collect lucky ore.
 function canvasTap(clientX, clientY) {
-  if (!R.ore) return false;
   const rect = CV.el.getBoundingClientRect();
   const x = ((clientX - rect.left) / rect.width) * LW;
   const y = ((clientY - rect.top) / rect.height) * LH;
-  const dx = x - R.ore.x;
-  const dy = y - R.ore.y;
-  if (dx * dx + dy * dy <= 16 * 16) {
-    collectOre();
-    return true;
+  if (R.ore) {
+    const dx = x - R.ore.x;
+    const dy = y - R.ore.y;
+    if (dx * dx + dy * dy <= 16 * 16) {
+      collectOre();
+      return true;
+    }
   }
+  // Fidget pops: tapping anything in the mine gives a tiny burst and click (no vibration).
+  const b = BIOMES[biomeIndex(S.run.floor) % BIOMES.length];
+  const e = R.enemy;
+  let colors = [b.rock[2], b.oreColor, '#ffffff'];
+  if (e && !e.waiting) {
+    const box = enemyBox(e);
+    if (x >= box.x - 4 && x <= box.x + box.w + 4 && y >= box.y - 4 && y <= box.y + box.h + 4) {
+      e.flash = 0.05;
+      colors = enemyColors(e);
+    }
+  }
+  addParticles(x, y, 6, colors, 35, 0.4, 80);
+  SFX.pop();
   return false;
 }
 
@@ -414,7 +476,17 @@ function drawEnemy(biome) {
   y = Math.round(y);
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.fillRect(x + 3 * (e.boss ? 2 : 1), GROUND_Y, box.w - 6 * (e.boss ? 2 : 1), 1);
-  ctx.drawImage(e.flash > 0 ? silhouette(spr, '#ffffff') : spr, x, y, box.w, h);
+  // Squash on impact: wider and shorter for a moment, then back.
+  let sw = box.w;
+  if (e.flash > 0 && S.settings.juice !== 'low') {
+    const k = e.flash / 0.07;
+    sw = Math.round(box.w * (1 + 0.15 * k));
+    const sh = Math.round(h * (1 - 0.15 * k));
+    x -= Math.round((sw - box.w) / 2);
+    y += h - sh;
+    h = sh;
+  }
+  ctx.drawImage(e.flash > 0 ? silhouette(spr, '#ffffff') : spr, x, y, sw, h);
   if (e.boss) ctx.drawImage(crownSprite(), x + Math.round((box.w - 18) / 2), y - 9, 18, 10);
   if (e.type === 'goldie' && Math.sin(R.time * 9) > 0.3) {
     ctx.fillStyle = '#fff6c0';
@@ -514,7 +586,15 @@ function drawFloats(dt) {
     f.t += dt;
     f.y += f.vy * dt;
     const a = f.t > f.life * 0.6 ? 1 - (f.t - f.life * 0.6) / (f.life * 0.4) : 1;
-    drawText(f.text, f.x, f.y, f.color, f.s, 'center', a);
+    const pop = f.t < 0.1 ? 1 + 0.3 * (1 - f.t / 0.1) * juice() : 1;
+    if (pop > 1.01) {
+      const ctx = CV.ctx;
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.scale(pop, pop);
+      drawText(f.text, 0, 0, f.color, f.s, 'center', a);
+      ctx.restore();
+    } else drawText(f.text, f.x, f.y, f.color, f.s, 'center', a);
   }
   SCN.floats = SCN.floats.filter(f => f.t < f.life);
 }
@@ -562,6 +642,19 @@ function drawOverlay(dt) {
     ctx.strokeRect(0.5, 0.5, LW - 1, LH - 1);
   }
   if (ST.boost > 1) drawText('2× COINS', 157, ry, '#ffcc4d', 1, 'right');
+  if (SCN.rank) {
+    const r = SCN.rank;
+    r.t += dt;
+    if (r.t < 0.06) {
+      ctx.globalAlpha = 0.35 * juice();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, LW, LH);
+      ctx.globalAlpha = 1;
+    }
+    const a = r.t < 0.9 ? 1 : 1 - (r.t - 0.9) / 0.4;
+    drawText(r.text, LW / 2, 22 - Math.min(4, r.t * 10), r.color, 2, 'center', a);
+    if (r.t > 1.3) SCN.rank = null;
+  }
   if (SCN.banner) {
     const b = SCN.banner;
     b.t += dt;
@@ -595,10 +688,14 @@ function render(dt) {
   if (SCN.comboPop > 0) SCN.comboPop -= dt;
   let sx = 0;
   let sy = 0;
-  if (SCN.shake > 0) {
-    sx = Math.round(rand(-SCN.shake, SCN.shake));
-    sy = Math.round(rand(-SCN.shake, SCN.shake));
-    SCN.shake = Math.max(0, SCN.shake - dt * 18);
+  if (SCN.trauma > 0) {
+    if (S.settings.shake) {
+      const amp = 4 * juice() * SCN.trauma * SCN.trauma;
+      const t = R.time * 30;
+      sx = Math.round(amp * (Math.sin(t * 1.3) + Math.sin(t * 2.7 + 1)) / 2);
+      sy = Math.round(amp * (Math.sin(t * 1.9 + 2) + Math.sin(t * 3.1)) / 2);
+    }
+    SCN.trauma = Math.max(0, SCN.trauma - dt * 3.5);
   }
   const bi = biomeIndex(S.run.floor);
   const layers = biomeLayers(bi);

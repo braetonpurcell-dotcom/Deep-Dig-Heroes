@@ -3,6 +3,14 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.3.0
+- Game feel pass based on game-feel and reward research: hits now freeze for a split second (hitstop), the screen shake is smoother, and big hits, crits and kills get stronger haptics.
+- Correct answers climb a musical scale as your streak grows, with harmony on later laps. Sounds vary slightly each time so they never get stale.
+- Streak ranks at 5, 10, 25, 50 and 100 with a flash, chord and buzz. Losing a streak of 3 or more plays a soft break sound.
+- Bosses become ENRAGED at half health.
+- Tap the mine for little fidget pops.
+- New settings: Juice (Low/Med/High) and Screen shake on/off. Low turns off hitstop.
+
 ## v1.2.0
 - Four brain mini-games in the mine's theme: Spark Vein (reaction time), Crystal Echo (sequence memory), Ore Code (number memory) and Ore Order (chimp test).
 - Boss fights are now active duels: a boss waits until you tap Fight boss, then you play one of the mini-games. Each round you win is a big strike; three mistakes or running out of time and the boss escapes. Offline progress stops at the next boss.

@@ -92,7 +92,7 @@ function freshState() {
     },
     settings: {
       sound: true, vibe: true, answer: 'keypad', mathMode: 'adaptive', mathTier: 3,
-      autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1',
+      autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true,
     },
   };
 }
@@ -221,6 +221,8 @@ function hydrate(obj) {
   const st = s.settings;
   if (!['keypad', 'choices'].includes(st.answer)) st.answer = 'keypad';
   if (!['adaptive', 'fixed'].includes(st.mathMode)) st.mathMode = 'adaptive';
+  if (!['low', 'med', 'high'].includes(st.juice)) st.juice = 'high';
+  st.shake = st.shake !== false;
   st.mathTier = Number.isInteger(st.mathTier) ? clamp(st.mathTier, 1, 12) : 3;
   st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, 4) : 0;
   st.breakMin = nonNeg(st.breakMin);
@@ -234,7 +236,7 @@ let ST = null;
 
 // Runtime values that are not saved.
 const R = {
-  sim: false, paused: false, time: 0, session: 0, secT: 0, dayKey: '', hiddenAt: 0,
+  sim: false, paused: false, hitstop: 0, time: 0, session: 0, secT: 0, dayKey: '', hiddenAt: 0,
   enemy: null, spawnT: 0.6, atkT: 0, swingT: 0, queued: [],
   prob: null, probStart: 0, input: '', choices: null,
   lastAnswer: -99, decayAcc: 0,
@@ -442,6 +444,12 @@ function changeFloor(f) {
 }
 
 function bossFailed() {
+  if (R.duel) {
+    // A lost duel still pays a little, so trying is never a pure loss.
+    const c = Math.max(10, idleRates().coins * 20);
+    addCoins(c);
+    emit('consolation', { coins: c });
+  }
   endDuel(false);
   S.run.auto = false;
   emit('bossFail', {});

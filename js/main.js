@@ -32,8 +32,14 @@ function loop(now) {
   if (!(dt >= 0)) dt = 0;
   if (dt > 0.25) dt = 0.25;
   try {
-    step(dt);
-    render(dt);
+    // Hit-stop: the world freezes for a few frames on big hits; input keeps working.
+    if (R.hitstop > 0) {
+      R.hitstop = Math.max(0, R.hitstop - dt);
+      render(0);
+    } else {
+      step(dt);
+      render(dt);
+    }
     uiTick(dt);
   } catch (e) {
     console.error(e);
