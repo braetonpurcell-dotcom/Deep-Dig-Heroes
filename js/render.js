@@ -347,7 +347,8 @@ function drawPets() {
   S.pets.eq.forEach((p, i) => {
     const def = PETS[p.sp];
     const spr = petSprite(p.sp);
-    const x = HERO_X - 13 - i * 11;
+    // Four party slots (after prestige 3) must all fit between the miner and the left edge.
+    const x = HERO_X - 12 - i * 9;
     const phase = R.time * (def.fly ? 5 : 3) + i * 1.7;
     let y = def.fly ? GROUND_Y - 30 + Math.round(Math.sin(phase) * 2) : GROUND_Y - 10 - (Math.sin(phase) > 0.75 ? 1 : 0);
     if (!R.enemy || R.enemy.enter > 0) y -= SCN.step && !def.fly ? 1 : 0;

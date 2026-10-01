@@ -54,12 +54,14 @@ function loop(now) {
 function onVisibility() {
   if (document.hidden) {
     hiddenAt = Date.now();
+    R.hiddenAt = hiddenAt;
     saveNow();
     releaseWake();
     return;
   }
   const away = hiddenAt ? (Date.now() - hiddenAt) / 1000 : 0;
   hiddenAt = 0;
+  R.hiddenAt = 0;
   lastFrame = performance.now();
   ensureDay();
   autoBackup(JSON.parse(serialize()));
@@ -71,7 +73,7 @@ function onVisibility() {
     if (res && res.coins > 0) toast(`+${fmt(res.coins)} coins while you were away`, 'gold', 'coin');
   }
   applyWakeLock();
-  refreshAll();
+  refreshAll(true);
 }
 
 async function applyWakeLock() {
@@ -171,7 +173,16 @@ function boot(hotData) {
     }
   }
   if (base) autoBackup(base);
-  loadState(base || freshState());
+  let broken = false;
+  try {
+    loadState(base || freshState());
+  } catch (e) {
+    // A damaged save must never leave the game stuck on a frozen screen.
+    console.error(e);
+    broken = !!base;
+    keepBrokenSave(base);
+    loadState(freshState());
+  }
   initCanvas($('#cv'));
   initIcons();
   bindInput();
@@ -184,11 +195,18 @@ function boot(hotData) {
   const offline = away >= 60 ? applyOffline(away) : null;
   UI.booting = false;
   if (!base) queueModal(showIntro);
+  if (broken) toast('Your save could not be read, so the game started fresh. A copy was kept.', 'bad');
+  if (S.bonusRound) toast('Your double-it round is still on: 5 in a row', 'purple');
   if (offline && offline.coins > 0) queueModal(() => showWelcomeBack(offline));
   if (!S.daily.claimed) queueModal(showDailyPopup);
 
   saveLocal();
   applyWakeLock();
+  // Opened in the background (restored tab): the drill is idle until the player looks at it.
+  if (document.hidden) {
+    hiddenAt = Date.now();
+    R.hiddenAt = hiddenAt;
+  }
   window.addEventListener('resize', resizeCanvas);
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('pagehide', saveNow);

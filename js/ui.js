@@ -6,7 +6,7 @@ const UI = {
   tickerUntil: 0, goalIdx: 0, goalT: 0,
   modalOpen: false, modalOpts: null, modalQueue: [],
   lastOpen: null, reelRaf: 0, reelTimer: 0, modalId: 0, nextBreak: 0, forgeSeen: 0, booting: true,
-  hudT: 0, slowT: 0, lastKeyDown: -1e9, holdToasts: false, heldToasts: [],
+  hudT: 0, slowT: 0, holdToasts: false, heldToasts: [],
 };
 
 // ---------- small builders ----------
@@ -42,7 +42,7 @@ function toast(text, kind = '', ic = null) {
   el.className = 'toast ' + kind;
   el.innerHTML = (ic ? icon(ic, '') : '') + `<span>${escapeHtml(text)}</span>`;
   box.appendChild(el);
-  while (box.children.length > 3) box.firstChild.remove();
+  while (box.children.length > 2) box.firstChild.remove(); // two at most, so the HUD and boss timer stay readable
   setTimeout(() => el.remove(), 2600);
 }
 
@@ -89,8 +89,17 @@ function closeModal() {
   if (UI.holdToasts) releaseToasts();
   if (opts && opts.onClose) opts.onClose();
   refreshAll();
+  pumpModalQueue();
+}
+
+function pumpModalQueue() {
   const next = UI.modalQueue.shift();
-  if (next) setTimeout(() => { if (!UI.modalOpen) next(); else UI.modalQueue.unshift(next); }, 150);
+  if (!next) return;
+  setTimeout(() => {
+    if (UI.modalOpen) { UI.modalQueue.unshift(next); return; }
+    next();
+    if (!UI.modalOpen) pumpModalQueue(); // that entry chose not to show anything
+  }, 150);
 }
 
 // ---------- tabs ----------
@@ -114,10 +123,13 @@ function buildTab(name = UI.tab) {
   else if (name === 'more') buildMore();
 }
 
-function refreshAll() {
+// gentle: keep a save code the player is pasting (More tab) instead of rebuilding over it.
+function refreshAll(gentle = false) {
   updateHud();
   updateFloorBar();
   updateBadges();
+  const box = $('#importBox');
+  if (gentle && UI.tab === 'more' && box && !box.hidden) return;
   buildTab();
 }
 
@@ -193,7 +205,7 @@ function goalMessages() {
     out.push([`Boss at B${nb}, ${plural(nb - f, 'floor')} to go`, '']);
   }
   if (S.prestiges === 0 && S.run.maxFloor < 25) out.push(['Reach B25 to unlock prestige', '']);
-  const toEpic = ST.epicPity - S.pity.epic;
+  const toEpic = epicPityLeft();
   if (toEpic <= 3) out.push([`Epic or better guaranteed within ${plural(toEpic, 'case')}`, '']);
   out.push([`Level ${S.run.level + 1} in ${fmt(Math.max(0, xpNeed(S.run.level) - S.run.xp))} XP`, '']);
   if (S.math.streak === 0) out.push(['Answer problems to strike and build a combo', '']);
@@ -201,7 +213,7 @@ function goalMessages() {
 }
 
 function rotateGoal(dt) {
-  if (performance.now() < UI.tickerUntil) return;
+  if (R.bonusRound || performance.now() < UI.tickerUntil) return;
   UI.goalT -= dt;
   if (UI.goalT > 0) return;
   UI.goalT = 5;
@@ -254,11 +266,12 @@ function updateFight(full = false) {
     else if (el < T) { bar.style.width = (1 - (el - qT) / (T - qT)) * 100 + '%'; bar.className = 'slow'; }
     else { bar.style.width = '100%'; bar.className = 'late'; }
   }
-  const bb = $('#bonusBar');
-  if (R.bonusRound) {
-    bb.hidden = false;
-    bb.textContent = `Double your offline earnings: ${R.bonusRound.done}/${R.bonusRound.need} correct in a row`;
-  } else bb.hidden = true;
+  // The double-it progress lives in the ticker line, so the keypad never loses space to it.
+  if (R.bonusRound && performance.now() >= UI.tickerUntil) {
+    const t = $('#ticker');
+    const msg = `Double it: ${R.bonusRound.done}/${R.bonusRound.need} correct in a row, no mistakes`;
+    if (t.textContent !== msg) { t.textContent = msg; t.className = 'ticker gold'; }
+  }
 }
 
 function keyInput(k) {
@@ -422,13 +435,17 @@ function tapSkill(id) {
 }
 
 // ---------- cases ----------
+// Opens left until the pity guarantee kicks in. Pity Pact can lower the threshold below the
+// current counter, in which case the very next open is guaranteed.
+function epicPityLeft() { return Math.max(1, ST.epicPity - S.pity.epic); }
+
 function buildCases() {
   const odds = rarityOdds();
   const best = bestCaseTier();
   const ready = freeCrateReady();
   let h = `<div class="card"><div class="pity">
-      <div>Epic+ guaranteed in <b>${ST.epicPity - S.pity.epic}</b></div>
-      <div>Legendary+ in <b>${LEGENDARY_PITY - S.pity.leg}</b></div></div>
+      <div>Epic+ guaranteed in <b>${epicPityLeft()}</b></div>
+      <div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - S.pity.leg)}</b></div></div>
     <div class="odds" style="margin-top:6px">${RARITY.map((r, i) =>
       `<span class="tc${i}">${r.name} ${(odds[i] * 100).toFixed(odds[i] < 0.01 ? 2 : 1)}%</span>`).join('')}</div>
     <div class="small muted" style="margin-top:4px">Luck ${fmtPct(Math.max(0, ST.luck))} · 3 in 10 drops are pets</div></div>`;
@@ -454,8 +471,24 @@ function buildCases() {
   refreshCases();
 }
 
+// Case prices follow the deepest floor of the run, which keeps changing while the miner digs,
+// so every price on screen (Cases tab and the 'Open another' button) is re-quoted live.
+function refreshCaseButtons() {
+  for (const b of $$('[data-act="openCase"], [data-act="again"][data-t]')) {
+    const c = CASES[Number(b.dataset.t) - 1];
+    if (!c) continue;
+    const n = Number(b.dataset.n) || 1;
+    const cost = caseCost(c) * n;
+    if (Number(b.dataset.cost) !== cost) {
+      b.dataset.cost = cost;
+      b.innerHTML = `${b.dataset.act === 'again' ? 'Open another' : n > 1 ? '×' + n : 'Open'} ${costHtml(cost)}`;
+    }
+    b.disabled = S.coins < cost;
+  }
+}
+
 function refreshCases() {
-  for (const b of $$('#tab-cases [data-act="openCase"]')) b.disabled = S.coins < Number(b.dataset.cost);
+  refreshCaseButtons();
   for (const b of $$('#tab-cases [data-act="openKey"]')) b.disabled = S.keys < 1;
   const ft = $('#freeTimer');
   if (ft) {
@@ -571,23 +604,28 @@ function againButton(ctx) {
   if (ctx.method === 'key') {
     return S.keys > 0 ? `<button class="btn purple" data-act="again">${icon('key', '')} Open another (${S.keys} left)</button>` : '';
   }
-  const cost = caseCost(c) * (UI.lastOpen ? UI.lastOpen.n : 1);
-  return `<button class="btn gold" data-act="again" ${S.coins < cost ? 'disabled' : ''}>Open another ${costHtml(cost)}</button>`;
+  const n = UI.lastOpen ? UI.lastOpen.n : 1;
+  const cost = caseCost(c) * n;
+  return `<button class="btn gold" data-act="again" data-t="${c.tier}" data-n="${n}" data-cost="${cost}" ${S.coins < cost ? 'disabled' : ''}>Open another ${costHtml(cost)}</button>`;
 }
 
 function dropDetailHtml(d) {
   if (d.kind === 'pet') {
     const def = PETS[d.sp];
     const inParty = petEquippedCount(d.sp, d.r) > 0;
+    const full = S.pets.eq.length >= petSlots();
+    const where = inParty ? 'In your party.' : full ? 'Party full: swap pets in Bag › Pets.' : '';
+    const merge = d.r < 4 ? 'Merge 3 into the next rarity.' : 'Top rarity.';
     return `<div class="rname tc${d.r}">${RARITY[d.r].name} ${def.name}</div>
       <div class="rsub">${petBonusText(d.sp, d.r)}</div>
-      <div class="rsub">You own ${S.pets.inv[d.sp][d.r]} · ${inParty ? 'in your party' : 'merge 3 into the next rarity'}</div>`;
+      <div class="rsub">You own ${S.pets.inv[d.sp][d.r]}. ${where} ${merge}</div>`;
   }
   const it = d.item;
   const lines = itemStats(it).map(s => `<div class="statline"><span>${STATS[s.k].name}</span><b>${statVal(s.k, s.v)}</b></div>`).join('');
   let note = '';
   if (d.autoEquipped) note = '<div class="rsub" style="color:var(--good)">Equipped in your empty slot</div>';
   else if (d.salvaged) note = `<div class="rsub">Auto-salvaged for ${d.salvaged} scrap</div>`;
+  else if (d.madeRoom) note = `<div class="rsub">Bag full: scrapped your ${d.madeRoom.name} (+${d.madeRoom.scrap} scrap) to make room</div>`;
   const eq = S.gear.eq[it.slot];
   let cmp = '';
   if (!d.autoEquipped && eq && eq !== it) {
@@ -615,7 +653,7 @@ function revealResult(drops, ctx) {
     actions += `<button class="btn good" data-act="equipItem" data-id="${win.item.id}">Equip</button>`;
     actions += `<button class="btn" data-act="salvage" data-id="${win.item.id}">Salvage +${scrapValue(win.item)}</button>`;
   }
-  if (win.kind === 'pet' && petEquippedCount(win.sp, win.r) === 0) {
+  if (win.kind === 'pet' && petAvailable(win.sp, win.r) > 0 && S.pets.eq.length < petSlots()) {
     actions += `<button class="btn good" data-act="petToParty" data-sp="${win.sp}" data-r="${win.r}">Add to party</button>`;
   }
   actions += againButton(ctx);
@@ -654,10 +692,13 @@ function showMulti(drops, ctx) {
         views.forEach(v => counts[v.r]++);
         const equipped = drops.filter(d => d.autoEquipped).length;
         const salvaged = drops.filter(d => d.salvaged).reduce((a, d) => a + d.salvaged, 0);
+        const room = drops.filter(d => d.madeRoom);
+        const roomScrap = room.reduce((a, d) => a + d.madeRoom.scrap, 0);
         const box = $('#multiResult', sheet);
         box.innerHTML = `<div class="odds" style="justify-content:center">${counts.map((n, r) => n ? `<span class="tc${r}">${n} ${RARITY[r].name}</span>` : '').join('')}</div>
           ${equipped ? `<div class="rsub" style="color:var(--good)">${plural(equipped, 'item')} equipped in empty slots</div>` : ''}
           ${salvaged ? `<div class="rsub">Auto-salvaged for ${salvaged} scrap</div>` : ''}
+          ${room.length ? `<div class="rsub">Bag full: scrapped ${plural(room.length, 'weaker item')} (+${roomScrap} scrap) to make room</div>` : ''}
           <div class="rsub">Check the Bag tab to compare and equip.</div>
           <div class="mbtns">${againButton(ctx)}<button class="btn" data-act="close">Close</button></div>`;
         if (UI.modalOpts) UI.modalOpts.dismissable = true;
@@ -835,7 +876,21 @@ function achRow(a, state) {
     ${state === 'ready' ? `<button class="btn gold small" data-act="claimAch" data-id="${a.id}">Claim</button>` : state === 'claimed' ? '<span class="small muted">Done</span>' : ''}</div>`;
 }
 
+// The tab is rebuilt whenever something claimable changes (see refreshQuests), so progress,
+// Claim buttons and freshly unlocked achievements never go stale while the player watches.
+function questsSignature() {
+  const c = claimableCounts();
+  return [S.daily.day, S.daily.claimed, S.daily.streak, S.quests.day, S.quests.bonus,
+    S.quests.list.map(q => `${q.prog}/${q.claimed ? 1 : 0}`).join(','), c.ach, S.trophies].join('|');
+}
+
+function refreshQuests() {
+  const sig = questsSignature();
+  if (sig !== UI.questsSig) buildQuests();
+}
+
 function buildQuests() {
+  UI.questsSig = questsSignature();
   const streak = Math.max(1, S.daily.streak);
   const cur = (streak - 1) % 7;
   const week = Math.floor((streak - 1) / 7);
@@ -843,11 +898,11 @@ function buildQuests() {
   for (let i = 0; i < 7; i++) {
     const rw = DAILY_REWARDS[i];
     const cls = i < cur || (i === cur && S.daily.claimed) ? 'done' : i === cur ? 'today' : '';
-    h += `<div class="day ${cls}"><b>Day ${i + 1}</b>${icon(dailyIcon(rw), '')}<span>${rw.label}</span></div>`;
+    h += `<div class="day ${cls}"><b>Day ${i + 1}</b>${icon(dailyIcon(rw), '')}<span>${dailyRewardLabel(week * 7 + i + 1)}</span></div>`;
   }
   h += '</div><div style="margin-top:8px">';
   if (S.daily.claimed) h += '<div class="small muted">Come back tomorrow to keep your streak. Missing a day resets it to Day 1.</div>';
-  else h += `<button class="btn gold wide" data-act="claimDaily">Claim day ${cur + 1}: ${DAILY_REWARDS[cur].label}${week && DAILY_REWARDS[cur].keys ? ` +${week} week bonus` : ''}</button>`;
+  else h += `<button class="btn gold wide" data-act="claimDaily">Claim day ${cur + 1}: ${dailyRewardLabel(streak)}</button>`;
   h += '</div></div>';
 
   h += '<div class="card"><h3>Daily quests</h3><div class="list">';
@@ -957,6 +1012,8 @@ function buildMore() {
 
 // ---------- popups ----------
 function showWelcomeBack(res) {
+  // Earned in a run that has since been collapsed by prestige: those coins are gone with it.
+  if (res.runStarted && res.runStarted !== S.run.started) return;
   const html = `<h2>Welcome back</h2>
     <p style="text-align:center">Your drill kept digging for ${fmtTime(res.capped)}${res.sec > res.capped ? ` (max ${fmtTime(ST.offlineCap)})` : ''}.</p>
     <div class="big-gain">${icon('coin', '')} +${fmt(res.coins)}</div>
@@ -974,7 +1031,7 @@ function showDailyPopup() {
   const rw = DAILY_REWARDS[cur];
   openModal(`<h2>Day ${streak} login reward</h2>
     <div style="text-align:center">${icon(dailyIcon(rw), '')}</div>
-    <div class="big-gain">${rw.label}</div>
+    <div class="big-gain">${dailyRewardLabel(streak)}</div>
     <p class="small muted" style="text-align:center">${streak > 1 ? `${streak} days in a row. ` : ''}Come back tomorrow for Day ${streak + 1}. Missing a day resets the streak.</p>
     <div class="mbtns"><button class="btn gold" data-act="claimDaily">Claim</button></div>`, { dismissable: true });
 }
@@ -1021,6 +1078,15 @@ on('bestFloor', ({ floor }) => {
   if (floor === 25 && S.prestiges === 0) toast('Prestige unlocked! See the More tab.', 'purple', 'core');
 });
 on('bossFail', () => setTicker('The boss escaped. Farm here, then tap Retry boss.', 'bad', 4000));
+on('dailyAuto', res => {
+  let what = res.label;
+  if (res.keys) what = `+${res.keys} keys`;
+  else if (res.coins) what = `+${fmt(res.coins)} coins`;
+  else if (res.scrap) what = `+${res.scrap} scrap`;
+  else if (res.boost) what = `2× coins for ${res.boost} minutes`;
+  else if (res.drops) what = res.drops.map(d => `${RARITY[d.r].name} ${d.kind === 'pet' ? PETS[d.sp].name : itemName(d.item)}`).join(', ') + ' (see your Bag)';
+  toast(`Yesterday's login reward collected for you: ${what}`, 'gold', res.keys ? 'key' : res.scrap ? 'scrap' : res.drops ? 'chest' : 'coin');
+});
 on('floor', () => updateFloorBar());
 on('newDay', () => { if (!UI.booting) queueModal(showDailyPopup); });
 
@@ -1114,6 +1180,7 @@ function handleAction(el) {
     case 'askPrestige': askPrestige(); break;
     case 'doPrestige': {
       const res = doPrestige();
+      if (res) UI.pendingBonus = null;
       closeModal();
       if (res) {
         SFX.levelup();
@@ -1281,9 +1348,14 @@ function bindInput() {
       if (R.prob && !UI.modalOpen) submitAnswer(Number(choice.dataset.choice));
       return;
     }
-    // Taps are handled on pointerdown; only keyboard activation of a keypad button reaches here.
+    // Taps are handled on pointerdown. The click that follows the same press is ignored, however
+    // long the finger stayed down, so a key never types twice. Keyboard and assistive-tech
+    // activation have no pointerdown and still reach keyInput here.
     const key = e.target.closest('[data-key]');
-    if (key && performance.now() - UI.lastKeyDown > 700) keyInput(key.dataset.key);
+    if (key) {
+      if (key._pressed) { key._pressed = false; return; }
+      keyInput(key.dataset.key);
+    }
   });
 
   // Keypad on pointerdown so fast typing never waits for a click.
@@ -1291,11 +1363,14 @@ function bindInput() {
     const key = e.target.closest('[data-key]');
     if (!key) return;
     e.preventDefault();
-    UI.lastKeyDown = performance.now();
+    key._pressed = true;
     audioUnlock();
     key.classList.add('press');
     setTimeout(() => key.classList.remove('press'), 90);
     keyInput(key.dataset.key);
+  });
+  $('#keypad').addEventListener('pointercancel', () => {
+    for (const k of $$('#keypad [data-key]')) k._pressed = false;
   });
 
   $('#modal').addEventListener('click', e => {
@@ -1316,6 +1391,7 @@ function bindInput() {
 
   document.addEventListener('keydown', e => {
     if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) return;
+    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.closest && e.target.closest('[data-key]')) e.target.closest('[data-key]')._pressed = false;
     if (e.key === 'Escape' && UI.modalOpen && UI.modalOpts && UI.modalOpts.dismissable) { closeModal(); return; }
     if (UI.tab !== 'fight' || UI.modalOpen) return;
     if (/^\d$/.test(e.key)) { audioUnlock(); keyInput(e.key); e.preventDefault(); }
@@ -1346,6 +1422,8 @@ function uiTick(dt) {
     updateBadges();
     if (UI.tab === 'forge') refreshForge();
     else if (UI.tab === 'cases') refreshCases();
+    else if (UI.tab === 'quests') refreshQuests();
+    if (UI.modalOpen) refreshCaseButtons();
   }
   if (UI.tab === 'fight') rotateGoal(dt);
   if (S.settings.breakMin > 0 && R.session >= UI.nextBreak) {

@@ -78,6 +78,7 @@ function freshState() {
     ach: { done: {}, claimed: {} },
     freeCrateAt: 0,
     boostUntil: 0,
+    bonusRound: null,
     stats: {
       playTime: 0, kills: 0, bosses: 0, correct: 0, wrong: 0, skipped: 0, answerTime: 0, fastest: 0,
       bestStreak: 0, bestMath: 1, cases: 0, bestDrop: -1, coinsEarned: 0, merges: 0, ores: 0, goldies: 0,
@@ -95,26 +96,128 @@ function deepMerge(base, src) {
   for (const k of Object.keys(src)) {
     const v = src[k];
     const b = base[k];
-    if (v && typeof v === 'object' && !Array.isArray(v) && b && typeof b === 'object' && !Array.isArray(b)) deepMerge(b, v);
+    const bObj = b && typeof b === 'object' && !Array.isArray(b);
+    const vObj = v && typeof v === 'object' && !Array.isArray(v);
+    if (bObj && vObj) deepMerge(b, v);
+    else if (bObj) continue; // a section that is not an object in the save keeps its defaults
     else base[k] = v;
   }
   return base;
 }
 
-// Fill in anything a save from an older version is missing and repair impossible values.
+// Repairs one gear item in place. Returns false when it cannot be made usable.
+function repairItem(it) {
+  if (!it || typeof it !== 'object' || !SLOTS[it.slot]) return false;
+  if (!Number.isInteger(it.r) || it.r < 0 || it.r >= RARITY.length) return false;
+  if (!Number.isInteger(it.t) || it.t < 1 || it.t >= MATERIALS.length) return false;
+  it.fl = isFinite(it.fl) ? clamp(it.fl, 0, 1) : 0.5;
+  it.lv = Number.isInteger(it.lv) ? clamp(it.lv, 0, MAX_ITEM_LEVEL) : 0;
+  it.subs = (Array.isArray(it.subs) ? it.subs : []).filter(sb => sb && STATS[sb.k] && isFinite(sb.roll));
+  it.isNew = !!it.isNew;
+  return true;
+}
+
+const nonNeg = (v, d = 0) => (isFinite(v) && v >= 0 ? v : d);
+const nonNegInt = (v, d = 0) => (Number.isInteger(v) && v >= 0 ? v : d);
+
+// Fill in anything a save from an older version is missing and repair impossible values,
+// so a damaged save never leaves the game stuck on a black screen.
 function hydrate(obj) {
   const s = deepMerge(freshState(), obj || {});
-  for (const k of ['coins', 'keys', 'scrap', 'cores', 'trophies', 'prestiges']) {
-    if (!isFinite(s[k]) || s[k] < 0) s[k] = 0;
+  const now = Date.now();
+  for (const k of ['coins', 'keys', 'scrap', 'cores', 'trophies', 'prestiges']) s[k] = nonNeg(s[k]);
+  s.nextId = nonNegInt(s.nextId, 1);
+  // Run and math numbers.
+  const run = s.run;
+  run.level = Math.max(1, nonNegInt(run.level, 1));
+  run.xp = nonNeg(run.xp);
+  run.sp = nonNegInt(run.sp);
+  run.kills = nonNegInt(run.kills);
+  run.floor = Math.max(1, nonNegInt(Math.floor(run.floor), 1));
+  run.maxFloor = Math.max(run.floor, nonNegInt(Math.floor(run.maxFloor), 1));
+  run.cases = nonNegInt(run.cases);
+  run.auto = run.auto !== false;
+  if (!run.skills || typeof run.skills !== 'object') run.skills = {};
+  for (const id of Object.keys(run.skills)) {
+    const n = SKILL_INDEX[id];
+    if (!n || !Number.isInteger(run.skills[id]) || run.skills[id] <= 0) delete run.skills[id];
+    else run.skills[id] = Math.min(n.max, run.skills[id]);
   }
+  if (!run.upg || typeof run.upg !== 'object') run.upg = {};
+  for (const id of Object.keys(run.upg)) {
+    const u = UPGRADES.find(x => x.id === id);
+    if (!u || !Number.isInteger(run.upg[id]) || run.upg[id] <= 0) delete run.upg[id];
+    else if (u.max != null) run.upg[id] = Math.min(u.max, run.upg[id]);
+  }
+  if (!run.bossDone || typeof run.bossDone !== 'object') run.bossDone = {};
+  s.math.rating = isFinite(s.math.rating) ? clamp(s.math.rating, 1, 12.99) : 1;
+  s.math.streak = nonNegInt(s.math.streak);
+  s.pity.epic = nonNegInt(s.pity.epic);
+  s.pity.leg = nonNegInt(s.pity.leg);
+  // Gear: drop anything unusable, keep ids unique.
+  const ids = new Set();
+  const keepId = it => {
+    if (!Number.isInteger(it.id) || ids.has(it.id)) it.id = s.nextId++;
+    ids.add(it.id);
+    if (it.id >= s.nextId) s.nextId = it.id + 1;
+  };
+  for (const slot of SLOT_IDS) {
+    const it = s.gear.eq[slot];
+    if (!it || !repairItem(it) || it.slot !== slot) s.gear.eq[slot] = null;
+    else keepId(it);
+  }
+  s.gear.bag = (Array.isArray(s.gear.bag) ? s.gear.bag : []).filter(repairItem).slice(0, BAG_SIZE);
+  for (const it of s.gear.bag) keepId(it);
+  // Pets: inventory counts, then a party that only holds pets you actually own.
   for (const id of PET_IDS) {
     const arr = s.pets.inv[id];
     if (!Array.isArray(arr) || arr.length !== 5) s.pets.inv[id] = [0, 0, 0, 0, 0];
+    else s.pets.inv[id] = arr.map(n => nonNegInt(n));
   }
-  s.pets.eq = (s.pets.eq || []).filter(p => p && PETS[p.sp] && p.r >= 0 && p.r <= 4);
-  s.gear.bag = (s.gear.bag || []).filter(it => it && SLOTS[it.slot]);
-  if (s.run.floor < 1) s.run.floor = 1;
-  if (s.run.maxFloor < s.run.floor) s.run.maxFloor = s.run.floor;
+  const slots = 2 + (s.prestiges >= 1 ? 1 : 0) + (s.prestiges >= 3 ? 1 : 0);
+  const used = {};
+  s.pets.eq = (Array.isArray(s.pets.eq) ? s.pets.eq : []).filter(p => {
+    if (!p || !PETS[p.sp] || !Number.isInteger(p.r) || p.r < 0 || p.r > 4) return false;
+    const key = p.sp + ':' + p.r;
+    used[key] = (used[key] || 0) + 1;
+    return used[key] <= s.pets.inv[p.sp][p.r];
+  }).slice(0, slots);
+  // Daily, quests, achievements.
+  s.daily.streak = nonNegInt(s.daily.streak);
+  if (typeof s.daily.day !== 'string') s.daily.day = '';
+  if (typeof s.quests.day !== 'string') s.quests.day = '';
+  const list = Array.isArray(s.quests.list) ? s.quests.list : [];
+  const good = list.every(q => q && QUEST_INDEX[q.id] && Number.isInteger(q.target) && q.target > 0 && isFinite(q.prog));
+  if (!good || (list.length !== 3 && s.quests.day)) s.quests = { day: '', list: [], bonus: false };
+  else for (const q of list) q.prog = clamp(q.prog, 0, q.target);
+  for (const k of ['done', 'claimed']) if (!s.ach[k] || typeof s.ach[k] !== 'object') s.ach[k] = {};
+  if (!s.coll || typeof s.coll !== 'object') s.coll = {};
+  // Stats.
+  const fresh = freshState().stats;
+  for (const k of Object.keys(fresh)) {
+    if (k === 'days') { if (!s.stats.days || typeof s.stats.days !== 'object') s.stats.days = {}; }
+    else if (k === 'bestDrop') { if (!Number.isInteger(s.stats[k]) || s.stats[k] < -1 || s.stats[k] > 4) s.stats[k] = -1; }
+    else if (!isFinite(s.stats[k]) || s.stats[k] < 0) s.stats[k] = fresh[k];
+  }
+  s.stats.bestFloor = Math.max(s.stats.bestFloor, run.maxFloor);
+  // Timers: a device clock that was set ahead must not lock things for months.
+  s.freeCrateAt = isFinite(s.freeCrateAt) ? Math.min(s.freeCrateAt, now + FREE_CRATE_HOURS * 3600e3) : 0;
+  s.boostUntil = isFinite(s.boostUntil) ? Math.min(s.boostUntil, now + 2 * 3600e3) : 0;
+  if (!isFinite(s.lastSeen) || s.lastSeen > now) s.lastSeen = now;
+  if (!isFinite(s.savedAt) || s.savedAt > now) s.savedAt = now;
+  if (!isFinite(s.created)) s.created = now;
+  const br = s.bonusRound;
+  if (!br || typeof br !== 'object' || !br.reward || !isFinite(br.reward.coins) || !isFinite(br.reward.xp)) s.bonusRound = null;
+  else s.bonusRound = { need: 5, done: nonNegInt(br.done), reward: { coins: nonNeg(br.reward.coins), xp: nonNeg(br.reward.xp) } };
+  // Settings.
+  const st = s.settings;
+  if (!['keypad', 'choices'].includes(st.answer)) st.answer = 'keypad';
+  if (!['adaptive', 'fixed'].includes(st.mathMode)) st.mathMode = 'adaptive';
+  st.mathTier = Number.isInteger(st.mathTier) ? clamp(st.mathTier, 1, 12) : 3;
+  st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, 4) : 0;
+  st.breakMin = nonNeg(st.breakMin);
+  if (!['1', '10', 'max'].includes(String(st.buyAmt))) st.buyAmt = '1';
+  else st.buyAmt = String(st.buyAmt);
   return s;
 }
 
@@ -123,7 +226,7 @@ let ST = null;
 
 // Runtime values that are not saved.
 const R = {
-  sim: false, paused: false, time: 0, session: 0, secT: 0, dayKey: '',
+  sim: false, paused: false, time: 0, session: 0, secT: 0, dayKey: '', hiddenAt: 0,
   enemy: null, spawnT: 0.6, atkT: 0, swingT: 0, queued: [],
   prob: null, probStart: 0, input: '', choices: null,
   lastAnswer: -99, decayAcc: 0,
@@ -288,7 +391,7 @@ function killEnemy(e) {
     } else {
       emit('bossDown', { keys: 0, name: e.name });
     }
-    floorCleared();
+    floorCleared(true);
   } else {
     S.run.kills++;
     if (S.run.kills >= KILLS_PER_FLOOR) floorCleared();
@@ -296,10 +399,11 @@ function killEnemy(e) {
   gainXp(xp);
 }
 
-function floorCleared() {
+// Bosses are gates, not farms: beating one always opens the next floor, even in Farm mode.
+function floorCleared(bossBeaten = false) {
   S.run.kills = 0;
   track('floor');
-  if (S.run.auto) changeFloor(S.run.floor + 1);
+  if (S.run.auto || bossBeaten) changeFloor(S.run.floor + 1);
 }
 
 function changeFloor(f) {
@@ -338,11 +442,13 @@ function treasureEscaped() {
   emit('treasureEscaped', {});
 }
 
-// Player moving between floors. Going up turns auto-advance off so you can farm.
+// Player moving between floors. Going up turns auto-advance off so you can farm;
+// stepping back down onto the deepest floor turns it on again, so the dig resumes.
 function moveFloor(delta) {
   const f = S.run.floor + delta;
   if (f < 1 || f > S.run.maxFloor) return false;
   if (delta < 0) S.run.auto = false;
+  else if (f === S.run.maxFloor) S.run.auto = true;
   changeFloor(f);
   return true;
 }
@@ -540,14 +646,23 @@ function strike(e, mult, kind) {
   dealDamage(e, d, kind === 'mega' ? 'mega' : crit ? 'critstrike' : 'strike');
 }
 
+// The round is kept in the save, so closing the app mid-round does not lose the offer.
 function startBonusRound(reward) {
-  R.bonusRound = { need: 5, done: 0, reward };
+  const b = R.bonusRound;
+  if (b) {
+    // A second offer while a round is still running adds to it instead of replacing it.
+    b.reward = { coins: b.reward.coins + reward.coins, xp: b.reward.xp + reward.xp };
+  } else {
+    R.bonusRound = { need: 5, done: 0, reward: { coins: reward.coins, xp: reward.xp } };
+  }
+  S.bonusRound = R.bonusRound;
   emit('bonusRound', R.bonusRound);
 }
 
 function finishBonusRound(won) {
   const b = R.bonusRound;
   R.bonusRound = null;
+  S.bonusRound = null;
   if (won) {
     addCoins(b.reward.coins);
     gainXp(b.reward.xp);
@@ -802,13 +917,35 @@ function grantDrop(d) {
     d.autoEquipped = true;
     return;
   }
-  if (it.r < S.settings.autoSalvage || S.gear.bag.length >= BAG_SIZE) {
+  if (it.r < S.settings.autoSalvage) {
     const v = scrapValue(it);
     S.scrap += v;
     d.salvaged = v;
     return;
   }
+  if (S.gear.bag.length >= BAG_SIZE) {
+    // A full bag scraps the weakest thing in it to make room for a better drop,
+    // so a Legendary never turns into scrap just because the bag was full of Commons.
+    const i = weakestBagIndex();
+    if (i < 0 || itemRank(S.gear.bag[i]) >= itemRank(it)) {
+      const v = scrapValue(it);
+      S.scrap += v;
+      d.salvaged = v;
+      return;
+    }
+    const old = S.gear.bag.splice(i, 1)[0];
+    const v = scrapValue(old);
+    S.scrap += v;
+    d.madeRoom = { name: `${RARITY[old.r].name} ${itemName(old)}${old.lv ? ' +' + old.lv : ''}`, scrap: v };
+  }
   S.gear.bag.unshift(it);
+}
+
+function itemRank(it) { return it.r * 1000 + it.t * 20 + it.lv; }
+function weakestBagIndex() {
+  let best = -1;
+  for (let i = 0; i < S.gear.bag.length; i++) if (best < 0 || itemRank(S.gear.bag[i]) < itemRank(S.gear.bag[best])) best = i;
+  return best;
 }
 
 // method: 'coins' | 'key' | 'free' | 'reward'. Returns the drops, or null if it could not open.
@@ -1006,12 +1143,15 @@ function rollQuests(day) {
 function ensureDay() {
   const today = dateKey();
   if (S.daily.day !== today) {
+    // A login reward the player opened the app for but never tapped is collected, not lost.
+    const auto = S.daily.day && !S.daily.claimed ? claimDaily() : null;
     const gap = S.daily.day ? dayDiff(S.daily.day, today) : 0;
     S.daily.streak = gap === 1 ? S.daily.streak + 1 : 1;
     S.daily.day = today;
     S.daily.claimed = false;
     if (S.daily.streak > S.stats.bestLogin) S.stats.bestLogin = S.daily.streak;
     emit('newDay', {});
+    if (auto) emit('dailyAuto', auto);
   }
   if (S.quests.day !== today) {
     S.quests = { day: today, list: rollQuests(today), bonus: false };
@@ -1027,6 +1167,14 @@ function dailyRewardFor(streak) {
   const i = (Math.max(1, streak) - 1) % 7;
   const week = Math.floor((Math.max(1, streak) - 1) / 7);
   return { ...DAILY_REWARDS[i], index: i, week };
+}
+
+// What a login day actually pays, including the week bonus (keys +1 per week, scrap doubles).
+function dailyRewardLabel(streak) {
+  const rw = dailyRewardFor(streak);
+  if (rw.keys) return `${rw.keys + rw.week} keys`;
+  if (rw.scrap) return `${rw.scrap * (1 + rw.week)} scrap`;
+  return rw.label;
 }
 
 function claimDaily() {
@@ -1131,6 +1279,7 @@ function doPrestige() {
   R.frenzyT = 0;
   R.ore = null;
   R.bonusRound = null;
+  S.bonusRound = null;
   recalc();
   const tierAfter = bestCaseTier();
   return {
@@ -1156,10 +1305,16 @@ function idleRates() {
 
 function applyOffline(sec) {
   if (!(sec >= 10)) return null;
+  recalc(); // the 2x boost state must be as of now, not as of when the app went to the background
   const capped = Math.min(sec, ST.offlineCap);
   const eff = capped * ST.offlineRate;
   const r = idleRates();
-  const res = { sec, capped, coins: r.coins * eff, xp: r.xp * eff, kills: Math.floor(r.kps * eff) };
+  // Only the part of the absence that a 2x coin boost actually covered pays double.
+  const start = Date.now() - sec * 1000;
+  const boostedSec = clamp((S.boostUntil - start) / 1000, 0, capped);
+  const baseCoins = r.coins / ST.boost;
+  const coins = baseCoins * (eff + boostedSec * ST.offlineRate);
+  const res = { sec, capped, coins, xp: r.xp * eff, kills: Math.floor(r.kps * eff), runStarted: S.run.started };
   addCoins(res.coins);
   gainXp(res.xp);
   S.stats.kills += res.kills;
@@ -1169,7 +1324,9 @@ function applyOffline(sec) {
 // ---------- saving ----------
 function serialize() {
   S.savedAt = Date.now();
-  S.lastSeen = S.savedAt;
+  // While the app sits in the background the drill is not running, so a save made from there
+  // (tab closed from the switcher, browser killed) must keep the moment it went to the background.
+  S.lastSeen = R.hiddenAt || S.savedAt;
   S.gameVersion = GAME_VERSION;
   return JSON.stringify(S);
 }
@@ -1184,11 +1341,22 @@ function saveLocal() {
 }
 
 function loadLocal() {
+  let raw = null;
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
+    raw = localStorage.getItem(SAVE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch (e) {
+    keepBrokenSave(raw);
     return null;
+  }
+}
+
+// A save that cannot be read is kept under another key instead of being overwritten.
+function keepBrokenSave(raw) {
+  try {
+    if (raw) localStorage.setItem(SAVE_KEY + '-broken', typeof raw === 'string' ? raw : JSON.stringify(raw));
+  } catch (e) {
+    /* storage full or unavailable */
   }
 }
 
@@ -1227,12 +1395,26 @@ function parseCode(code) {
 }
 
 function loadState(obj) {
-  S = hydrate(obj);
-  R.enemy = null;
-  R.spawnT = 0.6;
-  R.queued = [];
-  R.bonusRound = null;
-  recalc();
-  ensureDay();
-  R.dayKey = dateKey();
+  const prev = S;
+  const next = hydrate(obj);
+  S = next;
+  try {
+    R.enemy = null;
+    R.spawnT = 0.6;
+    R.queued = [];
+    R.bonusRound = S.bonusRound;
+    R.frenzyT = 0;
+    R.ore = null;
+    R.decayAcc = 0;
+    R.lastAnswer = R.time; // a loaded combo gets the normal grace period before it fades
+    recalc();
+    ensureDay();
+    R.dayKey = dateKey();
+  } catch (e) {
+    // Never leave a half-loaded state behind: keep playing on the previous one.
+    S = prev;
+    R.bonusRound = S.bonusRound;
+    if (ST) recalc();
+    throw e;
+  }
 }
