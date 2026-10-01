@@ -27,6 +27,13 @@ function upgradeIconUrl(u) {
   if (u.icon === 'pick') return spriteUrl(pickSprite(0), 4, 'upg:pick');
   return iconUrl(u.icon);
 }
+// Wear condition and what it does to the item's stats, e.g. "Factory New · +18% stats".
+function wearHtml(it) {
+  const pct = Math.round((quality(it.fl) - 1) * 100);
+  const cls = pct > 0 ? 'wear-up' : pct < 0 ? 'wear-down' : '';
+  return `${wearName(it.fl)} · <span class="${cls}">${pct > 0 ? '+' : ''}${pct}% stats</span>`;
+}
+
 function plural(n, word) {
   return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
@@ -195,7 +202,7 @@ function setTicker(text, kind = '', ms = 1800) {
 
 function goalMessages() {
   const out = [];
-  if (bossWaiting()) return [['A boss blocks the way. Tap Fight boss to duel it.', 'gold']];
+  if (bossWaiting()) return [['A boss blocks the way. Your miner farms this floor until you tap Fight boss.', 'gold']];
   if (canPrestige()) out.push([`Prestige ready: +${prestigeGain()} cores in the More tab`, 'gold']);
   if (S.run.sp > 0) out.push([`${plural(S.run.sp, 'skill point')} to spend in Skills`, 'gold']);
   const c = claimableCounts();
@@ -643,7 +650,7 @@ function dropDetailHtml(d) {
       + itemStats(eq).map(s => `<div class="statline small muted"><span>${STATS[s.k].name}</span><span>${statVal(s.k, s.v)}</span></div>`).join('');
   }
   return `<div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}</div>
-    <div class="rsub">${wearName(it.fl)} · float ${it.fl.toFixed(4)}</div>${lines}${note}${cmp}`;
+    <div class="rsub">${wearHtml(it)}</div>${lines}${note}${cmp}`;
 }
 
 function revealResult(drops, ctx) {
@@ -851,7 +858,7 @@ function showItem(id) {
   actions += '<button class="btn" data-act="close">Close</button>';
   openModal(`<div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}${it.lv ? ' +' + it.lv : ''}</div>
-    <div class="rsub">Tier ${it.t} · ${wearName(it.fl)} · float ${it.fl.toFixed(4)}</div>
+    <div class="rsub">Tier ${it.t} · ${wearHtml(it)}</div>
     ${lines}<div class="rsub">Reforging adds +10% to every stat (max +${MAX_ITEM_LEVEL}).</div></div>${cmp}
     <div class="mbtns">${actions}</div>`, { dismissable: true });
 }

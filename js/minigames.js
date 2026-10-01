@@ -269,7 +269,7 @@ function fightBoss() {
   updateFloorBar();
 }
 
-on('spawn', e => { if (e.boss) setTimeout(updateFloorBar, ENTER_TIME * 1000 + 50); });
+on('spawn', () => { if (isBossFloor(S.run.floor)) updateFloorBar(); });
 on('consolation', ({ coins }) => toast(`Consolation ore: +${fmt(coins)} coins`, 'gold', 'coin'));
 on('duelMiss', () => { if (MG.active) mgStatus(MG.active); });
 on('duelEnd', ({ won }) => {

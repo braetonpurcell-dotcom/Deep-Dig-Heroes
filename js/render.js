@@ -391,7 +391,7 @@ function canvasTap(clientX, clientY) {
   const b = BIOMES[biomeIndex(S.run.floor) % BIOMES.length];
   const e = R.enemy;
   let colors = [b.rock[2], b.oreColor, '#ffffff'];
-  if (e && !e.waiting) {
+  if (e) {
     const box = enemyBox(e);
     if (x >= box.x - 4 && x <= box.x + box.w + 4 && y >= box.y - 4 && y <= box.y + box.h + 4) {
       e.flash = 0.05;
@@ -614,7 +614,7 @@ function drawOverlay(dt) {
     }
   }
   const e = R.enemy;
-  if (e && e.boss && e.waiting) {
+  if (bossWaiting()) {
     if (Math.floor(R.time * 2) % 2 === 0) drawText('TAP FIGHT BOSS', 156, 3, '#ffcc4d', 1, 'right');
   } else if (e && e.boss) {
     const k = clamp(e.timer / BOSS_TIME, 0, 1);

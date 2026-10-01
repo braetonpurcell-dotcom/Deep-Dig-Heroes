@@ -3,6 +3,10 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.4.0
+- While a boss waits for you, your miner keeps farming that floor's regular enemies instead of standing still. Tap Fight boss whenever you're ready; the boss steps in and the duel starts. Offline earnings use the same floor.
+- Gear no longer shows the raw float number. Items show their wear and what it does to their stats instead, e.g. "Factory New · +18% stats" in green or "Battle-Scarred · -15% stats" in red.
+
 ## v1.3.0
 - Game feel pass based on game-feel and reward research: hits now freeze for a split second (hitstop), the screen shake is smoother, and big hits, crits and kills get stronger haptics.
 - Correct answers climb a musical scale as your streak grows, with harmony on later laps. Sounds vary slightly each time so they never get stale.

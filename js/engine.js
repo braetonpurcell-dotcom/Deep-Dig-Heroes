@@ -331,11 +331,12 @@ function gainXp(x) {
 }
 
 // ---------- combat ----------
-function spawnEnemy() {
+// On a boss floor regular enemies keep coming until the player starts the duel,
+// so the miner farms instead of standing still. `boss` spawns the boss itself.
+function spawnEnemy(boss = false) {
   const f = S.run.floor;
   const biome = biomeFor(f);
   let type;
-  const boss = isBossFloor(f);
   if (boss) type = BOSS_ORDER[(f / 10) % BOSS_ORDER.length];
   else if (f >= ENEMIES.goldie.minFloor && Math.random() < TREASURE_CHANCE) type = 'goldie';
   else type = weightedPick(NORMAL_ENEMIES.filter(t => ENEMIES[t].minFloor <= f), t => ENEMIES[t].weight);
@@ -344,7 +345,6 @@ function spawnEnemy() {
   R.enemy = {
     type, boss, name, hp, max: hp, enter: ENTER_TIME, flash: 0,
     timer: boss ? BOSS_TIME : 0, flee: type === 'goldie' ? TREASURE_TIME : 0, seed: Math.random() * 10,
-    waiting: boss, // bosses only fight once the player starts the duel
   };
   R.atkT = 0;
   emit('spawn', R.enemy);
@@ -404,7 +404,8 @@ function killEnemy(e) {
       emit('bossDown', { keys: 0, name: e.name });
     }
     floorCleared(true);
-  } else {
+  } else if (!isBossFloor(f)) {
+    // Kills while a boss waits only farm: the boss is the only way down.
     S.run.kills++;
     if (S.run.kills >= KILLS_PER_FLOOR) floorCleared();
   }
@@ -474,15 +475,14 @@ function recordMinigame(game, value) {
 
 // ---------- boss duels ----------
 function bossWaiting() {
-  const e = R.enemy;
-  return !!(e && e.boss && e.waiting && e.enter <= 0);
+  return isBossFloor(S.run.floor) && !R.duel && !(R.enemy && R.enemy.boss);
 }
 
+// The boss steps in and replaces whatever enemy the miner was farming.
 function startBossDuel() {
-  const e = R.enemy;
-  if (!e || !e.boss || !e.waiting) return null;
-  e.waiting = false;
-  e.timer = BOSS_TIME;
+  if (!bossWaiting()) return null;
+  R.queued.length = 0;
+  spawnEnemy(true);
   R.duel = { game: bossGame(S.run.floor), lives: DUEL_LIVES, hits: 0 };
   emit('duelStart', R.duel);
   return R.duel;
@@ -818,8 +818,6 @@ function step(dt) {
     if (R.spawnT <= 0) spawnEnemy();
   } else if (e.enter > 0) {
     e.enter -= dt;
-  } else if (e.waiting) {
-    // A boss stands off until the player taps Fight boss.
   } else {
     while (R.queued.length && R.enemy === e) {
       const q = R.queued.shift();
@@ -1380,8 +1378,7 @@ function doPrestige() {
 
 // ---------- idle and offline ----------
 function idleRates() {
-  let f = S.run.floor;
-  if (isBossFloor(f)) f = Math.max(1, f - 1);
+  const f = S.run.floor; // on a boss floor the miner farms that floor's regular enemies
   const dps = Math.max(1e-9, ST.dps * ST.goldDrill);
   const t = (hpFor(f) * 0.975) / dps + SPAWN_GAP + ENTER_TIME;
   return {
