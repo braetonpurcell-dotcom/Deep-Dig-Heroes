@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.5.1
+- Lock button on every item (top right of the item popup). Locked items can't be salvaged, are skipped by the bulk Salvage buttons, and are never scrapped to make room in a full bag. Locked items show a small padlock in the bag.
+
 ## v1.5.0
 - Six new rarities above Mythic: Exotic (1 in 500), Divine (1 in 2,500), Celestial (1 in 10,000), Cosmic (1 in 50,000), Eclipse (1 in 250,000) and Singularity (1 in 1,000,000). Their damage and coin stats are huge jumps (a Singularity pickaxe can carry a run about 15 floors past its wall), while luck and side stats only creep up so one lucky pull can't snowball.
 - Every item on the case reel shows its odds, combining rarity and wear the way CS2 does: wear is picked as Factory New 3%, Minimal Wear 24%, Field-Tested 33%, Well-Worn 24%, Battle-Scarred 16%. A Divine Factory New is 1 in 83,333; a Factory New Singularity is 1 in 33 million.
