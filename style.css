@@ -76,7 +76,7 @@ img.ic { image-rendering: pixelated; image-rendering: crisp-edges; width: 18px; 
 
 /* ---------- HUD ---------- */
 #hud { display: flex; flex-direction: column; gap: 4px; flex: none; }
-.hud-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.hud-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-width: 0; }
 .res { display: flex; align-items: center; gap: 5px; font-size: 15px; white-space: nowrap; }
 .res b { font-weight: 700; font-variant-numeric: tabular-nums; }
 .res.coins b { color: var(--gold); font-size: 18px; }
@@ -113,7 +113,7 @@ img.ic { image-rendering: pixelated; image-rendering: crisp-edges; width: 18px; 
 }
 
 /* ---------- Floor bar ---------- */
-#floorbar { display: flex; align-items: center; gap: 6px; flex: none; min-width: 0; }
+#floorbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: none; min-width: 0; }
 .fbtn {
   width: 36px; height: 34px; padding: 0;
   background: var(--raise); border: 2px solid var(--line-hi);
@@ -122,8 +122,15 @@ img.ic { image-rendering: pixelated; image-rendering: crisp-edges; width: 18px; 
   font-size: 14px; line-height: 1;
 }
 .fbtn:disabled { opacity: .35; }
-.finfo { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.05; }
-.finfo b { font-size: 17px; }
+/* The label keeps a readable minimum; narrow phones get compact buttons, and as a last resort a chip wraps. */
+.finfo { display: flex; flex-direction: column; min-width: 64px; flex: 1; line-height: 1.05; }
+#fPrestige { margin-left: auto; }
+@media (max-width: 359px) {
+  .fbtn { width: 30px; }
+  .chip { padding: 0 7px; font-size: 13px; }
+  .xs-hide { display: none; }
+}
+.finfo b { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .finfo span { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chip {
   height: 34px; padding: 0 10px;
@@ -173,7 +180,7 @@ img.ic { image-rendering: pixelated; image-rendering: crisp-edges; width: 18px; 
 .btn.good { background: #1f4a2e; border-color: var(--good); color: #e2ffe9; }
 .btn.bad { background: #4a1720; border-color: var(--bad); color: #ffe0e3; }
 .btn.purple { background: #3b1d5c; border-color: var(--gambler); color: #f3e3ff; }
-.btn.small { min-height: 32px; padding: 3px 8px; font-size: 13px; }
+.btn.small { min-height: 36px; padding: 3px 8px; font-size: 13px; }
 .btn.wide { width: 100%; }
 button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
 
@@ -211,14 +218,13 @@ button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
 .timer i.slow { background: var(--info); }
 .timer i.late { background: var(--line-hi); }
 .skip { min-height: 28px; padding: 2px 8px; font-size: 13px; background: transparent; border: 2px solid var(--line); clip-path: var(--notch); color: var(--dim); }
-.bonusbar { font-size: 14px; padding: 6px 10px; background: #3b1d5c; border: 2px solid var(--gambler); clip-path: var(--notch); text-align: center; }
 .keypad { flex: 1 1 auto; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(4, minmax(38px, 1fr)); gap: 6px; min-height: 168px; max-height: 290px; }
 .keypad button, .choices button {
   background: var(--raise); border: 2px solid var(--line-hi);
   box-shadow: inset 0 -4px 0 rgba(0,0,0,.35);
   clip-path: var(--notch);
   font-size: 24px; font-weight: 700; padding: 0;
-  touch-action: manipulation;
+  touch-action: none; /* a touch that starts on a key is a key press, never a scroll */
 }
 .keypad button:active, .choices button:active, .keypad button.press { background: #3a2d52; box-shadow: inset 0 -1px 0 rgba(0,0,0,.35); transform: translateY(1px); }
 .keypad button.fn { font-size: 16px; color: var(--dim); }
@@ -297,7 +303,7 @@ button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
 .result { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
 .result .rname { font-size: 20px; font-weight: 700; text-align: center; }
 .result .rsub { text-align: center; font-size: 13px; color: var(--dim); }
-.result .statline { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.statline { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
 .grid10 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .grid10 .tile { width: auto; height: 76px; }
 .grid10 .tile img { width: 34px; }
@@ -334,7 +340,7 @@ button:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
 .petrow .pic img { width: 32px; image-rendering: pixelated; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .pchip {
-  min-height: 30px; padding: 2px 8px; font-size: 13px;
+  min-height: 34px; padding: 2px 8px; font-size: 13px;
   background: var(--raise); background: color-mix(in srgb, var(--rc) 20%, var(--raise)); border: 2px solid var(--rc); clip-path: var(--notch);
 }
 .pchip.eq { box-shadow: inset 0 0 0 2px var(--fg); }
@@ -437,8 +443,52 @@ input[type="text"] {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 }
+/* Keep the whole keypad on screen on every common phone height. */
+@media (max-height: 700px) {
+  #cv { height: min(calc((100vw - 36px) * 0.6), 26svh, 300px); }
+  .keypad { grid-template-rows: repeat(4, minmax(36px, 1fr)); min-height: 162px; }
+}
+/* Short screens (iPhone SE, browsers with toolbars). */
 @media (max-height: 640px) {
-  #cv { height: min(calc((100vw - 36px) * 0.6), 25svh, 300px); }
-  .keypad { grid-template-rows: repeat(4, minmax(34px, 1fr)); min-height: 150px; }
-  #tabs button { min-height: 42px; }
+  #app { gap: 4px; }
+  #cv { height: min(calc((100vw - 36px) * 0.6), 21svh, 300px); }
+  .mathcard { padding: 6px 10px; gap: 4px; }
+  .problem { min-height: 34px; font-size: clamp(20px, 6.5vw, 28px); }
+  .keypad { grid-template-rows: repeat(4, minmax(30px, 1fr)); min-height: 138px; }
+  .choices { min-height: 130px; }
+  #tabs { padding-block: 4px 6px; }
+  #tabs button { min-height: 40px; }
+}
+@media (max-height: 580px) {
+  #cv { height: min(calc((100vw - 36px) * 0.6), 18svh, 300px); }
+  .keypad { grid-template-rows: repeat(4, minmax(28px, 1fr)); min-height: 130px; gap: 4px; }
+  #tab-fight { gap: 4px; }
+}
+@supports not (height: 1svh) {
+  @media (max-height: 700px) { #cv { height: min(calc((100vw - 36px) * 0.6), 26vh, 300px); } }
+  @media (max-height: 640px) { #cv { height: min(calc((100vw - 36px) * 0.6), 21vh, 300px); } }
+  @media (max-height: 580px) { #cv { height: min(calc((100vw - 36px) * 0.6), 18vh, 300px); } }
+}
+/* Phone held sideways in a browser: scene on the left, panel on the right, so the keypad stays reachable. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #app {
+    display: grid; max-width: none; column-gap: 12px; row-gap: 4px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas: "hud panel" "stage panel" "floor panel" "tabs tabs";
+  }
+  #hud { grid-area: hud; }
+  #stage { grid-area: stage; }
+  #floorbar { grid-area: floor; align-self: start; }
+  #panel { grid-area: panel; }
+  #tabs { grid-area: tabs; padding-block: 2px 4px; }
+  #tabs button { min-height: 36px; }
+  #cv { height: min(calc((50vw - 36px) * 0.6), 36svh, 300px); }
+}
+@media (orientation: landscape) and (max-height: 360px) {
+  #panel { padding-bottom: 0; }
+  .tab { min-height: 0; }
+  .keypad { grid-template-rows: repeat(4, minmax(24px, 1fr)); min-height: 112px; gap: 4px; }
+  .keypad button { font-size: 18px; line-height: 1; }
+  #tabs button { min-height: 32px; padding: 3px 0 2px; }
 }

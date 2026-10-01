@@ -56,21 +56,23 @@ function hashStr(s) {
 const SUFFIXES = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc', 'Ud', 'Dd', 'Td', 'Qad', 'Qid'];
 
 // 1234 -> "1.23K". Truncates instead of rounding so 999,999 never shows as "1000K".
+// The tiny epsilon keeps binary floating point from turning 2300 into "2.29K" (2.3 * 100 = 229.999…).
+const FMT_EPS = 1e-9;
 function fmt(n) {
   if (n === Infinity) return '∞';
   if (!isFinite(n)) return '0';
   if (n < 0) return '-' + fmt(-n);
   if (n < 1000) {
-    if (n < 10 && n % 1 !== 0) return (Math.floor(n * 10) / 10).toString();
-    return Math.floor(n).toString();
+    if (n < 10 && n % 1 !== 0) return (Math.floor(n * 10 + FMT_EPS) / 10).toString();
+    return Math.floor(n + FMT_EPS).toString();
   }
   const e = Math.floor(Math.log10(n) / 3);
   if (e < SUFFIXES.length) {
     const v = n / Math.pow(1000, e);
     let s;
-    if (v < 10) s = (Math.floor(v * 100) / 100).toFixed(2);
-    else if (v < 100) s = (Math.floor(v * 10) / 10).toFixed(1);
-    else s = Math.floor(v).toString();
+    if (v < 10) s = (Math.floor(v * 100 + FMT_EPS) / 100).toFixed(2);
+    else if (v < 100) s = (Math.floor(v * 10 + FMT_EPS) / 10).toFixed(1);
+    else s = Math.floor(v + FMT_EPS).toString();
     return s + SUFFIXES[e];
   }
   return n.toExponential(2).replace('e+', 'e');
