@@ -944,7 +944,14 @@ function buildMore() {
     <div id="importBox" hidden><textarea id="importText" aria-label="Paste a save code" placeholder="Paste a code that starts with DDH1."></textarea>
     <div class="mbtns" style="margin-top:6px"><button class="btn good" data-act="doImport">Load this save</button></div></div>
     <div class="mbtns" style="margin-top:8px"><button class="btn bad" data-act="askReset">Reset game</button></div></div>`;
-  h += '<div class="card small muted">Deep Dig Heroes v1. Font: Jersey 10, SIL Open Font License. Works offline once it has loaded.</div>';
+  const backups = backupList();
+  h += `<div class="card"><h3>Backups</h3>
+    <p class="small muted">A copy of your progress is saved automatically before every game update and once a day. The newest ${BACKUP_KEEP} are kept on this device.</p>
+    <div class="list" style="margin-top:8px">${backups.length ? backups.map(b => `<div class="ach"><div><div class="an">v${escapeHtml(b.version)} · ${new Date(b.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+      <div class="ad">${escapeHtml(b.reason)} · deepest B${b.floor} · ${plural(b.prestiges, 'prestige')}</div></div>
+      <button class="btn small" data-act="askRestore" data-id="${b.id}">Restore</button></div>`).join('') : '<div class="small muted">No backups yet.</div>'}</div>
+    <div class="mbtns" style="margin-top:8px"><button class="btn" data-act="backupNow">Back up now</button></div></div>`;
+  h += `<div class="card small muted">Deep Dig Heroes v${GAME_VERSION}. Font: Jersey 10, SIL Open Font License. Works offline once it has loaded.</div>`;
   $('#tab-more').innerHTML = h;
 }
 
@@ -1141,6 +1148,12 @@ function handleAction(el) {
     case 'showImport': $('#importBox').hidden = false; $('#importText').focus(); break;
     case 'doImport': doImport(); break;
     case 'askReset': askReset(); break;
+    case 'backupNow':
+      toast(makeBackup(JSON.parse(serialize()), 'Saved by you') ? 'Backup saved' : 'Could not save a backup on this device', '');
+      buildMore();
+      break;
+    case 'askRestore': askRestore(d.id); break;
+    case 'doRestore': doRestore(d.id); break;
     case 'doReset': doReset(); break;
     case 'startBonus':
       if (UI.pendingBonus) startBonusRound(UI.pendingBonus);
@@ -1166,6 +1179,30 @@ function askPrestige() {
     ${nextCase ? `<p class="small">Unlocks the ${nextCase.name}.</p>` : ''}
     ${S.prestiges === 0 || S.prestiges === 2 ? '<p class="small">Adds a pet slot.</p>' : ''}
     <div class="mbtns"><button class="btn purple" data-act="doPrestige">Prestige</button><button class="btn" data-act="close">Not yet</button></div>`, { dismissable: true });
+}
+
+function askRestore(id) {
+  const b = backupList().find(x => x.id === id);
+  if (!b) return;
+  openModal(`<h2>Restore this backup?</h2>
+    <p>v${escapeHtml(b.version)} from ${new Date(b.at).toLocaleString()}, deepest B${b.floor}.</p>
+    <p class="small muted">Your current progress is backed up first, so you can switch back.</p>
+    <div class="mbtns"><button class="btn good" data-act="doRestore" data-id="${b.id}">Restore</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
+}
+
+function doRestore(id) {
+  const raw = loadBackup(id);
+  closeModal();
+  if (!raw || !raw.run) {
+    toast('That backup could not be read', 'bad');
+    return;
+  }
+  makeBackup(JSON.parse(serialize()), 'Before restoring a backup');
+  loadState(raw);
+  saveNow();
+  newProblem();
+  showTab('fight');
+  toast('Backup restored', 'good');
 }
 
 function askReset() {

@@ -1170,6 +1170,7 @@ function applyOffline(sec) {
 function serialize() {
   S.savedAt = Date.now();
   S.lastSeen = S.savedAt;
+  S.gameVersion = GAME_VERSION;
   return JSON.stringify(S);
 }
 

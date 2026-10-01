@@ -35,11 +35,20 @@ Run `node tools/build-single.js deep-dig-heroes.html` and send that file to your
 | `js/render.js` | The 160×96 pixel scene, bitmap font, particles and screen shake |
 | `js/ui.js` | HUD, tabs, the case reel, popups and keypad input |
 | `js/main.js` | Boot, game loop, autosave, offline earnings and service worker |
+| `js/version.js` | The game version. Bump it for every release |
+| `js/backup.js` | Automatic save backups on the device |
 | `sw.js` | Offline cache. List any new file here |
 
 Saves go to `localStorage` every 5 seconds and when the app is hidden. When the game runs as a claude.ai artifact it also keeps a private copy of the save in the player's own row of the artifact's database.
 
 `window.DDH` exposes the state and core functions for testing from the browser console.
+
+## Versions
+
+Every release is saved on GitHub under Releases, so any old version can be viewed or downloaded.
+To ship a new version: bump `GAME_VERSION` in `js/version.js`, add a matching `## vX.Y.Z` section at the top of `CHANGELOG.md`, and bump `CACHE` in `sw.js`. When that lands on `main`, the "Save each version" workflow creates the release.
+
+On the phone, the game backs up your progress before every update and once a day (More → Backups).
 
 ## Credits
 

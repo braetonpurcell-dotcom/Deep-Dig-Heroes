@@ -62,6 +62,7 @@ function onVisibility() {
   hiddenAt = 0;
   lastFrame = performance.now();
   ensureDay();
+  autoBackup(JSON.parse(serialize()));
   if (away >= 60) {
     const res = applyOffline(away);
     if (res && res.coins > 0) queueModal(() => showWelcomeBack(res));
@@ -169,6 +170,7 @@ function boot(hotData) {
       /* ignore a bad snapshot */
     }
   }
+  if (base) autoBackup(base);
   loadState(base || freshState());
   initCanvas($('#cv'));
   initIcons();

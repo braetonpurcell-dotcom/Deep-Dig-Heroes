@@ -1,0 +1,47 @@
+name: Save each version
+
+# Every version listed in CHANGELOG.md becomes a GitHub release (a permanent copy
+# of the game at that version) the first time it lands on main.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create missing releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: python
+        run: |
+          import os, re, subprocess
+          text = open('CHANGELOG.md').read()
+          current = re.search(r"GAME_VERSION = '([\d.]+)'", open('js/version.js').read()).group(1)
+          sections = re.split(r'^## v', text, flags=re.M)[1:]
+          for sec in reversed(sections):  # oldest first, so the newest ends up as "latest"
+              head, _, body = sec.partition('\n')
+              version = head.split()[0]
+              tag = 'v' + version
+              m = re.search(r'^Commit: ([0-9a-f]{7,40})\s*$', body, re.M)
+              if m:
+                  ref = m.group(1)
+              elif version == current:
+                  ref = os.environ['GITHUB_SHA']
+              else:
+                  print(f'{tag}: no commit listed, skipping')
+                  continue
+              if subprocess.run(['gh', 'release', 'view', tag], capture_output=True).returncode == 0:
+                  print(f'{tag}: already released')
+                  continue
+              sha = subprocess.check_output(['git', 'rev-parse', ref + '^{commit}']).decode().strip()
+              notes = re.sub(r'^Commit: .*\n?', '', body, flags=re.M).strip()
+              subprocess.check_call(['gh', 'release', 'create', tag, '--target', sha, '--title', tag, '--notes', notes])
+              print(f'{tag}: released at {sha[:7]}')
