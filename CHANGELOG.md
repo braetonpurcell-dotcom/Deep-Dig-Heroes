@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.9.2
+- Fixed fast taps not registering (feedback from Waerin): tapping anywhere inside a monster's gold ring now counts, not just the monster itself, and a tap that lands just as the ring closes (phones report taps a moment late) still counts.
+
 ## v1.9.1
 - Feedback is connected: notes from the Feedback button now go straight to the developer's inbox (and any notes already waiting on a phone send the next time the game is open online).
 

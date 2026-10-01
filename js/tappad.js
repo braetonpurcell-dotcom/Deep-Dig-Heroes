@@ -4,6 +4,11 @@
 // session pace in engine.js (tapDifficulty), which settles where you hit most but not all of them.
 
 const TAP = { on: false, targets: [], spawnT: 0.3, raf: 0, last: 0, bgKey: '', nextId: 1 };
+// Phone screens report a tap a little after the finger lands, so a monster stays tappable for a
+// moment after its ring closes.
+const TAP_GRACE = 0.12;
+const RING_GROW = 1.3; // the ring starts 2.3x the monster's size and shrinks to it
+function ringScale(t) { return 1 + RING_GROW * Math.max(0, 1 - t.age / t.life); }
 
 function tapStart() {
   if (TAP.on) return;
@@ -91,9 +96,9 @@ function tapFrame(now) {
     for (const t of TAP.targets.slice()) {
       t.age += dt;
       const k = t.age / t.life;
-      t.ring.style.transform = `scale(${1 + 1.3 * Math.max(0, 1 - k)})`;
+      t.ring.style.transform = `scale(${ringScale(t)})`;
       t.ring.classList.toggle('late', k > 0.7);
-      if (k >= 1) tapEscape(t);
+      if (t.age >= t.life + TAP_GRACE) tapEscape(t);
     }
     TAP.spawnT -= dt;
     const d = tapDifficulty();
@@ -127,15 +132,17 @@ function tapPointer(e) {
   const rect = $('#tappad').getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  // Forgiving hit area: a little bigger than the monster, nearest one wins.
+  // Anywhere inside the gold ring counts (it shrinks as time runs out), and never less than a
+  // little more than the monster itself. The nearest monster wins.
   let best = null;
   let bestD = Infinity;
   for (const t of TAP.targets) {
     const dd = Math.hypot(t.x - x, t.y - y);
-    if (dd < t.size * 0.62 && dd < bestD) { best = t; bestD = dd; }
+    const reach = Math.max(t.size * 0.62, (t.size / 2) * ringScale(t) + 6);
+    if (dd < reach && dd < bestD) { best = t; bestD = dd; }
   }
   if (!best) { tapFloat(x, y, '·', 'dust'); SFX.pop(); return; }
-  const res = tapHit(1 - best.age / best.life);
+  const res = tapHit(Math.max(0, 1 - best.age / best.life));
   tapRemove(best, 'hit');
   tapFloat(best.x, best.y - best.size / 2, res.perfect ? 'PERFECT' : 'HIT', res.perfect ? 'perfect' : 'good');
 }

@@ -1,1 +1,9 @@
-{}
+{
+  "fb-mupygccv-amf3": [
+    {
+      "from": "Braeton (dev)",
+      "text": "Good catch, thanks! Fixed in v1.9.2: tapping anywhere inside the gold ring now counts (not just the monster), and a tap right as the ring closes still counts. Close and reopen the game to get the update.",
+      "at": "2026-10-01T20:30:00Z"
+    }
+  ]
+}
