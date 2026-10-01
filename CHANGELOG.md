@@ -3,6 +3,11 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.8.2
+- Focus Shield: tap 15 monsters in a row without an escape to earn one ("Shield ready" on the combo bar). The next escape turns it on for 2.5 seconds (up to 4 near your peak); escapes while it's on are SAFE and cost no combo, so you can glance away to check your floor or score.
+- The multiplier ceiling follows the pace you've held over the last ~20 seconds, and near the ceiling an escape costs only 4% of your combo (10% lower down). In the playtest, looking away for 3 seconds at a good pace now costs about x0.05 instead of about x0.9.
+- How pace works: it counts hits and escapes rather than timing you. Each hit nudges it up, each escape eases it down, and it settles where you hit about 9 in 10.
+
 ## v1.8.1
 - Tuned the tap pace with five simulated players from 750 ms to 200 ms per target (matched to Human Benchmark Aim Trainer percentiles), each with lapses, fatigue, target-switch time and mis-taps.
 - Slow burn for everyone: pace steps are weighted by time, so fast tappers no longer race up. Reaching 25% pace takes about 40-110 seconds.

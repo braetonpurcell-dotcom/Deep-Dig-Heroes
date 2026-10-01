@@ -84,6 +84,9 @@ function tapFrame(now) {
   TAP.last = now;
   // The pad freezes (rings included) whenever you can't see it.
   const paused = UI.tab !== 'fight' || UI.modalOpen || MG.active || document.hidden;
+  const pad = $('#tappad');
+  const sh = shieldActive();
+  if (pad.classList.contains('shielded') !== sh) pad.classList.toggle('shielded', sh);
   if (!paused) {
     for (const t of TAP.targets.slice()) {
       t.age += dt;
@@ -140,7 +143,7 @@ function tapPointer(e) {
 function tapEscape(t) {
   const res = tapMiss();
   tapRemove(t, 'miss');
-  tapFloat(t.x, t.y - t.size / 2, res.lost ? `-${res.lost}` : 'MISS', 'miss');
+  tapFloat(t.x, t.y - t.size / 2, res.shielded ? 'SAFE' : res.lost ? `-${res.lost}` : 'MISS', res.shielded ? 'safe' : 'miss');
 }
 
 on('floor', () => { if (TAP.on) tapBackground(); });

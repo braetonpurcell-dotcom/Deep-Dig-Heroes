@@ -257,7 +257,7 @@ const R = {
   sim: false, paused: false, hitstop: 0, time: 0, session: 0, secT: 0, dayKey: '', hiddenAt: 0,
   enemy: null, spawnT: 0.6, atkT: 0, swingT: 0, queued: [],
   lastAnswer: -99, decayAcc: 0,
-  frenzyT: 0, ore: null, oreT: 40, pace: 0,
+  frenzyT: 0, ore: null, oreT: 40, pace: 0, paceHold: 0, shield: 0, shieldUntil: 0, cleanHits: 0,
   boostOn: false, bonusRound: null, duel: null,
 };
 
@@ -584,18 +584,22 @@ const PACE_LOW = 0.2;
 const PACE_HIGH = 0.8;
 const PACE_STEP_TIME = 0.6; // seconds: steps are weighted by time, so fast tappers don't climb faster per second
 
+// The combo ceiling follows the pace you've held over the last ~20 seconds (paceHold), not the
+// instant pace, so a short dip (a glance away, a couple of escapes) barely moves your multiplier.
+const PACE_HOLD_TIME = 20;
 function paceComboCap() {
-  const k = clamp(((R.pace || 0) - PACE_LOW) / (PACE_HIGH - PACE_LOW), 0, 1);
+  const k = clamp(((R.paceHold || 0) - PACE_LOW) / (PACE_HIGH - PACE_LOW), 0, 1);
   return Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * k) + 4 * skillRank('momentum');
 }
 // Each step counts in proportion to the time since the previous tap or escape, so the climb takes
 // about as long for everyone while the ~88% hit-rate balance stays the same.
 function paceStep(delta) {
-  const since = R.time - (R.paceT || 0);
+  const since = Math.max(0, R.time - (R.paceT || 0));
   R.paceT = R.time;
+  R.paceHold = (R.paceHold || 0) + (R.pace - (R.paceHold || 0)) * (1 - Math.exp(-since / PACE_HOLD_TIME));
   setPace(R.pace + delta * clamp(since / PACE_STEP_TIME, 0.25, 1));
 }
-function startPaceSession() { R.pace = clamp((S.pace || 0) * PACE_WARMUP, 0, 1); }
+function startPaceSession() { R.pace = R.paceHold = clamp((S.pace || 0) * PACE_WARMUP, 0, 1); }
 function setPace(p) {
   R.pace = clamp(p, 0, 1);
   S.pace = R.pace;
@@ -621,6 +625,12 @@ const BONUS_TAPS = 20; // "Double it" round: this many taps in a row without an 
 function tapHit(quality) {
   const perfect = quality >= 0.5;
   paceStep(PACE_UP);
+  R.cleanHits = (R.cleanHits || 0) + 1;
+  if (!R.shield && !shieldActive() && R.cleanHits >= SHIELD_EVERY) {
+    R.shield = 1;
+    R.cleanHits = 0;
+    emit('shield', { on: false, ready: true });
+  }
   S.math.streak++;
   R.lastAnswer = R.time;
   R.decayAcc = 0;
@@ -651,11 +661,36 @@ function tapHit(quality) {
   return res;
 }
 
+// Focus Shield: 15 taps in a row without an escape earns one charge. The next escape spends it and
+// turns the shield on for a few seconds (longer near your peak); escapes during that window cost
+// nothing, so you can glance away to check your floor or score.
+const SHIELD_EVERY = 15;
+const SHIELD_TIME = 2.5; // seconds, +1.5s at a full combo
+// Near the combo ceiling an escape costs less: 10% normally, 4% at the cap.
+const PEAK_KEEP = 0.96;
+
+function shieldActive() { return R.time < (R.shieldUntil || 0); }
+function comboFill() { return Math.min(1, S.math.streak / Math.max(1, ST.comboCap)); }
+
 function tapMiss() {
-  const before = S.math.streak;
-  paceStep(-PACE_DOWN);
-  S.math.streak = Math.floor(S.math.streak * ST.comboKeep);
   S.stats.escapes++;
+  if (!shieldActive() && R.shield) {
+    R.shield = 0;
+    R.shieldUntil = R.time + SHIELD_TIME + 1.5 * comboFill();
+    emit('shield', { on: true, until: R.shieldUntil });
+  }
+  if (shieldActive()) {
+    // The shield protects the combo, but the pace still eases off so it stays comfortable.
+    paceStep(-PACE_DOWN);
+    const res = { ok: false, lost: 0, shielded: true, streak: S.math.streak, bonus: null };
+    emit('tap', res);
+    return res;
+  }
+  const before = S.math.streak;
+  R.cleanHits = 0;
+  paceStep(-PACE_DOWN);
+  const keep = lerp(ST.comboKeep, Math.max(ST.comboKeep, PEAK_KEEP), comboFill());
+  S.math.streak = Math.floor(S.math.streak * keep);
   const bonus = R.bonusRound ? finishBonusRound(false) : null;
   const res = { ok: false, lost: before - S.math.streak, streak: S.math.streak, bonus };
   emit('tap', res);

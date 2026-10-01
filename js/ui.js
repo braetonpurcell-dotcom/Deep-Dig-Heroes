@@ -246,6 +246,10 @@ function updateFight() {
   fill.classList.toggle('fading', streak > 0 && R.time - R.lastAnswer > ST.decay - 2);
   $('#cStreak').textContent = `${streak}/${ST.comboCap}`;
   $('#cPace').textContent = `Pace ${Math.round((R.pace || 0) * 100)}%`;
+  const sh = $('#cShield');
+  const left = (R.shieldUntil || 0) - R.time;
+  const shTxt = left > 0 ? `Shield ${left.toFixed(1)}s` : R.shield ? 'Shield ready' : '';
+  if (sh.textContent !== shTxt) { sh.textContent = shTxt; sh.hidden = !shTxt; sh.classList.toggle('on', left > 0); }
   // The double-it progress lives in the ticker line, so the tap pad never loses space to it.
   if (R.bonusRound && performance.now() >= UI.tickerUntil) {
     const t = $('#ticker');
@@ -254,7 +258,13 @@ function updateFight() {
   }
 }
 
+on('shield', e => {
+  if (e.ready) { SFX.pop(); vibrate(10); }
+  else if (e.on) { SFX.rankUp(0); vibrate([15, 30, 15]); }
+});
+
 on('tap', res => {
+  if (res.shielded) return;
   if (res.ok) {
     SFX.correct(res.streak);
     vibrate(res.perfect ? 14 : 8);

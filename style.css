@@ -615,3 +615,7 @@ input[type="text"] {
 @keyframes tapMissFx { to { transform: translate(-50%, -50%) scale(.6); opacity: 0; filter: grayscale(1) sepia(1) hue-rotate(-50deg) saturate(4); } }
 @keyframes tapFloatUp { to { transform: translate(-50%, -190%); opacity: 0; } }
 .mathmeta .pace { color: var(--dim); min-width: 72px; text-align: right; }
+.mathmeta .shield { font-size: 13px; color: var(--info); white-space: nowrap; }
+.mathmeta .shield.on { color: #fff; background: color-mix(in srgb, var(--info) 55%, transparent); padding: 0 4px; }
+.tapfloat.safe { color: #fff; font-size: 18px; text-shadow: 0 0 6px var(--info), 0 1px 0 #000; }
+#tappad.shielded { box-shadow: inset 0 0 0 3px var(--info), inset 0 0 24px color-mix(in srgb, var(--info) 45%, transparent); }

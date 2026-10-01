@@ -11,7 +11,7 @@ const { PERSONAS, AGENT_CODE } = require('./personas');
     R.sim = true; R.paused = true;
     const res = {};
     for (const [k, p] of Object.entries(PERSONAS)) {
-      S.math.streak = 0; setPace(0);
+      S.math.streak = 0; setPace(0); R.paceHold = 0;
       const a = makeAgent(p); const series = []; const marks = {};
       let sumM = 0, sumP = 0, n = 0, h0 = 0, m0 = 0;
       for (let i = 0; i < 120000; i++) {
