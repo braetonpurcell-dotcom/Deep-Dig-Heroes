@@ -3,6 +3,12 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.2.0
+- Four brain mini-games in the mine's theme: Spark Vein (reaction time), Crystal Echo (sequence memory), Ore Code (number memory) and Ore Order (chimp test).
+- Boss fights are now active duels: a boss waits until you tap Fight boss, then you play one of the mini-games. Each round you win is a big strike; three mistakes or running out of time and the boss escapes. Offline progress stops at the next boss.
+- About a third of lucky ores are now runes: tap one to play a mini-game until your first mistake. Rewards grow with every round, with keys from round 4.
+- Personal bests for each mini-game.
+
 ## v1.1.0
 - Skills: every skill shows what it does on its card. Tapping a skill selects it, and points are only spent with the Learn button.
 - Scrapping asks first: the bulk Salvage buttons and scrapping an Epic or better item both need a confirmation.

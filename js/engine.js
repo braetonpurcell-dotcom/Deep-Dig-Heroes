@@ -5,7 +5,12 @@
 const SAVE_KEY = 'ddh-save-v1';
 const SAVE_VERSION = 1;
 const KILLS_PER_FLOOR = 6;
-const BOSS_TIME = 30;
+const BOSS_TIME = 45; // duel length: mini-games take longer than math answers
+const DUEL_LIVES = 3;
+const MINIGAME_IDS = ['reaction', 'sequence', 'number', 'chimp'];
+const RUNE_CHANCE = 0.35;
+// Each boss floor uses the next mini-game in turn.
+function bossGame(f) { return MINIGAME_IDS[(Math.floor(f / 10) - 1) % MINIGAME_IDS.length]; }
 const SPAWN_GAP = 0.45;
 const ENTER_TIME = 0.25;
 const TREASURE_CHANCE = 1 / 35;
@@ -79,6 +84,7 @@ function freshState() {
     freeCrateAt: 0,
     boostUntil: 0,
     bonusRound: null,
+    mg: { reaction: 0, sequence: 0, number: 0, chimp: 0 }, // personal bests (reaction is in ms, lower is better)
     stats: {
       playTime: 0, kills: 0, bosses: 0, correct: 0, wrong: 0, skipped: 0, answerTime: 0, fastest: 0,
       bestStreak: 0, bestMath: 1, cases: 0, bestDrop: -1, coinsEarned: 0, merges: 0, ores: 0, goldies: 0,
@@ -209,6 +215,8 @@ function hydrate(obj) {
   const br = s.bonusRound;
   if (!br || typeof br !== 'object' || !br.reward || !isFinite(br.reward.coins) || !isFinite(br.reward.xp)) s.bonusRound = null;
   else s.bonusRound = { need: 5, done: nonNegInt(br.done), reward: { coins: nonNeg(br.reward.coins), xp: nonNeg(br.reward.xp) } };
+  if (!s.mg || typeof s.mg !== 'object') s.mg = freshState().mg;
+  for (const k of MINIGAME_IDS) s.mg[k] = nonNeg(s.mg[k]);
   // Settings.
   const st = s.settings;
   if (!['keypad', 'choices'].includes(st.answer)) st.answer = 'keypad';
@@ -231,7 +239,7 @@ const R = {
   prob: null, probStart: 0, input: '', choices: null,
   lastAnswer: -99, decayAcc: 0,
   frenzyT: 0, ore: null, oreT: 40,
-  boostOn: false, bonusRound: null,
+  boostOn: false, bonusRound: null, duel: null,
 };
 
 // ---------- derived stats ----------
@@ -334,6 +342,7 @@ function spawnEnemy() {
   R.enemy = {
     type, boss, name, hp, max: hp, enter: ENTER_TIME, flash: 0,
     timer: boss ? BOSS_TIME : 0, flee: type === 'goldie' ? TREASURE_TIME : 0, seed: Math.random() * 10,
+    waiting: boss, // bosses only fight once the player starts the duel
   };
   R.atkT = 0;
   emit('spawn', R.enemy);
@@ -381,6 +390,7 @@ function killEnemy(e) {
     emit('treasure', {});
   }
   if (e.boss) {
+    endDuel(true);
     S.stats.bosses++;
     track('boss');
     if (!S.run.bossDone[f]) {
@@ -408,6 +418,7 @@ function floorCleared(bossBeaten = false) {
 
 function changeFloor(f) {
   f = Math.max(1, Math.floor(f));
+  if (R.duel) endDuel(false);
   const oldBiome = biomeIndex(S.run.floor);
   S.run.floor = f;
   S.run.kills = 0;
@@ -431,9 +442,69 @@ function changeFloor(f) {
 }
 
 function bossFailed() {
+  endDuel(false);
   S.run.auto = false;
   emit('bossFail', {});
   changeFloor(S.run.floor - 1);
+}
+
+// Reward for a rune mini-game that reached `level` rounds before the first mistake.
+function runeReward(level) {
+  const out = { level, coins: Math.max(20, idleRates().coins * (15 + 15 * level)), keys: level >= 6 ? 2 : level >= 4 ? 1 : 0 };
+  addCoins(out.coins);
+  S.keys += out.keys;
+  return out;
+}
+
+// Personal bests per mini-game. Reaction stores milliseconds (lower is better).
+function recordMinigame(game, value) {
+  const prev = S.mg[game] || 0;
+  const better = game === 'reaction' ? (prev === 0 || value < prev) : value > prev;
+  if (better) S.mg[game] = value;
+  return better && prev !== 0;
+}
+
+// ---------- boss duels ----------
+function bossWaiting() {
+  const e = R.enemy;
+  return !!(e && e.boss && e.waiting && e.enter <= 0);
+}
+
+function startBossDuel() {
+  const e = R.enemy;
+  if (!e || !e.boss || !e.waiting) return null;
+  e.waiting = false;
+  e.timer = BOSS_TIME;
+  R.duel = { game: bossGame(S.run.floor), lives: DUEL_LIVES, hits: 0 };
+  emit('duelStart', R.duel);
+  return R.duel;
+}
+
+// A won mini-game round: a big strike that also keeps the math combo alive.
+function duelHit(quality) {
+  const e = R.enemy;
+  if (!R.duel || !e || !e.boss) return;
+  R.duel.hits++;
+  S.math.streak++;
+  R.lastAnswer = R.time;
+  R.decayAcc = 0;
+  if (S.math.streak > S.stats.bestStreak) S.stats.bestStreak = S.math.streak;
+  queueStrike(3 * clamp(quality, 0.3, 2) * ST.strikeMult, quality >= 1.2 ? 'quick' : 'strike');
+}
+
+function duelMiss() {
+  if (!R.duel) return;
+  R.duel.lives--;
+  S.math.streak = Math.floor(S.math.streak * ST.comboKeep);
+  emit('duelMiss', R.duel);
+  if (R.duel.lives <= 0) bossFailed();
+}
+
+function endDuel(won) {
+  if (!R.duel) return;
+  const d = R.duel;
+  R.duel = null;
+  emit('duelEnd', { won, duel: d });
 }
 
 function treasureEscaped() {
@@ -680,7 +751,8 @@ function updateOre(dt) {
   R.oreT -= dt * ST.oreRate;
   if (R.oreT <= 0) {
     R.oreT = rand(45, 100);
-    R.ore = { x: rand(66, 142), y: rand(14, 40), life: 6, max: 6 };
+    // About a third of lucky ores are runes that open a mini-game instead of paying out at once.
+    R.ore = { x: rand(66, 142), y: rand(14, 40), life: 6, max: 6, rune: Math.random() < RUNE_CHANCE };
     emit('oreSpawn', R.ore);
   }
 }
@@ -691,6 +763,11 @@ function collectOre() {
   R.ore = null;
   S.stats.ores++;
   track('ore');
+  if (o.rune && !R.duel) {
+    const game = pick(MINIGAME_IDS);
+    emit('rune', { x: o.x, y: o.y, game });
+    return { kind: 'rune', game };
+  }
   const roll = Math.random();
   let res;
   if (roll < 0.6) {
@@ -733,6 +810,8 @@ function step(dt) {
     if (R.spawnT <= 0) spawnEnemy();
   } else if (e.enter > 0) {
     e.enter -= dt;
+  } else if (e.waiting) {
+    // A boss stands off until the player taps Fight boss.
   } else {
     while (R.queued.length && R.enemy === e) {
       const q = R.queued.shift();
@@ -1280,6 +1359,7 @@ function doPrestige() {
   R.ore = null;
   R.bonusRound = null;
   S.bonusRound = null;
+  endDuel(false);
   recalc();
   const tierAfter = bestCaseTier();
   return {
@@ -1403,6 +1483,7 @@ function loadState(obj) {
     R.spawnT = 0.6;
     R.queued = [];
     R.bonusRound = S.bonusRound;
+    R.duel = null;
     R.frenzyT = 0;
     R.ore = null;
     R.decayAcc = 0;

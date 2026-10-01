@@ -15,7 +15,7 @@ Run `node tools/build-single.js deep-dig-heroes.html` and send that file to your
 
 ## How it plays
 
-- **Dig and fight.** Your miner attacks on their own. Clear 6 enemies to go one floor deeper. Every 10th floor is a boss with a 30-second timer.
+- **Dig and fight.** Your miner attacks on their own. Clear 6 enemies to go one floor deeper. Every 10th floor is a boss: tap Fight boss to duel it in a mini-game (3 lives, 45 seconds).
 - **Math strikes.** Answer problems on the keypad to strike. Each correct answer adds to your combo, and the combo multiplies all damage. Answers inside the green timer bar count as QUICK and hit 1.5× harder. Mistakes cut your streak. Difficulty adapts to how fast and accurate you are, from single-digit sums up to algebra.
 - **Forge.** Spend coins on permanent upgrades for the current run. New upgrades unlock as you go deeper.
 - **Skills.** You earn 1 point per level. The tree has three branches: Brawler for active play, Tycoon for idle play and coins, and Gambler for luck and cases. Respec is free.
@@ -34,6 +34,7 @@ Run `node tools/build-single.js deep-dig-heroes.html` and send that file to your
 | `js/sprites.js` | Pixel art as text grids, built into canvases at startup |
 | `js/render.js` | The 160×96 pixel scene, bitmap font, particles and screen shake |
 | `js/ui.js` | HUD, tabs, the case reel, popups and keypad input |
+| `js/minigames.js` | The four mini-games, boss duels and rune challenges |
 | `js/main.js` | Boot, game loop, autosave, offline earnings and service worker |
 | `js/version.js` | The game version. Bump it for every release |
 | `js/backup.js` | Automatic save backups on the device |

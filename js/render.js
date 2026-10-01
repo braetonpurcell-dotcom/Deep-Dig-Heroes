@@ -278,7 +278,7 @@ on('kill', ({ enemy }) => {
 
 on('spawn', e => {
   if (e.boss) {
-    banner('BOSS', e.name.toUpperCase(), '#ff5d6c', 1.8);
+    banner('BOSS', e.name.toUpperCase(), '#ff5d6c', 2.4);
     SFX.boss();
     vibrate(80);
   } else if (e.type === 'goldie') {
@@ -534,7 +534,9 @@ function drawOverlay(dt) {
     }
   }
   const e = R.enemy;
-  if (e && e.boss) {
+  if (e && e.boss && e.waiting) {
+    if (Math.floor(R.time * 2) % 2 === 0) drawText('TAP FIGHT BOSS', 156, 3, '#ffcc4d', 1, 'right');
+  } else if (e && e.boss) {
     const k = clamp(e.timer / BOSS_TIME, 0, 1);
     const blink = e.timer < 5 && Math.floor(R.time * 6) % 2 === 0;
     ctx.fillStyle = OUTLINE;

@@ -162,8 +162,10 @@ function updateFloorBar() {
   auto.setAttribute('aria-pressed', S.run.auto ? 'true' : 'false');
   auto.textContent = S.run.auto ? 'Auto' : 'Farm';
   const retry = canRetryBoss();
+  const waiting = bossWaiting();
   $('#fBoss').hidden = !retry;
-  auto.hidden = retry;
+  $('#fFight').hidden = !waiting;
+  auto.hidden = retry || waiting;
   $('#fPrestige').hidden = !canPrestige();
 }
 
@@ -174,6 +176,7 @@ function setDot(tab, on) {
 
 function updateBadges() {
   const c = claimableCounts();
+  setDot('fight', bossWaiting() && UI.tab !== 'fight');
   setDot('skills', S.run.sp > 0);
   setDot('cases', freeCrateReady() || S.keys > 0);
   setDot('bag', S.gear.bag.some(it => it.isNew) || mergeablePets() > 0);
@@ -192,6 +195,7 @@ function setTicker(text, kind = '', ms = 1800) {
 
 function goalMessages() {
   const out = [];
+  if (bossWaiting()) return [['A boss blocks the way. Tap Fight boss to duel it.', 'gold']];
   if (canPrestige()) out.push([`Prestige ready: +${prestigeGain()} cores in the More tab`, 'gold']);
   if (S.run.sp > 0) out.push([`${plural(S.run.sp, 'skill point')} to spend in Skills`, 'gold']);
   const c = claimableCounts();
@@ -275,7 +279,7 @@ function updateFight(full = false) {
 }
 
 function keyInput(k) {
-  if (!R.prob || UI.modalOpen) return;
+  if (!R.prob || UI.modalOpen || MG.active) return;
   if (k === 'clear') R.input = '';
   else if (k === 'back') R.input = R.input.slice(0, -1);
   else {
@@ -1414,6 +1418,8 @@ function bindInput() {
   $('#fDown').addEventListener('click', () => { moveFloor(1); updateFloorBar(); });
   $('#fAuto').addEventListener('click', () => { setAuto(!S.run.auto); updateFloorBar(); });
   $('#fBoss').addEventListener('click', () => { retryBoss(); updateFloorBar(); });
+  $('#fFight').addEventListener('click', fightBoss);
+  $('#arena').addEventListener('pointerdown', mgPointer);
   $('#fPrestige').addEventListener('click', () => { audioUnlock(); askPrestige(); });
   $('#skip').addEventListener('click', () => { audioUnlock(); skipProblem(); });
 

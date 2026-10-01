@@ -1,5 +1,5 @@
 // Offline support: serve from cache first, refresh the cache in the background.
-const CACHE = 'ddh-v4';
+const CACHE = 'ddh-v5';
 const FILES = [
   './',
   './index.html',
@@ -15,6 +15,7 @@ const FILES = [
   './js/audio.js',
   './js/render.js',
   './js/ui.js',
+  './js/minigames.js',
   './js/main.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
