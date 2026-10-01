@@ -578,11 +578,22 @@ function canRetryBoss() {
 const PACE_UP = 0.004;
 const PACE_DOWN = 0.03;
 const PACE_WARMUP = 0.6; // a new session starts at 60% of the pace you settled at last time
-const PACE_CAP_MIN = 20; // combo cap at pace 0 (x2)
-const PACE_CAP_MAX = 100; // combo cap at full pace (x6)
+const PACE_CAP_MIN = 20; // combo cap (x2) up to PACE_LOW
+const PACE_CAP_MAX = 100; // combo cap (x6) from PACE_HIGH
+const PACE_LOW = 0.2;
+const PACE_HIGH = 0.8;
+const PACE_STEP_TIME = 0.6; // seconds: steps are weighted by time, so fast tappers don't climb faster per second
 
 function paceComboCap() {
-  return Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * (R.pace || 0)) + 4 * skillRank('momentum');
+  const k = clamp(((R.pace || 0) - PACE_LOW) / (PACE_HIGH - PACE_LOW), 0, 1);
+  return Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * k) + 4 * skillRank('momentum');
+}
+// Each step counts in proportion to the time since the previous tap or escape, so the climb takes
+// about as long for everyone while the ~88% hit-rate balance stays the same.
+function paceStep(delta) {
+  const since = R.time - (R.paceT || 0);
+  R.paceT = R.time;
+  setPace(R.pace + delta * clamp(since / PACE_STEP_TIME, 0.25, 1));
 }
 function startPaceSession() { R.pace = clamp((S.pace || 0) * PACE_WARMUP, 0, 1); }
 function setPace(p) {
@@ -609,7 +620,7 @@ const BONUS_TAPS = 20; // "Double it" round: this many taps in a row without an 
 
 function tapHit(quality) {
   const perfect = quality >= 0.5;
-  setPace(R.pace + PACE_UP);
+  paceStep(PACE_UP);
   S.math.streak++;
   R.lastAnswer = R.time;
   R.decayAcc = 0;
@@ -642,7 +653,7 @@ function tapHit(quality) {
 
 function tapMiss() {
   const before = S.math.streak;
-  setPace(R.pace - PACE_DOWN);
+  paceStep(-PACE_DOWN);
   S.math.streak = Math.floor(S.math.streak * ST.comboKeep);
   S.stats.escapes++;
   const bonus = R.bonusRound ? finishBonusRound(false) : null;

@@ -3,6 +3,11 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.8.1
+- Tuned the tap pace with five simulated players from 750 ms to 200 ms per target (matched to Human Benchmark Aim Trainer percentiles), each with lapses, fatigue, target-switch time and mis-taps.
+- Slow burn for everyone: pace steps are weighted by time, so fast tappers no longer race up. Reaching 25% pace takes about 40-110 seconds.
+- Your multiplier now spreads with skill: in the playtest the slowest player settles near x2.5, the median near x3.3, and the fastest near x4.8 (x6 on hot streaks). Everyone still hits about 88-90% of monsters.
+
 ## v1.8.0
 - The tap pad now adapts to you. A new Pace level (shown next to your combo) sets how fast monsters come instead of your multiplier, so it no longer snowballs into chaos. Each hit nudges the pace up a little and each escape eases it back more, settling where you hit about 88% of monsters: comfortable, with a slight challenge.
 - Slow burn: from a standing start it takes about 2 minutes of good tapping to reach 50% pace. Extra monsters on screen only appear gradually, never more than 4 at once.
