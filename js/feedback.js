@@ -4,10 +4,18 @@
 // back through feedback/replies.json in the repo, keyed by feedback id. Unsent notes wait on the
 // phone and go out the next time the game is online.
 
-// Filled in once the Google Form exists: the form's formResponse URL and its entry ids.
-let FEEDBACK_FORM = null;
-// e.g. { action: 'https://docs.google.com/forms/d/e/<form id>/formResponse',
-//        fields: { id: 'entry.1', player: 'entry.2', type: 'entry.3', message: 'entry.4', replyTo: 'entry.5', info: 'entry.6' } }
+// The "Deep Dig Heroes Feedback" Google Form: its public formResponse URL and question entry ids.
+let FEEDBACK_FORM = {
+  action: 'https://docs.google.com/forms/d/e/1FAIpQLSdQRsEDB5PyPI0UuJ6tgBSe2q3zckr_QmFoViBZXIj0rrR7ng/formResponse',
+  fields: {
+    id: 'entry.2041969518',
+    player: 'entry.1473776147',
+    type: 'entry.689527602',
+    message: 'entry.1040787197',
+    replyTo: 'entry.1064139938',
+    info: 'entry.377246766',
+  },
+};
 
 const FB_TYPES = [['bug', 'Bug'], ['idea', 'Idea'], ['other', 'Other']];
 const FB = { replies: {}, type: 'idea', commentOn: null };

@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.9.1
+- Feedback is connected: notes from the Feedback button now go straight to the developer's inbox (and any notes already waiting on a phone send the next time the game is open online).
+
 ## v1.9.0
 - Feedback button at the top right. Pick Bug, Idea or Other, type a note and tap Send. "Your feedback" lists everything you've sent, with replies from the developer under each one (a red dot means a new reply) and a Comment button to add to your own notes.
 - Player name: set the first time you open Feedback, or in More. It's attached to every note so the developer knows who said it.
