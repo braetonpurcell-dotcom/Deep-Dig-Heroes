@@ -410,6 +410,28 @@ const PX = {
     'kkkkkkkwk',
     '.kkkkkkkk',
   ],
+  lock: [
+    '..kkk..',
+    '.k...k.',
+    '.k...k.',
+    'kkkkkkk',
+    'kyyyyyk',
+    'kyykyyk',
+    'kyykyyk',
+    'kyyyyyk',
+    'kkkkkkk',
+  ],
+  unlock: [
+    '..kkk..',
+    '.k...k.',
+    '.....k.',
+    'kkkkkkk',
+    'kmmmmmk',
+    'kmmkmmk',
+    'kmmkmmk',
+    'kmmmmmk',
+    'kkkkkkk',
+  ],
   trophy: [
     'kkkkkkkkk',
     'kyyyyyyyk',
@@ -455,6 +477,8 @@ const ICON_PALETTES = {
   skull: { w: '#f2e9d8' },
   book: { b: '#5a7bd6', y: '#ffcc4d', w: '#f2e9d8' },
   trophy: { y: '#ffcc4d', Y: '#fff2b0' },
+  lock: { y: '#ffcc4d' },
+  unlock: { m: '#9aa3b0' },
 };
 
 const spriteCache = new Map();

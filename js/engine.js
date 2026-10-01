@@ -122,6 +122,7 @@ function repairItem(it) {
   it.lv = Number.isInteger(it.lv) ? clamp(it.lv, 0, MAX_ITEM_LEVEL) : 0;
   it.subs = (Array.isArray(it.subs) ? it.subs : []).filter(sb => sb && STATS[sb.k] && isFinite(sb.roll));
   it.isNew = !!it.isNew;
+  it.locked = !!it.locked;
   return true;
 }
 
@@ -1086,7 +1087,10 @@ function grantDrop(d) {
 function itemRank(it) { return it.r * 1000 + it.t * 20 + it.lv; }
 function weakestBagIndex() {
   let best = -1;
-  for (let i = 0; i < S.gear.bag.length; i++) if (best < 0 || itemRank(S.gear.bag[i]) < itemRank(S.gear.bag[best])) best = i;
+  for (let i = 0; i < S.gear.bag.length; i++) {
+    if (S.gear.bag[i].locked) continue;
+    if (best < 0 || itemRank(S.gear.bag[i]) < itemRank(S.gear.bag[best])) best = i;
+  }
   return best;
 }
 
@@ -1181,9 +1185,17 @@ function unequipItem(slot) {
   return true;
 }
 
+// Locked items can't be scrapped by any button, and a full bag never scraps them to make room.
+function toggleLock(id) {
+  const f = findItem(id);
+  if (!f) return false;
+  f.it.locked = !f.it.locked;
+  return true;
+}
+
 function salvageItem(id) {
   const f = findItem(id);
-  if (!f || f.where !== 'bag') return 0;
+  if (!f || f.where !== 'bag' || f.it.locked) return 0;
   const v = scrapValue(f.it);
   S.gear.bag.splice(f.index, 1);
   S.scrap += v;
@@ -1194,7 +1206,7 @@ function salvageBelow(r) {
   let total = 0;
   let n = 0;
   S.gear.bag = S.gear.bag.filter(it => {
-    if (it.r < r) {
+    if (it.r < r && !it.locked) {
       total += scrapValue(it);
       n++;
       return false;

@@ -787,7 +787,7 @@ function gearViewHtml() {
     h += '<div class="baggrid">';
     for (const it of S.gear.bag) {
       h += `<button class="bagtile rc${it.r}" data-act="item" data-id="${it.id}" aria-label="${RARITY[it.r].name} ${itemName(it)}">
-        <img src="${gearUrl(it.slot, it.t, it.r)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
+        <img src="${gearUrl(it.slot, it.t, it.r)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
     }
     h += '</div>';
   }
@@ -895,10 +895,14 @@ function showItem(id) {
   let actions = '';
   if (f.where === 'bag') actions += `<button class="btn good" data-act="equipItem" data-id="${it.id}">Equip</button>`;
   actions += `<button class="btn" data-act="reforge" data-id="${it.id}" ${maxed || S.scrap < rc ? 'disabled' : ''}>${maxed ? 'Max level' : `Reforge +1 ${costHtml(rc, 'scrap')}`}</button>`;
-  if (f.where === 'bag') actions += `<button class="btn bad" data-act="salvage" data-id="${it.id}">Salvage +${scrapValue(it)}</button>`;
-  else actions += `<button class="btn" data-act="unequip" data-slot="${it.slot}">Unequip</button>`;
+  if (f.where === 'bag') {
+    actions += it.locked
+      ? `<button class="btn" disabled>${icon('lock')} Locked</button>`
+      : `<button class="btn bad" data-act="salvage" data-id="${it.id}">Salvage +${scrapValue(it)}</button>`;
+  } else actions += `<button class="btn" data-act="unequip" data-slot="${it.slot}">Unequip</button>`;
   actions += '<button class="btn" data-act="close">Close</button>';
-  openModal(`<div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
+  openModal(`<button class="lockbtn ${it.locked ? 'on' : ''}" data-act="lockItem" data-id="${it.id}" aria-pressed="${it.locked}" aria-label="${it.locked ? 'Unlock item' : 'Lock item'}">${icon(it.locked ? 'lock' : 'unlock', '')}<small>${it.locked ? 'Locked' : 'Lock'}</small></button>
+    <div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}${it.lv ? ' +' + it.lv : ''}</div>
     <div class="rsub">${MATERIALS[it.t].name} (B${(it.t - 1) * MATERIAL_FLOORS + 1}+ material) · ${wearHtml(it)}</div>
     <div class="rsub">${RARITY[it.r].name} ${WEAR[wearIndex(it.fl)].short} pulls are ${oddsLong(dropOdds(it.r, it.fl))} with your luck</div>
@@ -1205,6 +1209,17 @@ function handleAction(el) {
       closeModal();
       break;
     }
+    case 'lockItem': {
+      const id = Number(d.id);
+      if (toggleLock(id)) {
+        const f = findItem(id);
+        SFX.click();
+        vibrate(10);
+        toast(f.it.locked ? 'Locked: this item can\'t be scrapped' : 'Unlocked', f.it.locked ? 'gold' : '', f.it.locked ? 'lock' : 'unlock');
+        showItem(id);
+      }
+      break;
+    }
     case 'reforge': {
       const id = Number(d.id);
       if (reforgeItem(id)) { SFX.buy(); showItem(id); } else SFX.error();
@@ -1330,13 +1345,14 @@ function askSalvage(it) {
 }
 
 function askSalvageBelow(r) {
-  const items = S.gear.bag.filter(it => it.r < r);
+  const items = S.gear.bag.filter(it => it.r < r && !it.locked);
+  const kept = S.gear.bag.filter(it => it.r < r && it.locked).length;
   if (!items.length) { toast('Nothing to salvage', 'bad', 'scrap'); return; }
   const total = items.reduce((a, it) => a + scrapValue(it), 0);
   const names = r > 1 ? 'Common and Rare' : 'Common';
   const leveled = items.filter(it => it.lv > 0).length;
   openModal(`<h2>Scrap ${plural(items.length, 'item')}?</h2>
-    <p style="text-align:center">Every ${names} item in your bag turns into ${total} scrap. Equipped gear is safe.${leveled ? ` ${leveled} of them ${leveled === 1 ? 'is' : 'are'} reforged.` : ''} This can't be undone.</p>
+    <p style="text-align:center">Every ${names} item in your bag turns into ${total} scrap. Equipped${kept ? ` and ${kept} locked` : ''} gear is safe.${leveled ? ` ${leveled} of them ${leveled === 1 ? 'is' : 'are'} reforged.` : ''} This can't be undone.</p>
     <div class="mbtns"><button class="btn bad" data-act="salvageBelow" data-r="${r}" data-ok="1">Scrap ${items.length}</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
 }
 
