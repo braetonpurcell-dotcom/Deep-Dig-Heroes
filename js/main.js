@@ -221,6 +221,7 @@ function boot(hotData) {
   });
   cloudInit();
   registerSW();
+  window.DDH_BOOTED = true;
 }
 
 // A small handle for automated testing and debugging from the console.

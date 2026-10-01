@@ -3,6 +3,10 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.7.1
+- Fixed a black screen after updating to v1.7.0: the offline cache could pair the new page with old scripts. The page now always loads fresh when online, every script is tied to its version so new and old files can't mix, and updates download everything fresh.
+- If an update ever does arrive half-loaded, the game shows a "Repair and reload" button instead of a black screen. Your save is never touched.
+
 ## v1.7.0
 - Math is gone. Fights now use the tap pad: monsters pop up on a cave wall inside a shrinking ring, and you tap them before the ring closes. Each tap is a strike and +1 combo; tap in the first half of the ring for a PERFECT (40% harder). A monster that escapes cuts your combo by 20%.
 - The combo multiplies all your damage, including the miner's own swings, up to x6. The higher it is, the faster the rings close (1.6s at x1, about 0.6s at x4) and the more monsters show at once, so your multiplier settles wherever your reactions hold up.

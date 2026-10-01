@@ -47,6 +47,9 @@ Saves go to `localStorage` every 5 seconds and when the app is hidden. When the 
 
 ## Versions
 
+After changing `js/version.js`, run `node tools/stamp-version.js` so every script and stylesheet in `index.html` carries the new `?v=` and the offline cache picks up a clean set.
+
+
 Every release is saved on GitHub under Releases, so any old version can be viewed or downloaded.
 To ship a new version: bump `GAME_VERSION` in `js/version.js`, add a matching `## vX.Y.Z` section at the top of `CHANGELOG.md`, and bump `CACHE` in `sw.js`. When that lands on `main`, the "Save each version" workflow creates the release.
 
