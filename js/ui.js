@@ -245,6 +245,7 @@ function updateFight() {
   fill.style.width = Math.min(100, (Math.min(streak, ST.comboCap) / ST.comboCap) * 100) + '%';
   fill.classList.toggle('fading', streak > 0 && R.time - R.lastAnswer > ST.decay - 2);
   $('#cStreak').textContent = `${streak}/${ST.comboCap}`;
+  $('#cPace').textContent = `Pace ${Math.round((R.pace || 0) * 100)}%`;
   // The double-it progress lives in the ticker line, so the tap pad never loses space to it.
   if (R.bonusRound && performance.now() >= UI.tickerUntil) {
     const t = $('#ticker');

@@ -71,6 +71,8 @@ function onVisibility() {
   lastFrame = performance.now();
   ensureDay();
   autoBackup(JSON.parse(serialize()));
+  // A real break means a new session: the tap pad warms up again from a gentler pace.
+  if (away >= 300) startPaceSession();
   if (away >= 60) {
     const res = applyOffline(away);
     if (res && res.coins > 0) queueModal(() => showWelcomeBack(res));

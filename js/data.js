@@ -141,7 +141,7 @@ const BRANCHES = [
     nodes: [
       { id: 'quickwit', name: 'Quick Hands', tier: 0, max: 5, desc: '+20% tap strike damage per rank' },
       { id: 'momentum', name: 'Momentum', tier: 0, max: 5, desc: '+4 max combo per rank' },
-      { id: 'ironmind', name: 'Iron Mind', tier: 1, max: 3, desc: 'An escaped monster costs less: keep 5% more of your combo per rank' },
+      { id: 'ironmind', name: 'Iron Mind', tier: 1, max: 3, desc: 'An escaped monster costs less: keep 2% more of your combo per rank' },
       { id: 'adrenaline', name: 'Adrenaline', tier: 1, max: 3, desc: 'Each combo stack gives +1% more damage per rank' },
       { id: 'focus', name: 'Battle Focus', tier: 2, max: 3, desc: 'Your combo waits 2s longer before it starts to fade, per rank' },
       { id: 'executioner', name: 'Executioner', tier: 2, max: 5, desc: '+30% damage to bosses per rank' },

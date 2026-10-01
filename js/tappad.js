@@ -1,20 +1,9 @@
 'use strict';
 // Tap pad: monsters pop up on a cave wall inside a shrinking ring. Tap one before its ring closes
-// to grow the multiplier; one that escapes costs some of it. The higher the multiplier, the faster
-// the rings close and the more monsters show at once, so the combo settles where your reactions are.
+// to grow the multiplier; one that escapes costs some of it. How fast they come is set by the
+// session pace in engine.js (tapDifficulty), which settles where you hit most but not all of them.
 
 const TAP = { on: false, targets: [], spawnT: 0.3, raf: 0, last: 0, bgKey: '', nextId: 1 };
-
-
-// Everything scales with the current multiplier m (1x at no combo).
-function tapDifficulty() {
-  const k = comboMult() - 1;
-  return {
-    life: clamp(1.6 / (1 + 0.5 * k), 0.4, 1.6), // seconds before the ring closes: 1.6s at x1, 1.07s at x2, 0.64s at x4, 0.46s at x6
-    max: clamp(1 + Math.floor(k * 1.25), 1, 6), // monsters on screen at once
-    size: clamp(76 - 5 * k, 50, 76), // px
-  };
-}
 
 function tapStart() {
   if (TAP.on) return;

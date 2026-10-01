@@ -3,6 +3,13 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.8.0
+- The tap pad now adapts to you. A new Pace level (shown next to your combo) sets how fast monsters come instead of your multiplier, so it no longer snowballs into chaos. Each hit nudges the pace up a little and each escape eases it back more, settling where you hit about 88% of monsters: comfortable, with a slight challenge.
+- Slow burn: from a standing start it takes about 2 minutes of good tapping to reach 50% pace. Extra monsters on screen only appear gradually, never more than 4 at once.
+- Skill still pays: the faster the pace you can hold, the higher your combo can climb (x2 at the slowest pace up to x6 at full pace). In the sim that means about x3.3 for slower reactions and x4.5 for fast ones.
+- Each session starts at 60% of the pace you settled at last time, and a break of 5 minutes or more warms you up again.
+- An escaped monster now costs 10% of your combo (was 20%); Iron Mind softens it by 2% per rank.
+
 ## v1.7.1
 - Fixed a black screen after updating to v1.7.0: the offline cache could pair the new page with old scripts. The page now always loads fresh when online, every script is tied to its version so new and old files can't mix, and updates download everything fresh.
 - If an update ever does arrive half-loaded, the game shows a "Repair and reload" button instead of a black screen. Your save is never touched.

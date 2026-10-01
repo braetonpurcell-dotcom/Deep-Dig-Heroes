@@ -614,3 +614,4 @@ input[type="text"] {
 @keyframes tapHitFx { to { transform: translate(-50%, -50%) scale(1.5); opacity: 0; filter: brightness(2.5); } }
 @keyframes tapMissFx { to { transform: translate(-50%, -50%) scale(.6); opacity: 0; filter: grayscale(1) sepia(1) hue-rotate(-50deg) saturate(4); } }
 @keyframes tapFloatUp { to { transform: translate(-50%, -190%); opacity: 0; } }
+.mathmeta .pace { color: var(--dim); min-width: 72px; text-align: right; }

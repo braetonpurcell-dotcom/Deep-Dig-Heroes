@@ -76,6 +76,7 @@ function freshState() {
     gear: { eq: { pick: null, helm: null, charm: null }, bag: [] },
     pets: { inv, eq: [] },
     pity: { epic: 0, leg: 0 },
+    pace: 0, // tap pad pace you settled at last session
     coll: {},
     best: {}, // rarest pull per slot (pick, helm, charm, pet) and overall; kept through prestige
     daily: { day: '', streak: 0, claimed: true },
@@ -171,6 +172,7 @@ function hydrate(obj) {
   }
   if (!run.bossDone || typeof run.bossDone !== 'object') run.bossDone = {};
   s.math.streak = nonNegInt(s.math.streak);
+  s.pace = isFinite(s.pace) ? clamp(s.pace, 0, 1) : 0;
   s.pity.epic = nonNegInt(s.pity.epic);
   s.pity.leg = nonNegInt(s.pity.leg);
   // Gear: drop anything unusable, keep ids unique.
@@ -255,7 +257,7 @@ const R = {
   sim: false, paused: false, hitstop: 0, time: 0, session: 0, secT: 0, dayKey: '', hiddenAt: 0,
   enemy: null, spawnT: 0.6, atkT: 0, swingT: 0, queued: [],
   lastAnswer: -99, decayAcc: 0,
-  frenzyT: 0, ore: null, oreT: 40,
+  frenzyT: 0, ore: null, oreT: 40, pace: 0,
   boostOn: false, bonusRound: null, duel: null,
 };
 
@@ -294,8 +296,8 @@ function computeStats() {
   st.strikeMult = (1 + 0.1 * up('brain')) * (1 + 0.2 * sk('quickwit')) * (1 + add.strike);
   st.comboPer = 0.05 + 0.01 * sk('adrenaline');
   // The tap pad's own difficulty is the real limit on the combo.
-  st.comboCap = TAP_COMBO_CAP + 4 * sk('momentum');
-  st.comboKeep = Math.min(0.95, TAP_KEEP + 0.05 * sk('ironmind'));
+  st.comboCap = paceComboCap();
+  st.comboKeep = Math.min(0.96, TAP_KEEP + 0.02 * sk('ironmind'));
   st.decay = 6 + 2 * sk('focus');
   st.bossMult = 1 + 0.3 * sk('executioner');
   st.overdrive = sk('overdrive') > 0;
@@ -569,9 +571,37 @@ function canRetryBoss() {
 // Monsters pop up on the tap pad (tappad.js) inside a shrinking ring. Each one tapped in time is a
 // strike and +1 combo; each one that escapes cuts the combo. The combo multiplies all damage,
 // including the miner's own swings, so active play is far stronger than leaving the game idle.
-const TAP_COMBO_CAP = 100; // 6x at the base 5% per stack
+// Session pace (0..1) sets how fast monsters come. It is a slow staircase: every hit nudges it up a
+// little and every escape eases it back more, so it settles where you hit about 88% of monsters,
+// comfortable with a slight challenge. Skill shows in the multiplier: the faster the pace you can
+// hold, the higher your combo can climb (x2 at the slowest pace up to x6 at the fastest).
+const PACE_UP = 0.004;
+const PACE_DOWN = 0.03;
+const PACE_WARMUP = 0.6; // a new session starts at 60% of the pace you settled at last time
+const PACE_CAP_MIN = 20; // combo cap at pace 0 (x2)
+const PACE_CAP_MAX = 100; // combo cap at full pace (x6)
+
+function paceComboCap() {
+  return Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * (R.pace || 0)) + 4 * skillRank('momentum');
+}
+function startPaceSession() { R.pace = clamp((S.pace || 0) * PACE_WARMUP, 0, 1); }
+function setPace(p) {
+  R.pace = clamp(p, 0, 1);
+  S.pace = R.pace;
+  if (ST) ST.comboCap = paceComboCap();
+}
+// Ring time, monsters at once and size, all from the pace. Extra monsters arrive slowly.
+function tapDifficulty() {
+  const p = R.pace || 0;
+  return {
+    life: lerp(1.6, 0.42, Math.pow(p, 0.85)), // seconds before the ring closes
+    max: 1 + Math.floor(p * 3.2), // at most 4 at once
+    size: Math.round(lerp(76, 52, p)), // px
+  };
+}
+
 let TAP_STRIKE = 0.35; // seconds of damage per tap
-const TAP_KEEP = 0.8; // an escaped monster keeps 80% of the combo
+const TAP_KEEP = 0.9; // an escaped monster keeps 90% of the combo
 const PERFECT_BONUS = 1.4; // tapped in the first half of the ring
 const OVERDRIVE_EVERY = 25;
 const GOLD_DRILL = 1.5;
@@ -579,6 +609,7 @@ const BONUS_TAPS = 20; // "Double it" round: this many taps in a row without an 
 
 function tapHit(quality) {
   const perfect = quality >= 0.5;
+  setPace(R.pace + PACE_UP);
   S.math.streak++;
   R.lastAnswer = R.time;
   R.decayAcc = 0;
@@ -611,6 +642,7 @@ function tapHit(quality) {
 
 function tapMiss() {
   const before = S.math.streak;
+  setPace(R.pace - PACE_DOWN);
   S.math.streak = Math.floor(S.math.streak * ST.comboKeep);
   S.stats.escapes++;
   const bonus = R.bonusRound ? finishBonusRound(false) : null;
@@ -1464,6 +1496,7 @@ function loadState(obj) {
     R.ore = null;
     R.decayAcc = 0;
     R.lastAnswer = R.time; // a loaded combo gets the normal grace period before it fades
+    startPaceSession();
     recalc();
     ensureDay();
     R.dayKey = dateKey();
