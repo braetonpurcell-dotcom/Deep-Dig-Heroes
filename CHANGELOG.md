@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.3
+- **Flow:** when you're crushing a floor (one-shotting monsters with room to spare), kills speed up over the next few monsters and the kill "ding" climbs higher in pitch, with a sparkle on top at full speed. When monsters start taking a few hits, it eases back down to the normal pace and pitch, so you can hear when you're getting stronger and when the mine is catching up.
+
 ## v1.11.2
 - Leaderboard: the R2-D2 account is hidden, since its owner no longer has access to it. Everyone else is unaffected.
 

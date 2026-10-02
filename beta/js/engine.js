@@ -384,6 +384,7 @@ let ST = null;
 
 // Runtime values that are not saved.
 const R = {
+  flow: 0, // 0..1: how hard you're overpowering this floor; speeds up the kill rhythm
   sim: false, paused: false, hitstop: 0, time: 0, session: 0, secT: 0, dayKey: '', hiddenAt: 0,
   enemy: null, spawnT: 0.6, atkT: 0, swingT: 0, queued: [],
   lastAnswer: -99, decayAcc: 0,
@@ -520,13 +521,27 @@ function spawnEnemy(boss = false) {
   else type = weightedPick(NORMAL_ENEMIES.filter(t => ENEMIES[t].minFloor <= f), t => ENEMIES[t].weight);
   const hp = Math.min(BIG, hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult);
   const name = boss ? `${biome.adj} ${BOSS_NAMES[type]}` : ENEMIES[type].name(biome);
+  // In flow the next monster arrives sooner and the first swing comes almost at once.
+  const fast = boss ? 0 : flowSpeed();
+  const enter = ENTER_TIME * (1 - fast);
   R.enemy = {
-    type, boss, name, hp, max: hp, enter: ENTER_TIME, flash: 0,
+    type, boss, name, hp, max: hp, enter, enterMax: enter, flash: 0, hits: 0, lastD: 0,
     timer: boss ? BOSS_TIME : 0, flee: type === 'goldie' ? TREASURE_TIME : 0, seed: Math.random() * 10,
   };
-  R.atkT = 0;
+  R.atkT = (0.8 * fast) / ST.aps;
   emit('spawn', R.enemy);
 }
+
+// Flow: one-shotting monsters by a wide margin builds it up over a few kills, so the kills (and the
+// kill sound) speed up and climb in pitch; once monsters take a few hits it eases back down.
+function updateFlow(e) {
+  if (e.boss) return;
+  let target = 0;
+  if (e.hits <= 1) target = clamp(0.35 + Math.log10(Math.max(1, (e.lastD || 0) / e.max)) / 1.5, 0, 1);
+  else if (e.hits === 2) target = 0.15;
+  R.flow += (target - R.flow) * 0.4;
+}
+function flowSpeed() { return 0.7 * clamp(R.flow || 0, 0, 1); }
 
 function situational(e) {
   let m = 1;
@@ -545,6 +560,8 @@ function heroHit(e) {
 
 function dealDamage(e, d, kind) {
   e.hp -= d;
+  e.hits = (e.hits || 0) + 1;
+  e.lastD = d;
   e.flash = 0.07;
   if (d > S.stats.maxHit) S.stats.maxHit = d;
   emit('damage', { d, kind, enemy: e });
@@ -565,8 +582,9 @@ function killEnemy(e) {
   addCoins(coins);
   S.stats.kills++;
   track('kill');
+  updateFlow(e);
   R.enemy = null;
-  R.spawnT = SPAWN_GAP;
+  R.spawnT = SPAWN_GAP * (1 - flowSpeed());
   R.atkT = 0;
   emit('kill', { enemy: e, coins });
   if (e.type === 'goldie') {

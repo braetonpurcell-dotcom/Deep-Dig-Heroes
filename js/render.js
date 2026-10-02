@@ -298,8 +298,8 @@ on('kill', ({ enemy }) => {
   addParticles(box.x + box.w / 2, box.y + box.h / 2, enemy.boss ? 40 : 14, enemyColors(enemy), enemy.boss ? 90 : 55, 0.6);
   addParticles(box.x + box.w / 2, box.y + box.h / 2, enemy.boss ? 16 : 5, ['#ffcc4d', '#fff2b0'], 50, 0.7, 60);
   shake(enemy.boss ? 5 : 1.5);
-  hitStop(enemy.boss ? 120 : 60);
-  SFX.kill();
+  hitStop(enemy.boss ? 120 : Math.round(60 * (1 - 0.6 * R.flow)));
+  SFX.kill(enemy.boss ? 0 : R.flow);
   if (enemy.boss) vibrate([30, 40, 60]);
 });
 
@@ -485,7 +485,7 @@ function drawEnemy(biome) {
   const ctx = CV.ctx;
   const spr = enemySprite(e.type, biome);
   const box = enemyBox(e);
-  const slide = e.enter > 0 ? (e.enter / ENTER_TIME) * 100 : 0;
+  const slide = e.enter > 0 ? (e.enter / (e.enterMax || ENTER_TIME)) * 100 : 0;
   let x = box.x + slide + (e.flash > 0 ? 1 : 0);
   let y = box.y;
   let h = box.h;

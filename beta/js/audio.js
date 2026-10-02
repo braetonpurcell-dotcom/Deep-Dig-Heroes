@@ -106,10 +106,16 @@ const SFX = {
     impact(kind === 'quick' ? 2 : 1.5);
     tone(330, 0.09, 'square', 0.22, 660);
   },
-  kill() {
+  // The two-note "ding" climbs a pentatonic scale with flow: faster kills ring higher, and it
+  // slides back down when monsters start taking a few hits. Full flow adds a sparkle on top.
+  kill(flow = 0) {
+    const step = Math.round(clamp(flow, 0, 1) * 7);
+    const up = Math.pow(2, ([0, 2, 4, 7, 9, 12, 14, 16][step]) / 12);
+    const gap = 0.05 * (1 - 0.4 * flow);
     impact(1.5);
-    tone(988, 0.05, 'square', 0.2);
-    tone(1319, 0.08, 'square', 0.2, 0, 0.05);
+    tone(988 * up, 0.05, 'square', 0.2);
+    tone(1319 * up, 0.08, 'square', 0.2, 0, gap);
+    if (step >= 6) tone(1976 * up, 0.06, 'triangle', 0.12, 0, gap * 2);
   },
   correct(streak) {
     // Climbs two octaves, then wraps around with a harmony layer so it still feels like rising.
