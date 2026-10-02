@@ -132,6 +132,7 @@ function showTab(name) {
 function cropStage(name = UI.tab) {
   const crop = name !== 'fight' && name !== 'skills';
   document.body.classList.toggle('croptab', crop);
+  SCN.top = crop ? 47 : 0; // canvas rows hidden above the crop (48% of 96)
   if (crop) {
     const h = $('#cv').offsetHeight;
     if (h) document.body.style.setProperty('--cvh', h + 'px');

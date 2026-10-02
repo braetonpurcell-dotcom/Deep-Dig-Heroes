@@ -518,7 +518,7 @@ function drawEnemy(biome) {
   if (e.enter > 0) return;
   const bw = e.boss ? 32 : 20;
   const bx = Math.round(x + box.w / 2 - bw / 2);
-  const by = y - (e.boss ? 14 : 5);
+  const by = Math.max((SCN.top || 0) + (e.boss ? 9 : 2), y - (e.boss ? 14 : 5));
   ctx.fillStyle = OUTLINE;
   ctx.fillRect(bx - 1, by - 1, bw + 2, 4);
   ctx.fillStyle = '#3a1420';
@@ -625,38 +625,40 @@ function drawFloats(dt) {
 function drawOverlay(dt) {
   const ctx = CV.ctx;
   const f = S.run.floor;
-  drawText('B' + f, 3, 3, '#ffffff', 2);
+  // Off the Fight tab only the bottom of the view shows, so the HUD moves down into it.
+  const T = SCN.top || 0;
+  drawText('B' + f, 3, T + 3, '#ffffff', 2);
   if (isBossFloor(f)) {
-    drawText('BOSS', 3, 16, '#ff5d6c', 1);
+    drawText('BOSS', 3, T + 16, '#ff5d6c', 1);
   } else {
     for (let i = 0; i < KILLS_PER_FLOOR; i++) {
       ctx.fillStyle = OUTLINE;
-      ctx.fillRect(3 + i * 5, 16, 4, 4);
+      ctx.fillRect(3 + i * 5, T + 16, 4, 4);
       ctx.fillStyle = i < S.run.kills ? '#ffcc4d' : '#3d3150';
-      ctx.fillRect(4 + i * 5, 17, 2, 2);
+      ctx.fillRect(4 + i * 5, T + 17, 2, 2);
     }
   }
   const e = R.enemy;
   if (bossWaiting()) {
-    if (Math.floor(R.time * 2) % 2 === 0) drawText('TAP FIGHT BOSS', 156, 3, '#ffcc4d', 1, 'right');
+    if (Math.floor(R.time * 2) % 2 === 0) drawText('TAP FIGHT BOSS', 156, T + 3, '#ffcc4d', 1, 'right');
   } else if (e && e.boss) {
     const k = clamp(e.timer / BOSS_TIME, 0, 1);
     const blink = e.timer < 5 && Math.floor(R.time * 6) % 2 === 0;
     ctx.fillStyle = OUTLINE;
-    ctx.fillRect(43, 3, 92, 5);
+    ctx.fillRect(43, T + 3, 92, 5);
     ctx.fillStyle = '#3a1420';
-    ctx.fillRect(44, 4, 90, 3);
+    ctx.fillRect(44, T + 4, 90, 3);
     ctx.fillStyle = blink ? '#ffffff' : '#ff5d6c';
-    ctx.fillRect(44, 4, Math.round(90 * k), 3);
-    drawText(Math.ceil(Math.max(0, e.timer)) + 'S', 156, 3, '#ffffff', 1, 'right');
+    ctx.fillRect(44, T + 4, Math.round(90 * k), 3);
+    drawText(Math.ceil(Math.max(0, e.timer)) + 'S', 156, T + 3, '#ffffff', 1, 'right');
   } else if (e && e.type === 'goldie') {
     const k = clamp(e.flee / TREASURE_TIME, 0, 1);
     ctx.fillStyle = OUTLINE;
-    ctx.fillRect(43, 3, 92, 5);
+    ctx.fillRect(43, T + 3, 92, 5);
     ctx.fillStyle = '#ffcc4d';
-    ctx.fillRect(44, 4, Math.round(90 * k), 3);
+    ctx.fillRect(44, T + 4, Math.round(90 * k), 3);
   }
-  let ry = e && (e.boss || e.type === 'goldie') ? 11 : 3;
+  let ry = T + (e && (e.boss || e.type === 'goldie') ? 11 : 3);
   if (R.frenzyT > 0) {
     drawText('FRENZY ×3', 157, ry, Math.floor(R.time * 5) % 2 ? '#ff5d6c' : '#ffcc4d', 1, 'right');
     ry += 7;
@@ -675,7 +677,7 @@ function drawOverlay(dt) {
       ctx.globalAlpha = 1;
     }
     const a = r.t < 0.9 ? 1 : 1 - (r.t - 0.9) / 0.4;
-    drawText(r.text, LW / 2, 22 - Math.min(4, r.t * 10), r.color, 2, 'center', a);
+    drawText(r.text, LW / 2, T + 22 - Math.min(4, r.t * 10), r.color, 2, 'center', a);
     if (r.t > 1.3) SCN.rank = null;
   }
   if (SCN.banner) {
@@ -684,10 +686,10 @@ function drawOverlay(dt) {
     const a = b.t < 0.2 ? b.t / 0.2 : b.t > b.life - 0.4 ? (b.life - b.t) / 0.4 : 1;
     ctx.globalAlpha = Math.max(0, a * 0.55);
     ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 30, LW, b.sub ? 24 : 16);
+    ctx.fillRect(0, T ? T + 12 : 30, LW, b.sub ? 24 : 16);
     ctx.globalAlpha = 1;
-    drawText(b.text, LW / 2, 33, b.color, 2, 'center', a);
-    if (b.sub) drawText(b.sub, LW / 2, 46, '#ffffff', 1, 'center', a);
+    drawText(b.text, LW / 2, (T ? T + 12 : 30) + 3, b.color, 2, 'center', a);
+    if (b.sub) drawText(b.sub, LW / 2, (T ? T + 12 : 30) + 16, '#ffffff', 1, 'center', a);
     if (b.t >= b.life) SCN.banner = null;
   }
 }

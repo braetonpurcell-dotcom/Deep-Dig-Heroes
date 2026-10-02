@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.6
+- The small mine view on the other tabs now keeps all its info: floor number, kill dots, the BOSS tag, "Tap fight boss", the boss and treasure timers, Frenzy and 2× coins, and every monster's health bar all move down into the visible strip.
+
 ## v1.11.5
 - On the Forge, Cases, Bag, Quests and More tabs, the mine view shrinks to its bottom half (your miner and the ground), giving those tabs more room. The Fight tab still shows the full view.
 
