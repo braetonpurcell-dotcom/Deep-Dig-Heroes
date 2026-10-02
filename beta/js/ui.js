@@ -667,7 +667,7 @@ function refreshCases() {
   const card = $('#autoCard');
   if (card && !UI.auto) {
     const c = CASES[autoTier() - 1];
-    const key = caseCost(c) + '|' + (S.coins >= caseCost(c));
+    const key = caseCost(c) + '|' + (S.coins >= caseCost(c)) + '|' + S.keys;
     if (key !== UI.autoKey || !card.childElementCount) { UI.autoKey = key; renderAutoBox(); }
   }
   for (const b of $$('#tab-cases [data-act="openKey"]')) b.disabled = S.keys < 1;
@@ -1332,7 +1332,7 @@ function handleAction(el) {
   const d = el.dataset;
   switch (a) {
     case 'close': closeModal(); break;
-    case 'autoResume': closeModal(); startAutoRoll(); break;
+    case 'autoResume': closeModal(); startAutoRoll(!!UI.autoKeys); break;
     case 'buyAmt': S.settings.buyAmt = d.v; buildForge(); break;
     case 'buy':
       if (buyUpgrade(d.id)) { SFX.buy(); buildForge(); updateHud(); } else SFX.error();
@@ -1360,6 +1360,7 @@ function handleAction(el) {
     case 'openKey': startOpen(Number(d.t), 'key', 1); break;
     case 'openFree': startOpen(bestCaseTier(), 'free', 1); break;
     case 'autoStart': startAutoRoll(); break;
+    case 'autoStartKeys': startAutoRoll(true); break;
     case 'autoStop': stopAutoRoll(); break;
     case 'autoCase': cycleAutoCase(); break;
     case 'autoStopAt': S.settings.autoStop = S.settings.autoStop >= TOP_RARITY ? 2 : S.settings.autoStop + 1; SFX.click(); renderAutoBox(); break;
@@ -1730,9 +1731,10 @@ function renderAutoBox() {
         <button class="btn small" data-act="autoCase">${c.name}</button>
         <button class="btn small" data-act="autoStopAt">Stop at <span class="tc${stop}">${RARITY[stop].name}+</span></button>
         <button class="btn small" data-act="autoScrap">Scrap: ${salvageLabel(S.settings.autoSalvage)}</button></div>
-      <button class="btn gold wide" data-act="autoStart" ${S.coins < cost ? 'disabled' : ''}>Start · ${costHtml(cost)} per case</button>`;
+      <div class="casebtns"><button class="btn gold" data-act="autoStart" ${S.coins < cost ? 'disabled' : ''}>Start · ${costHtml(cost)} per case</button>
+      <button class="btn purple" data-act="autoStartKeys" ${S.keys < 1 ? 'disabled' : ''}>${icon('key', '')} Use keys (${fmt(S.keys)})</button></div>`;
   } else {
-    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${c.name}: <b>${fmt(a.n)}</b> opened · ${fmt(a.spent)} coins · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
+    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${c.name}: <b>${fmt(a.n)}</b> opened · ${a.keys ? `${plural(a.spent, 'key')} used, ${fmt(S.keys)} left` : fmt(a.spent) + ' coins'} · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
       <div class="odds">${a.counts.map((n, r) => (n ? `<span class="tc${r}">${fmt(n)} ${RARITY[r].name}</span>` : '')).join('')}</div>
       <div class="autorecent">${a.recent.map(v => tileHtml(v, 'mini')).join('')}</div>
       ${a.best ? `<div class="small">Best this session: <span class="tc${a.best.r}">${RARITY[a.best.r].name}</span> · ${oddsLong(a.best.odds)}</div>` : ''}
@@ -1741,12 +1743,14 @@ function renderAutoBox() {
   box.innerHTML = h;
 }
 
-function startAutoRoll() {
+// keys: open with keys instead of coins, until the keys run out.
+function startAutoRoll(keys = false) {
   if (UI.auto) return;
   audioUnlock();
   const tier = autoTier();
-  if (S.coins < caseCost(CASES[tier - 1])) { SFX.error(); toast('Not enough coins yet.', 'bad'); return; }
-  UI.auto = { tier, n: 0, spent: 0, counts: RARITY.map(() => 0), recent: [], best: null, paused: false };
+  if (keys ? S.keys < 1 : S.coins < caseCost(CASES[tier - 1])) { SFX.error(); toast(keys ? 'No keys yet.' : 'Not enough coins yet.', 'bad'); return; }
+  UI.autoKeys = keys;
+  UI.auto = { tier, keys, n: 0, spent: 0, counts: RARITY.map(() => 0), recent: [], best: null, paused: false };
   clearInterval(UI.autoTimer);
   UI.autoTimer = setInterval(autoRollTick, AUTO_ROLL_MS);
   SFX.buy();
@@ -1772,9 +1776,9 @@ function autoRollTick() {
   if (a.paused) { if (!wasPaused) renderAutoBox(); return; }
   if (UI.modalOpen) return;
   const c = CASES[a.tier - 1];
-  const cost = caseCost(c);
-  if (S.coins < cost) { stopAutoRoll(`Auto-roll stopped: out of coins after ${plural(a.n, 'case')}.`); return; }
-  const drops = openCase(a.tier, 'coins', 1);
+  const cost = a.keys ? 1 : caseCost(c);
+  if (a.keys ? S.keys < 1 : S.coins < cost) { stopAutoRoll(`Auto-roll stopped: out of ${a.keys ? 'keys' : 'coins'} after ${plural(a.n, 'case')}.`); return; }
+  const drops = openCase(a.tier, a.keys ? 'key' : 'coins', 1);
   if (!drops) { stopAutoRoll(); return; }
   a.n++;
   a.spent += cost;
