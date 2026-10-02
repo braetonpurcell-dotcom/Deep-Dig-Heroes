@@ -680,6 +680,7 @@ input[type="text"] {
 
 /* Skills takes the whole screen between the HUD and the tab bar */
 body.fulltab #stage, body.fulltab #floorbar { display: none; }
+body.croptab #stage { height: calc(var(--cvh, 180px) * 0.52 + 4px); overflow: hidden; align-items: flex-end; }
 #tab-skills.web { height: 100%; min-height: 0; gap: 6px; }
 #tab-skills.web .treebox { flex: 1 1 auto; height: auto; min-height: 180px; max-height: none; }
 #tab-skills.web .nodeinfo { flex: none; }

@@ -121,10 +121,23 @@ function showTab(name) {
     document.body.classList.toggle('fulltab', full);
     if (!full) resizeCanvas();
   }
+  cropStage(name);
   $('#panel').scrollTop = 0;
   if (name === 'forge') UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
   buildTab(name);
 }
+
+// Off the Fight tab the mine view is cut down to its bottom half (the miner and the ground), so the
+// tab below gets more room. The canvas keeps its size; the stage just hides the top part.
+function cropStage(name = UI.tab) {
+  const crop = name !== 'fight' && name !== 'skills';
+  document.body.classList.toggle('croptab', crop);
+  if (crop) {
+    const h = $('#cv').offsetHeight;
+    if (h) document.body.style.setProperty('--cvh', h + 'px');
+  }
+}
+window.addEventListener('resize', () => cropStage());
 
 function buildTab(name = UI.tab) {
   if (name === 'fight') updateFight();

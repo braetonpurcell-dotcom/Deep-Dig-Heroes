@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.5
+- On the Forge, Cases, Bag, Quests and More tabs, the mine view shrinks to its bottom half (your miner and the ground), giving those tabs more room. The Fight tab still shows the full view.
+
 ## v1.11.4
 - The combo bar no longer jumps around while you tap: it stays on one line, so the tap pad never moves. The Shield chip just lights up while it's active (no countdown), Fresh Hands shows without its timer, and when several chips are showing, the pace shows as just a percentage.
 
