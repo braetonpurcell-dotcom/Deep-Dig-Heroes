@@ -39,7 +39,7 @@ function scorePayload() {
   const best = S.best.all;
   let rareLabel = '';
   if (best) {
-    const what = best.sp ? PETS[best.sp].name : (SLOTS[best.slot] ? SLOTS[best.slot].name : '');
+    const what = best.sp ? (PETS[best.sp] ? PETS[best.sp].name : 'Pet') : (SLOTS[best.slot] ? SLOTS[best.slot].name : '');
     const wear = best.fl != null ? ' ' + WEAR[wearIndex(best.fl)].short : '';
     rareLabel = `${RARITY[best.r].name}${wear} ${what} · 1 in ${fmt(best.odds)}`;
   }
@@ -94,7 +94,7 @@ function lbValid(e) {
   if (e.combo > 2 * e.taps + 1) return false; // a combo is built from taps (Fresh Hands counts 2 per tap)
   if (e.mult > 1 + 0.09 * Math.min(e.combo, 200) + 0.01) return false; // best skills, Combo Mastery and Limit Break
   if (e.power != null && !num(e.power)) return false;
-  if (e.kills < 5 * (e.floor - 1)) return false; // every floor takes 6 kills
+  if (e.kills < 2.5 * (e.floor - 1)) return false; // floors take 6 kills, minus Tunneler skips and 1-kill boss floors
   if (e.taps > e.play * 8 + 50) return false; // nobody taps 8 times a second for a whole session
   if (e.rare > 0 && (e.cases < 1 || e.rare > 1e9)) return false;
   return true;

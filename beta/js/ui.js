@@ -168,7 +168,7 @@ function updateFloorBar() {
   const f = S.run.floor;
   $('#fName').textContent = 'B' + f + (isBossFloor(f) ? ' · Boss' : '');
   const vein = nextVein();
-  $('#fBiome').textContent = biomeName(f) + (S.run.maxFloor > f ? ` · best this run B${S.run.maxFloor}` : '') + (vein ? ` · ⛏ vein B${vein}` : '');
+  $('#fBiome').textContent = biomeName(f) + (vein ? ` · ⛏ vein B${vein}` : '') + (S.run.maxFloor > f ? ` · best B${S.run.maxFloor}` : '');
   $('#fUp').disabled = f <= 1;
   $('#fDown').disabled = f >= S.run.maxFloor;
   const auto = $('#fAuto');
@@ -361,9 +361,12 @@ function refreshForge() {
 // The skill web is drawn as SVG you can drag and pinch. Tapping a node selects it; points are spent
 // with the Learn button on the card below, so a drag can never buy something by accident.
 const TREE_U = 46; // px per tree unit at zoom 1
+const TREE_MIN_K = 0.5; // further out, labels and tap targets get too small on a phone
+// How far the view can pan: the outermost node plus a little margin, so the web can't be lost.
+const TREE_EXTENT = (Math.max(...TREE_NODES.map(n => Math.hypot(n.x, n.y))) + 1) * TREE_U;
 const BRANCH_BY_ID = {};
 for (const b of BRANCHES) BRANCH_BY_ID[b.id] = b;
-UI.view = UI.view || { cx: 0, cy: 0, k: 0.75 };
+UI.view = UI.view || { cx: 0, cy: 0, k: 0.9 };
 UI.skillView = UI.skillView || 'web';
 
 // Why a node can't take a point right now, or '' if it can.
@@ -412,9 +415,10 @@ function skillInfoHtml(id) {
   if (!block) btns += `<button class="btn gold small" data-act="learnSkill" data-id="${id}">Learn +1</button>`;
   if (canLockRank(id)) btns += `<button class="btn purple small" data-act="lockSkill" data-id="${id}">${icon('lock')} Lock</button>`;
   if (lk) btns += `<button class="btn small" data-act="unlockSkill" data-id="${id}">Unlock</button>`;
+  const where = n.kind === 'class' ? 'Class' : `${nodeKindName(n)} · ${b.name}${n.sub ? ' · ' + SUB_INDEX[n.sub].name : ''}`;
   return `<div class="row"><div class="grow"><b style="color:${b.color}">${n.name}</b>
-    <span class="muted small">${nodeKindName(n)} · ${b.name}${n.sub ? ' · ' + SUB_INDEX[n.sub].name : ''}${n.max > 1 ? ` · ${skillRank(id)}/${n.max}` : skillRank(id) ? ' · owned' : ''}${lk ? ` · ${lk} locked` : ''}</span><br>
-    <span class="small">${n.desc}</span>${block && skillRank(id) < n.max ? `<br><span class="small" style="color:var(--bad)">${block}</span>` : ''}</div>
+    <span class="muted small">${where}${n.max > 1 ? ` · ${skillRank(id)}/${n.max}` : skillRank(id) ? ' · owned' : ''}${lk ? ` · ${lk} locked` : ''}</span>
+    ${n.desc !== n.name ? `<br><span class="small">${n.desc}</span>` : ''}${block && skillRank(id) < n.max ? `<br><span class="small" style="color:var(--bad)">${block}</span>` : ''}</div>
     <div class="col">${btns}</div></div>`;
 }
 
@@ -589,14 +593,14 @@ function autoSpendSkills() {
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pts.size >= 2 && pinch0) {
       const [p, q] = [...pts.values()];
-      UI.view.k = clamp(pinch0.k * Math.hypot(p.x - q.x, p.y - q.y) / Math.max(1, pinch0.d), 0.35, 2);
+      UI.view.k = clamp(pinch0.k * Math.hypot(p.x - q.x, p.y - q.y) / Math.max(1, pinch0.d), TREE_MIN_K, 2);
       applyTreeView();
     } else if (start) {
       const dx = e.clientX - start.x, dy = e.clientY - start.y;
       if (Math.abs(dx) + Math.abs(dy) > 8) moved = true;
       if (moved) {
-        UI.view.cx = start.cx - dx / UI.view.k;
-        UI.view.cy = start.cy - dy / UI.view.k;
+        UI.view.cx = clamp(start.cx - dx / UI.view.k, -TREE_EXTENT, TREE_EXTENT);
+        UI.view.cy = clamp(start.cy - dy / UI.view.k, -TREE_EXTENT, TREE_EXTENT);
         applyTreeView();
       }
     }
@@ -616,7 +620,7 @@ function autoSpendSkills() {
     const b = box();
     if (!b || !b.contains(e.target)) return;
     e.preventDefault();
-    UI.view.k = clamp(UI.view.k * (e.deltaY < 0 ? 1.1 : 0.9), 0.35, 2);
+    UI.view.k = clamp(UI.view.k * (e.deltaY < 0 ? 1.1 : 0.9), TREE_MIN_K, 2);
     applyTreeView();
   }, { passive: false });
 })();
@@ -652,7 +656,7 @@ function buildCases() {
       <div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - pityFor().leg)}</b></div></div>
     <div class="odds" style="margin-top:6px">${RARITY.map((r, i) =>
       `<span class="tc${i}">${r.name} ${oddsShort(1 / odds[i])}</span>`).join('')}</div>
-    <div class="small muted" style="margin-top:4px">Raw odds shown. Your luck +${fmtPct(Math.max(0, ST.luck))} makes rare drops more likely.${pet ? '' : ' · Gear wear: FN 3%, MW 24%, FT 33%, WW 24%, BS 16%'}</div></div>`;
+    <div class="small muted" style="margin-top:4px">Raw odds shown. Your luck ${fmtPct(Math.max(0, ST.luck))} makes rare drops more likely.${pet ? '' : ' · Gear wear: FN 3%, MW 24%, FT 33%, WW 24%, BS 16%'}</div></div>`;
   h += autoCardHtml();
   h += `<div class="card casecard"><div class="chest"><img src="${chestUrl(best)}" alt=""></div><div>
       <b>Free ${CASES[best - 1].name}</b><div class="small muted" id="freeTimer">${ready ? 'Ready now' : 'Next in ' + fmtClock((S.freeCrateAt - Date.now()) / 1000)}</div>
@@ -1356,7 +1360,7 @@ on('floor', () => updateFloorBar());
 on('fresh', ({ dur, key }) => { SFX.reveal(2); toast(`Fresh Hands: 2× combo and coins for ${fmtClock(dur)}${key ? ' · +1 key' : ''}`, 'good'); });
 on('freshEnd', () => toast('Fresh Hands ended', ''));
 on('goldRush', ({ kind, floor, mult, left }) => {
-  if (kind === 'mother') { SFX.levelup(); banner('MOTHER LODE', `${mult}× COINS · ${left} KILLS`, '#ffcc4d', 2.4); vibrate([40, 50, 120]); }
+  if (kind === 'mother') { SFX.levelup(); banner('MOTHER LODE', `${mult}× COINS - ${left} KILLS`, '#ffcc4d', 2.4); vibrate([40, 50, 120]); }
   else { SFX.reveal(1); toast(`Gold vein at B${floor}: ${mult}× coins for the next ${left} kills`, 'gold', 'coin'); }
   updateFloorBar();
 });
@@ -1370,6 +1374,7 @@ function handleAction(el) {
   const d = el.dataset;
   switch (a) {
     case 'close': closeModal(); break;
+    case 'openSkills': closeModal(); UI.skillView = 'web'; showTab('skills'); break;
     case 'autoResume': closeModal(); startAutoRoll(!!UI.autoKeys); break;
     case 'buyAmt': S.settings.buyAmt = d.v; buildForge(); break;
     case 'buy':
@@ -1383,12 +1388,21 @@ function handleAction(el) {
     case 'autoSkills': { const n = autoSpendSkills(); if (n) { SFX.buy(); toast(`Auto spent ${n} ${n === 1 ? 'point' : 'points'}`, 'good'); } buildSkills(); break; }
     case 'treeZoom': {
       const k = Number(d.v);
-      if (k) UI.view.k = clamp(UI.view.k * k, 0.35, 2); else UI.view = { cx: 0, cy: 0, k: 0.75 };
+      if (k) UI.view.k = clamp(UI.view.k * k, TREE_MIN_K, 2); else UI.view = { cx: 0, cy: 0, k: 0.9 };
       applyTreeView();
       break;
     }
     case 'buyPrestige': if (buyPrestigeNode(d.id)) { SFX.buy(); refreshAll(); } else SFX.error(); buildSkills(); break;
     case 'respec': {
+      let spent = 0;
+      for (const k in S.run.skills) spent += S.run.skills[k] - (S.locks[k] || 0);
+      if (!spent) { toast('Nothing to refund', ''); break; }
+      openModal(`<h2>Respec?</h2><p>Refund all ${plural(spent, 'point')} so you can rebuild from the middle. It's free. Locked ranks stay.</p>
+        <div class="mbtns"><button class="btn gold" data-act="respecYes">Refund all</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
+      break;
+    }
+    case 'respecYes': {
+      closeModal();
       const n = respecSkills();
       toast(n ? `Refunded ${plural(n, 'point')}` : 'Nothing to refund', '');
       buildSkills();
@@ -1557,7 +1571,7 @@ function askPrestige() {
     <div class="big-gain" style="color:var(--gambler)">+${gain} cores</div>
     <div class="kv"><span>Power</span><span>+${fmt(powerGain())} (damage +${fmt(S.power * 10)}% → +${fmt((S.power + powerGain()) * 10)}%)</span>
     <span>Cores</span><span>+${gain} to spend in the Prestige tree</span>
-    <span>You keep</span><span>gear, pets, keys, scrap</span><span>You reset</span><span>coins, floor, Forge, level, skills</span></div>
+    <span>You keep</span><span>gear, pets, keys, scrap</span><span>Resets</span><span>coins, floor, Forge, level, skills</span></div>
     ${nextCase ? `<p class="small">Unlocks the ${nextCase.name}.</p>` : ''}
     ${S.prestiges === 0 || S.prestiges === 2 ? '<p class="small">Adds a pet slot.</p>' : ''}
     ${S.prestiges < PRESTIGE_LUCK_MAX ? `<p class="small">Luck +${Math.round(PRESTIGE_LUCK * 100)}% on every case.</p>` : ''}

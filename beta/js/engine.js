@@ -65,6 +65,7 @@ function freshRun() {
     started: Date.now(), recordAnnounced: false,
     rush: { left: 0, mult: 1 }, // Gold Rush: kills left at the boosted coin rate
     bestCombo: 0, // best combo this run (for Second Wind)
+    giftSp: 0, // free path nodes handed out when a save's skills were rebuilt (not refunded by respec)
   };
 }
 
@@ -205,7 +206,11 @@ function hydrate(obj) {
   const now = Date.now();
   for (const k of ['coins', 'keys', 'scrap', 'cores', 'trophies', 'prestiges', 'power']) s[k] = nonNeg(s[k]);
   if (!s.ptree || typeof s.ptree !== 'object') s.ptree = {};
-  for (const k of Object.keys(s.ptree)) if (!PRESTIGE_TREE.some(n => n.id === k)) delete s.ptree[k]; else s.ptree[k] = nonNegInt(s.ptree[k]);
+  for (const k of Object.keys(s.ptree)) {
+    const n = PRESTIGE_TREE.find(x => x.id === k);
+    if (!n) delete s.ptree[k];
+    else s.ptree[k] = n.max ? Math.min(n.max, nonNegInt(s.ptree[k])) : nonNegInt(s.ptree[k]);
+  }
   if (!s.locks || typeof s.locks !== 'object') s.locks = {};
   for (const k of Object.keys(s.locks)) {
     const n = SKILL_INDEX[k];
@@ -218,10 +223,12 @@ function hydrate(obj) {
   s.pityPet.epic = nonNegInt(s.pityPet.epic); s.pityPet.leg = nonNegInt(s.pityPet.leg);
   if (!s.fresh || typeof s.fresh !== 'object') s.fresh = { left: 0 };
   s.fresh.left = clamp(nonNeg(s.fresh.left), 0, FRESH_MAX);
+  if (typeof s.fresh.keyDay !== 'string') s.fresh.keyDay = '';
   if (!s.run.rush || typeof s.run.rush !== 'object') s.run.rush = { left: 0, mult: 1 };
   s.run.rush.left = Math.min(200, nonNegInt(s.run.rush.left));
   s.run.rush.mult = s.run.rush.mult === 3 ? 3 : 2;
   s.run.bestCombo = nonNegInt(s.run.bestCombo);
+  s.run.giftSp = nonNegInt(s.run.giftSp);
   s.nextId = nonNegInt(s.nextId, 1);
   // Run and combo numbers.
   const run = s.run;
@@ -303,6 +310,8 @@ function hydrate(obj) {
   for (const k of Object.keys(s.best)) {
     const b = s.best[k];
     if (!b || !Number.isInteger(b.r) || b.r < 0 || b.r > TOP_RARITY || !isFinite(b.odds) || b.odds < 1) delete s.best[k];
+    else if (b.sp != null ? !PETS[b.sp] : !SLOTS[b.slot]) delete s.best[k];
+    else if (b.fl != null && !(b.fl >= 0 && b.fl <= 1)) delete s.best[k];
   }
   // Older saves stored odds with the luck of the moment; recompute the raw odds from rarity and wear.
   for (const k of Object.keys(s.best)) {
@@ -584,9 +593,12 @@ function changeFloor(f) {
   R.spawnT = SPAWN_GAP;
   R.atkT = 0;
   if (f > S.run.maxFloor) {
+    // Every newly reached floor counts, including one Tunneler dropped you past.
+    for (let g = S.run.maxFloor + 1; g <= f && g - S.run.maxFloor <= 3; g++) {
+      const v = veinKind(g);
+      if (v) startGoldRush(v, g);
+    }
     S.run.maxFloor = f;
-    const v = veinKind(f);
-    if (v) startGoldRush(v, f);
     if (skillRank('compound')) recalc();
   }
   if (f > S.stats.bestFloor) {
@@ -1093,9 +1105,12 @@ function rebuildOldSkills(old) {
   const sp = S.run.sp;
   S.run.sp = sp + 1000;
   learnTargets(order.map(id => [id, old[id]]));
-  let kept = 0;
+  let kept = 0, total = 0;
   for (const id of order) kept += Math.min(skillRank(id), old[id]);
+  for (const id in S.run.skills) total += S.run.skills[id];
   S.run.sp = Math.max(0, sp - kept);
+  // The free path nodes are a gift for this run only: respec doesn't turn them into points.
+  S.run.giftSp = (S.run.giftSp || 0) + Math.max(0, total - kept);
   return kept;
 }
 
@@ -1117,6 +1132,9 @@ function learnSkill(id) {
 function respecSkills() {
   let refund = 0;
   for (const k in S.run.skills) refund += S.run.skills[k] - (S.locks[k] || 0);
+  const gift = Math.min(refund, S.run.giftSp || 0);
+  refund -= gift;
+  S.run.giftSp = 0;
   S.run.skills = { ...S.locks };
   S.run.sp += refund;
   recalc();
@@ -1613,8 +1631,8 @@ function grantFreshHands(away) {
   if (!(away > FRESH_MIN_AWAY)) return null;
   const dur = Math.round(clamp(180 + ((away - FRESH_MIN_AWAY) / (7 * 3600)) * (FRESH_MAX - 180), 180, FRESH_MAX));
   S.fresh.left = Math.max(S.fresh.left, dur);
-  const key = away >= 4 * 3600;
-  if (key) S.keys++;
+  const key = away >= 4 * 3600 && S.fresh.keyDay !== dateKey(); // one Fresh Hands key per day
+  if (key) { S.keys++; S.fresh.keyDay = dateKey(); }
   recalc();
   const res = { dur, key };
   emit('fresh', res);
@@ -1862,6 +1880,16 @@ function loadState(obj) {
     R.lastAnswer = R.time; // a loaded combo gets the normal grace period before it fades
     startPaceSession();
     recalc();
+    // Saves from before a skill-web change: rebuild the old skills right away, on every load path
+    // (boot, import, restore), so points can't be spent twice and offline earnings see the skills.
+    if (S.oldSkills) {
+      const rebuilt = rebuildOldSkills(S.oldSkills);
+      S.migrateNote = { rebuilt, fromV2: !!S.fromV2 };
+      delete S.oldSkills;
+      delete S.fromV2;
+      delete S.migratedSkills;
+      recalc();
+    }
     ensureDay();
     R.dayKey = dateKey();
   } catch (e) {

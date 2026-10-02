@@ -655,7 +655,7 @@ input[type="text"] {
 /* Skill web */
 .treebox { position: relative; height: 34vh; min-height: 220px; max-height: 420px; background: radial-gradient(circle at 50% 50%, #1f1626, #0d0a12 70%); border: 2px solid #2c2338; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
 .treebox svg { display: block; }
-.treezoom { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.treezoom { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 4px; opacity: .8; }
 .treezoom .btn { min-width: 34px; padding: 4px 0; }
 .tnum { font: 700 10px sans-serif; fill: #fff; text-anchor: middle; paint-order: stroke; stroke: #000; stroke-width: 3px; pointer-events: none; }
 .tlabel { font: 12px 'Jersey 10', sans-serif; text-anchor: middle; paint-order: stroke; stroke: #0d0a12; stroke-width: 4px; pointer-events: none; }
