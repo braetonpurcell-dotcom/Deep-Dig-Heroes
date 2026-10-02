@@ -3,6 +3,17 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.10.0
+The big update.
+- **Skill web:** skills are now a web you grow from the middle. Four classes (Fighter, Tycoon, Gambler, Miner) each split into three branches (like Coins, XP and Speed) that fork toward named skills. Small nodes just say what they give. Own a whole branch to unlock its gold Mastery. 207 points to fill, plus keystones like Limit Break (your multiplier can pass x10.6). Your existing skills are rebuilt on the new paths, and the nodes on the way are free. Respec is free (it asks first). Auto spends points evenly from the middle out.
+- **Prestige:** gives power (permanent damage that grows with the level you reached) and cores to spend in the new Prestige tree: Might, Fortune, Wisdom, Lady Luck, Head Start, Memory (locks that keep chosen skill ranks through every prestige) and Second Wind. Your cores so far became power, and you kept them to spend.
+- **Fresh Hands:** back after more than an hour away, your combo builds twice as fast and coins are doubled for 3 to 15 minutes, plus a key after 4+ hours.
+- **Gold veins:** about 1 in 10 floors. Reaching one starts a Gold Rush (2x coins for the next 20 kills); a rare Mother Lode pays 3x for 30. The next vein shows on the floor bar.
+- **Cases:** Tool cases and Pet cases, each with its own pity. Auto-roll can also open cases with keys.
+- **Raw odds everywhere:** every "1 in N" is the real chance with no luck mixed in (luck is shown on its own).
+- **Leaderboard:** a full-screen board with 14 categories, including time played, top pet, pickaxe, helmet and charm, and power.
+- **Skills page** takes the whole screen.
+
 ## v1.9.5
 - The Feedback button is now a small "F" next to the leaderboard trophy, so the top bar stays one row and the game no longer gets pushed down on narrow phones.
 - Setup test entries ("delete me") are left off the leaderboard.

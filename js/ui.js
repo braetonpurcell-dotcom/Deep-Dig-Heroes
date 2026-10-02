@@ -115,6 +115,12 @@ function showTab(name) {
   UI.tab = name;
   for (const b of $$('#tabs button')) b.classList.toggle('on', b.dataset.tab === name);
   for (const s of $$('#panel > .tab')) s.hidden = s.id !== 'tab-' + name;
+  // Skills gets the whole screen: the mine view and floor bar step aside.
+  const full = name === 'skills';
+  if (document.body.classList.contains('fulltab') !== full) {
+    document.body.classList.toggle('fulltab', full);
+    if (!full) resizeCanvas();
+  }
   $('#panel').scrollTop = 0;
   if (name === 'forge') UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
   buildTab(name);
@@ -161,7 +167,8 @@ function updateHud() {
 function updateFloorBar() {
   const f = S.run.floor;
   $('#fName').textContent = 'B' + f + (isBossFloor(f) ? ' · Boss' : '');
-  $('#fBiome').textContent = biomeName(f) + (S.run.maxFloor > f ? ` · best this run B${S.run.maxFloor}` : '');
+  const vein = nextVein();
+  $('#fBiome').textContent = biomeName(f) + (vein ? ` · ⛏ vein B${vein}` : '') + (S.run.maxFloor > f ? ` · best B${S.run.maxFloor}` : '');
   $('#fUp').disabled = f <= 1;
   $('#fDown').disabled = f >= S.run.maxFloor;
   const auto = $('#fAuto');
@@ -203,7 +210,7 @@ function setTicker(text, kind = '', ms = 1800) {
 function goalMessages() {
   const out = [];
   if (bossWaiting()) return [['A boss blocks the way. Your miner farms this floor until you tap Fight boss.', 'gold']];
-  if (canPrestige()) out.push([`Prestige ready: +${prestigeGain()} cores in the More tab`, 'gold']);
+  if (canPrestige()) out.push([`Prestige ready: +${fmt(powerGain())} power and +${prestigeGain()} cores in the More tab`, 'gold']);
   if (S.run.sp > 0) out.push([`${plural(S.run.sp, 'skill point')} to spend in Skills`, 'gold']);
   const c = claimableCounts();
   if (c.daily + c.quests + c.bonus + c.ach > 0) out.push(['Rewards are waiting in Quests', 'gold']);
@@ -250,6 +257,13 @@ function updateFight() {
   const left = (R.shieldUntil || 0) - R.time;
   const shTxt = left > 0 ? `Shield ${left.toFixed(1)}s` : R.shield ? 'Shield ready' : '';
   if (sh.textContent !== shTxt) { sh.textContent = shTxt; sh.hidden = !shTxt; sh.classList.toggle('on', left > 0); }
+  const fr = $('#cFresh');
+  const frTxt = freshActive() ? `Fresh ${fmtClock(S.fresh.left)}` : '';
+  if (fr && fr.textContent !== frTxt) { fr.textContent = frTxt; fr.hidden = !frTxt; }
+  const ru = $('#cRush');
+  const rush = S.run.rush;
+  const ruTxt = rush.left > 0 ? `${rush.mult}× · ${rush.left}` : '';
+  if (ru && ru.textContent !== ruTxt) { ru.textContent = ruTxt; ru.hidden = !ruTxt; ru.title = 'Gold Rush: boosted coins for the next kills'; }
   // The double-it progress lives in the ticker line, so the tap pad never loses space to it.
   if (R.bonusRound && performance.now() >= UI.tickerUntil) {
     const t = $('#ticker');
@@ -344,55 +358,274 @@ function refreshForge() {
 }
 
 // ---------- skills ----------
-// Why a skill can't take a point right now, or '' if it can.
+// The skill web is drawn as SVG you can drag and pinch. Tapping a node selects it; points are spent
+// with the Learn button on the card below, so a drag can never buy something by accident.
+const TREE_U = 46; // px per tree unit at zoom 1
+const TREE_MIN_K = 0.5; // further out, labels and tap targets get too small on a phone
+// How far the view can pan: the outermost node plus a little margin, so the web can't be lost.
+const TREE_EXTENT = (Math.max(...TREE_NODES.map(n => Math.hypot(n.x, n.y))) + 1) * TREE_U;
+const BRANCH_BY_ID = {};
+for (const b of BRANCHES) BRANCH_BY_ID[b.id] = b;
+UI.view = UI.view || { cx: 0, cy: 0, k: 0.9 };
+UI.skillView = UI.skillView || 'web';
+
+// Why a node can't take a point right now, or '' if it can.
 function skillBlock(id) {
   const n = SKILL_INDEX[id];
   if (skillRank(id) >= n.max) return 'Maxed out.';
-  if (branchPoints(n.branch) < TIER_REQ[n.tier]) return `Put ${TIER_REQ[n.tier]} points into this branch first.`;
+  if (n.kind === 'mastery' && !masteryReady(n.sub)) {
+    const sb = SUB_INDEX[n.sub];
+    const done = sb.nodes.filter(k => skillRank(k) >= SKILL_INDEX[k].max).length;
+    return `Own every node in ${sb.name} first (${done}/${sb.nodes.length} done).`;
+  }
+  if (!nodeReachable(id)) {
+    const d = pathDistance(id);
+    return `Not connected yet: ${d} more ${d === 1 ? 'node' : 'nodes'} along the path to reach it.`;
+  }
   if (S.run.sp <= 0) return 'No skill points left. Level up to earn more.';
   return '';
 }
 
+// Fewest nodes you'd have to buy before this one opens (for planning a route).
+function pathDistance(id) {
+  const seen = new Set(['core']);
+  for (const k in S.run.skills) if (S.run.skills[k] > 0) seen.add(k);
+  let frontier = [...seen], d = 0;
+  while (frontier.length && d < 60) {
+    const next = [];
+    for (const a of frontier) for (const o of TREE_ADJ[a] || []) {
+      if (seen.has(o)) continue;
+      if (o === id) return d;
+      seen.add(o); next.push(o);
+    }
+    frontier = next; d++;
+  }
+  return d;
+}
+
+function nodeKindName(n) { return { key: 'Keystone', big: 'Skill', mastery: 'Mastery', class: 'Class' }[n.kind] || 'Node'; }
+
 function skillInfoHtml(id) {
   const n = SKILL_INDEX[id];
-  const b = BRANCHES.find(x => x.id === n.branch);
+  if (!n) return '<span class="muted small">Tap a node to read it. Drag to move around, pinch or use + and − to zoom.</span>';
+  const b = BRANCH_BY_ID[n.branch];
   const block = skillBlock(id);
-  return `<div class="row"><div class="grow"><b style="color:${b.color}">${n.name}</b> <span class="muted">${skillRank(id)}/${n.max}</span><br>
-    <span class="small">${n.desc}</span>${block ? `<br><span class="small" style="color:var(--bad)">${block}</span>` : ''}</div>
-    ${block ? '' : `<button class="btn gold small" data-act="learnSkill" data-id="${id}">Learn +1</button>`}</div>`;
+  const lk = S.locks[id] || 0;
+  let btns = '';
+  if (!block) btns += `<button class="btn gold small" data-act="learnSkill" data-id="${id}">Learn +1</button>`;
+  if (canLockRank(id)) btns += `<button class="btn purple small" data-act="lockSkill" data-id="${id}">${icon('lock')} Lock</button>`;
+  if (lk) btns += `<button class="btn small" data-act="unlockSkill" data-id="${id}">Unlock</button>`;
+  const where = n.kind === 'class' ? 'Class' : `${nodeKindName(n)} · ${b.name}${n.sub ? ' · ' + SUB_INDEX[n.sub].name : ''}`;
+  return `<div class="row"><div class="grow"><b style="color:${b.color}">${n.name}</b>
+    <span class="muted small">${where}${n.max > 1 ? ` · ${skillRank(id)}/${n.max}` : skillRank(id) ? ' · owned' : ''}${lk ? ` · ${lk} locked` : ''}</span>
+    ${n.desc !== n.name ? `<br><span class="small">${n.desc}</span>` : ''}${block && skillRank(id) < n.max ? `<br><span class="small" style="color:var(--bad)">${block}</span>` : ''}</div>
+    <div class="col">${btns}</div></div>`;
+}
+
+function treeSvg() {
+  const own = id => id === 'core' || skillRank(id) > 0;
+  let lines = '', dots = '', labels = '';
+  for (const [a, c] of TREE_EDGES) {
+    const A = a === 'core' ? TREE_NODES[0] : SKILL_INDEX[a], C = SKILL_INDEX[c];
+    const on = own(a) && own(c);
+    const col = on ? BRANCH_BY_ID[(C.branch || A.branch)].color : '#3a3346';
+    lines += `<line x1="${A.x * TREE_U}" y1="${A.y * TREE_U}" x2="${C.x * TREE_U}" y2="${C.y * TREE_U}" stroke="${col}" stroke-width="${on ? 4 : 3}"/>`;
+  }
+  for (const n of TREE_NODES) {
+    const x = n.x * TREE_U, y = n.y * TREE_U;
+    if (n.kind === 'core') {
+      dots += `<circle cx="0" cy="0" r="18" fill="#2a1a12" stroke="var(--gold)" stroke-width="3"/><circle cx="0" cy="0" r="7" fill="var(--gold)"/>`;
+      continue;
+    }
+    const col = BRANCH_BY_ID[n.branch].color;
+    const rank = skillRank(n.id);
+    const can = canLearn(n.id);
+    const reach = nodeReachable(n.id);
+    const r = { key: 19, big: 15, mastery: 17, class: 21 }[n.kind] || 9;
+    const fill = rank >= n.max ? col : rank > 0 ? col : '#17121f';
+    const stroke = rank > 0 || can ? col : reach ? '#8a7f9c' : '#4a4058';
+    const op = rank > 0 || reach ? 1 : 0.55;
+    const sel = UI.skillInfo === n.id;
+    dots += `<g data-node="${n.id}" opacity="${op}">`;
+    if (sel) dots += `<circle cx="${x}" cy="${y}" r="${r + 7}" fill="none" stroke="#fff" stroke-width="2"/>`;
+    if (can) dots += `<circle cx="${x}" cy="${y}" r="${r + 4}" fill="none" stroke="${col}" stroke-width="2" class="tglow"/>`;
+    if (n.kind === 'key') dots += `<rect x="${x - r}" y="${y - r}" width="${2 * r}" height="${2 * r}" transform="rotate(45 ${x} ${y})" fill="${fill}" stroke="${stroke}" stroke-width="3"/>`;
+    else if (n.kind === 'mastery') dots += `<polygon points="${starPoints(x, y, r)}" fill="${rank ? 'var(--gold)' : '#17121f'}" stroke="${rank || can ? 'var(--gold)' : stroke}" stroke-width="3"/>`;
+    else dots += `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${n.kind === 'big' ? 3 : 2}"/>`;
+    if (rank > 0 && rank < n.max) dots += `<circle cx="${x}" cy="${y}" r="${r - 5}" fill="#17121f"/>`;
+    if (n.max > 1) dots += `<text x="${x}" y="${y + 4}" class="tnum">${rank}/${n.max}</text>`;
+    if (S.locks[n.id]) dots += `<circle cx="${x + r * 0.8}" cy="${y - r * 0.8}" r="5" fill="var(--gold)" stroke="#000"/>`;
+    // A wide invisible hit area so small nodes are easy to tap.
+    dots += `<circle cx="${x}" cy="${y}" r="${Math.max(r + 6, 20)}" fill="transparent"/></g>`;
+    if (n.kind !== 'small') labels += `<text x="${x}" y="${y + r + 14}" class="tlabel ${n.kind === 'class' ? 'tclass' : ''}" fill="${n.kind === 'mastery' ? (rank ? 'var(--gold)' : '#d9c58a') : rank > 0 || n.kind === 'class' ? col : '#b9aec9'}">${n.name}</text>`;
+  }
+  return lines + dots + labels;
+}
+function starPoints(x, y, r) {
+  const p = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.48 : r;
+    p.push(`${Math.round((x + Math.cos(a) * rr) * 10) / 10},${Math.round((y + Math.sin(a) * rr) * 10) / 10}`);
+  }
+  return p.join(' ');
+}
+
+function treeTransform() {
+  const box = $('#treeBox');
+  const w = box ? box.clientWidth : 360, h = box ? box.clientHeight : 340;
+  const v = UI.view;
+  return `translate(${w / 2 - v.cx * v.k} ${h / 2 - v.cy * v.k}) scale(${v.k})`;
+}
+function applyTreeView() {
+  const g = $('#treeG');
+  if (g) g.setAttribute('transform', treeTransform());
+}
+
+// Totals from the tree, so you can see what your build adds up to.
+function buildSummary() {
+  const fx = ST.fx || {};
+  const parts = [];
+  const pct = v => Math.round(v * 100) + '%';
+  const dmg = (1 + 0.02 * branchPoints('brawler')) * (1 + (fx.dmg || 0)) - 1;
+  if (dmg > 0) parts.push(`Damage +${pct(dmg)}`);
+  if (fx.strike) parts.push(`Tap strike +${pct(fx.strike)}`);
+  const coin = (1 + 0.02 * branchPoints('tycoon')) * (1 + (fx.coin || 0)) - 1;
+  if (coin > 0) parts.push(`Coins +${pct(coin)}`);
+  const luck = 0.02 * branchPoints('gambler') + (fx.luck || 0);
+  if (luck > 0) parts.push(`Luck +${pct(luck)}`);
+  const aps = (1 + 0.01 * branchPoints('miner')) * (1 + (fx.aps || 0)) - 1;
+  if (aps > 0) parts.push(`Attack speed +${pct(aps)}`);
+  if (fx.xp) parts.push(`XP +${pct(fx.xp)}`);
+  if (fx.crit) parts.push(`Crit +${Math.round(fx.crit * 1000) / 10}%`);
+  if (fx.critdmg) parts.push(`Crit damage +${pct(fx.critdmg)}`);
+  if (fx.cap) parts.push(`Max combo +${fx.cap}`);
+  if (fx.disc) parts.push(`Cases ${pct(fx.disc)} cheaper`);
+  if (fx.scrap) parts.push(`Scrap +${pct(fx.scrap)}`);
+  if (fx.ore) parts.push(`Lucky ores +${pct(fx.ore)}`);
+  const m = TREE_SUBS.filter(sb => skillRank(sb.mastery)).map(sb => sb.name);
+  if (m.length) parts.push(`Masteries: ${m.join(', ')}`);
+  return parts.length ? parts.join(' · ') : 'Nothing yet. Every point you spend shows up here.';
+}
+
+function skillTabsHtml() {
+  return `<div class="seg"><button data-act="skillView" data-v="web" class="${UI.skillView === 'web' ? 'on' : ''}">Skill web</button>
+    <button data-act="skillView" data-v="prestige" class="${UI.skillView === 'prestige' ? 'on' : ''}">Prestige tree</button></div>`;
 }
 
 function buildSkills() {
-  const b = BRANCHES.find(x => x.id === UI.branch);
-  const pts = branchPoints(b.id);
-  let h = `<div class="row"><div class="grow"><b style="color:var(--gold)">${S.run.sp}</b> ${S.run.sp === 1 ? 'skill point' : 'skill points'}
-    <span class="muted small">· earn 1 per level</span></div><button class="btn small" data-act="respec">Respec (free)</button></div>`;
-  h += `<div class="seg">${BRANCHES.map(x =>
-    `<button data-act="branch" data-v="${x.id}" class="${x.id === UI.branch ? 'on' : ''}"><span style="color:${x.color}">${x.name}</span> ${branchPoints(x.id)}</button>`).join('')}</div>`;
-  h += `<div class="card branchhead"><span class="small">${b.blurb}</span><span class="small muted">Passive: ${b.passive} (now ${pts})</span></div>`;
-  h += `<div class="card nodeinfo" id="nodeInfo">${UI.skillInfo && SKILL_INDEX[UI.skillInfo].branch === b.id
-    ? skillInfoHtml(UI.skillInfo)
-    : '<span class="muted small">Tap a skill to read it, then press Learn to spend a point. Respec is free, so try different builds.</span>'}</div>`;
-  h += '<div class="tiers">';
-  for (let t = 0; t < 4; t++) {
-    const nodes = b.nodes.filter(n => n.tier === t);
-    const locked = pts < TIER_REQ[t];
-    h += `<div class="tierlabel">Tier ${t + 1}${t ? ` · needs ${TIER_REQ[t]} points in ${b.name}` : ''}</div>
-      <div class="nodes ${nodes.length === 1 ? 'one' : ''}">`;
-    for (const n of nodes) {
-      const rank = skillRank(n.id);
-      const cls = [canLearn(n.id) ? 'can' : '', locked ? 'locked' : '', rank >= n.max ? 'maxed' : '', UI.skillInfo === n.id ? 'sel' : ''].join(' ');
-      h += `<button class="node ${cls}" style="--branch:${b.color}" data-act="skill" data-id="${n.id}" aria-pressed="${UI.skillInfo === n.id}">
-        <span class="nn">${n.name}</span><span class="nd">${n.desc}</span>
-        <span class="pips">${Array.from({ length: n.max }, (_, i) => `<i class="${i < rank ? 'on' : ''}"></i>`).join('')}</span></button>`;
-    }
-    h += '</div>';
-  }
-  h += '</div>';
+  if (UI.skillView === 'prestige') { buildPrestigeTree(); return; }
+  let spent = 0;
+  for (const k in S.run.skills) spent += S.run.skills[k];
+  let h = skillTabsHtml();
+  h += `<div class="row"><div class="grow"><b style="color:var(--gold)">${S.run.sp}</b> ${S.run.sp === 1 ? 'point' : 'points'}
+    <span class="muted small">· ${spent}/${TREE_TOTAL} spent</span></div>
+    <button class="btn small" data-act="autoSkills" ${S.run.sp > 0 ? '' : 'disabled'} title="Spend points for you">Auto</button>
+    <button class="btn small" data-act="respec">Respec</button></div>`;
+  h += `<div class="card nodeinfo" id="nodeInfo">${skillInfoHtml(UI.skillInfo)}</div>`;
+  h += `<div id="treeBox" class="treebox"><svg id="treeSvg" width="100%" height="100%"><g id="treeG" transform="${treeTransform()}">${treeSvg()}</g></svg>
+    <div class="treezoom"><button class="btn small" data-act="treeZoom" data-v="1.25" aria-label="Zoom in">+</button><button class="btn small" data-act="treeZoom" data-v="0.8" aria-label="Zoom out">−</button><button class="btn small" data-act="treeZoom" data-v="0" aria-label="Back to the middle">◎</button></div></div>`;
+  h += `<div class="small muted">Your build: ${buildSummary()}</div>`;
+  h += `<div class="small muted">${BRANCHES.map(b => `<span style="color:${b.color}">${b.name}</span> ${branchPoints(b.id)} (${b.passive})`).join(' · ')}</div>`;
   $('#tab-skills').innerHTML = h;
+  $('#tab-skills').classList.add('web');
+  applyTreeView();
 }
 
-// Tapping a skill only selects it; points are spent with the Learn button.
+function buildPrestigeTree() {
+  $('#tab-skills').classList.remove('web');
+  let h = skillTabsHtml();
+  h += `<div class="card prestige-card"><div class="row"><div class="grow"><b style="color:var(--gambler)">${fmt(S.cores)}</b> cores to spend</div>
+    <span class="small muted">Power ${fmt(S.power)} · +${fmt(S.power * TUNE.coreBonus * 100)}% damage</span></div>
+    <p class="small muted">Prestiging gives cores (for this tree) and power (permanent damage that grows with the level you reached). Everything here is kept forever.</p>
+    <p class="small">Locks used: <b>${locksUsed()}/${lockSlots()}</b>. Lock skill ranks from a node's card in the Skill web; they stay through every prestige.</p></div>`;
+  for (const n of PRESTIGE_TREE) {
+    const lv = ptLevel(n.id);
+    const cost = ptCost(n.id);
+    h += `<div class="card row"><div class="grow"><b>${n.name}</b> <span class="muted small">Lv ${lv}</span><br>
+      <span class="small">${n.desc} per level${lv ? ` · now ${ptTotal(n, lv)}` : ''}</span></div>
+      ${ptMaxed(n.id) ? '<button class="btn small" disabled>Maxed</button>'
+        : `<button class="btn purple small" data-act="buyPrestige" data-id="${n.id}" ${S.cores >= cost ? '' : 'disabled'}>${fmt(cost)} cores</button>`}</div>`;
+  }
+  $('#tab-skills').innerHTML = h;
+}
+function ptTotal(n, lv) {
+  if (n.id === 'headstart') return `+${2 * lv} points`;
+  if (n.id === 'secondwind') return `${10 * lv}% of your best combo`;
+  if (n.id === 'memory') return `${lv} ${lv === 1 ? 'lock' : 'locks'}`;
+  return `+${(n.id === 'favor' ? 10 : 25) * lv}%`;
+}
+
+// Auto: grow the web from the middle out, evenly. Each point goes to the direction with the fewest
+// points so far, on its node closest to the centre. Keystones are left for you to choose, since
+// most of them change how you play.
+function autoSpendSkills() {
+  let n = 0;
+  const dist = id => Math.hypot(SKILL_INDEX[id].x, SKILL_INDEX[id].y);
+  while (S.run.sp > 0 && n < 500) {
+    const opts = Object.keys(SKILL_INDEX).filter(id => canLearn(id) && SKILL_INDEX[id].kind !== 'key');
+    if (!opts.length) break;
+    opts.sort((a, b) => branchPoints(SKILL_INDEX[a].branch) - branchPoints(SKILL_INDEX[b].branch) || dist(a) - dist(b));
+    if (!learnSkill(opts[0])) break;
+    n++;
+  }
+  return n;
+}
+
+// Drag to pan, pinch to zoom, tap to select.
+(function treeInput() {
+  const pts = new Map();
+  let start = null, moved = false, pinch0 = null;
+  const box = () => $('#treeBox');
+  document.addEventListener('pointerdown', e => {
+    const b = box();
+    if (!b || !b.contains(e.target) || e.target.closest('.treezoom')) return;
+    b.setPointerCapture && b.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) { start = { x: e.clientX, y: e.clientY, cx: UI.view.cx, cy: UI.view.cy, node: (e.target.closest('[data-node]') || {}).dataset }; moved = false; }
+    if (pts.size === 2) {
+      const [p, q] = [...pts.values()];
+      pinch0 = { d: Math.hypot(p.x - q.x, p.y - q.y), k: UI.view.k };
+      moved = true;
+    }
+  });
+  document.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size >= 2 && pinch0) {
+      const [p, q] = [...pts.values()];
+      UI.view.k = clamp(pinch0.k * Math.hypot(p.x - q.x, p.y - q.y) / Math.max(1, pinch0.d), TREE_MIN_K, 2);
+      applyTreeView();
+    } else if (start) {
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (Math.abs(dx) + Math.abs(dy) > 8) moved = true;
+      if (moved) {
+        UI.view.cx = clamp(start.cx - dx / UI.view.k, -TREE_EXTENT, TREE_EXTENT);
+        UI.view.cy = clamp(start.cy - dy / UI.view.k, -TREE_EXTENT, TREE_EXTENT);
+        applyTreeView();
+      }
+    }
+  });
+  const end = e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch0 = null;
+    if (pts.size === 0) {
+      if (!moved && start && start.node && start.node.node) tapSkill(start.node.node);
+      start = null;
+    }
+  };
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+  document.addEventListener('wheel', e => {
+    const b = box();
+    if (!b || !b.contains(e.target)) return;
+    e.preventDefault();
+    UI.view.k = clamp(UI.view.k * (e.deltaY < 0 ? 1.1 : 0.9), TREE_MIN_K, 2);
+    applyTreeView();
+  }, { passive: false });
+})();
+
+// Tapping a node only selects it; points are spent with the Learn button.
 function tapSkill(id) {
   UI.skillInfo = id;
   SFX.click();
@@ -409,18 +642,21 @@ function doLearnSkill(id) {
 // ---------- cases ----------
 // Opens left until the pity guarantee kicks in. Pity Pact can lower the threshold below the
 // current counter, in which case the very next open is guaranteed.
-function epicPityLeft() { return Math.max(1, ST.epicPity - S.pity.epic); }
+function epicPityLeft() { return Math.max(1, ST.epicPity - pityFor().epic); }
 
 function buildCases() {
-  const odds = rarityOdds();
+  const odds = baseRarityOdds();
   const best = bestCaseTier();
   const ready = freeCrateReady();
-  let h = `<div class="card"><div class="pity">
+  const pet = S.caseKind === 'pet';
+  let h = `<div class="seg"><button data-act="caseKind" data-v="tool" class="${pet ? '' : 'on'}">Tool cases</button>
+    <button data-act="caseKind" data-v="pet" class="${pet ? 'on' : ''}">Pet cases</button></div>`;
+  h += `<div class="card"><div class="small muted">${pet ? 'Pet cases drop pets only.' : 'Tool cases drop pickaxes, helmets and charms only.'} Each kind has its own pity.</div><div class="pity">
       <div>Epic+ guaranteed in <b>${epicPityLeft()}</b></div>
-      <div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - S.pity.leg)}</b></div></div>
+      <div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - pityFor().leg)}</b></div></div>
     <div class="odds" style="margin-top:6px">${RARITY.map((r, i) =>
       `<span class="tc${i}">${r.name} ${oddsShort(1 / odds[i])}</span>`).join('')}</div>
-    <div class="small muted" style="margin-top:4px">Luck ${fmtPct(Math.max(0, ST.luck))} · 3 in 10 drops are pets · gear wear: FN 3%, MW 24%, FT 33%, WW 24%, BS 16%</div></div>`;
+    <div class="small muted" style="margin-top:4px">Raw odds shown. Your luck ${fmtPct(Math.max(0, ST.luck))} makes rare drops more likely.${pet ? '' : ' · Gear wear: FN 3%, MW 24%, FT 33%, WW 24%, BS 16%'}</div></div>`;
   h += autoCardHtml();
   h += `<div class="card casecard"><div class="chest"><img src="${chestUrl(best)}" alt=""></div><div>
       <b>Free ${CASES[best - 1].name}</b><div class="small muted" id="freeTimer">${ready ? 'Ready now' : 'Next in ' + fmtClock((S.freeCrateAt - Date.now()) / 1000)}</div>
@@ -433,7 +669,7 @@ function buildCases() {
     }
     const cost = caseCost(c);
     h += `<div class="card casecard"><div class="chest"><img src="${chestUrl(c.tier)}" alt=""></div><div>
-      <b>${c.name}</b> <span class="small muted">· ${MATERIALS[dropMaterial(c.tier)].name} gear</span>
+      <b>${c.name}${pet ? ' (pets)' : ''}</b> <span class="small muted">· ${pet ? 'pets' : MATERIALS[dropMaterial(c.tier)].name + ' gear'}</span>
       <div class="casebtns">
         <button class="btn gold" data-act="openCase" data-t="${c.tier}" data-n="1" data-cost="${cost}">Open ${costHtml(cost)}</button>
         <button class="btn gold" data-act="openCase" data-t="${c.tier}" data-n="10" data-cost="${cost * 10}">×10 ${costHtml(cost * 10)}</button>
@@ -465,7 +701,7 @@ function refreshCases() {
   const card = $('#autoCard');
   if (card && !UI.auto) {
     const c = CASES[autoTier() - 1];
-    const key = caseCost(c) + '|' + (S.coins >= caseCost(c));
+    const key = caseCost(c) + '|' + (S.coins >= caseCost(c)) + '|' + S.keys;
     if (key !== UI.autoKey || !card.childElementCount) { UI.autoKey = key; renderAutoBox(); }
   }
   for (const b of $$('#tab-cases [data-act="openKey"]')) b.disabled = S.keys < 1;
@@ -498,7 +734,7 @@ function dropView(d) {
 // Reel filler rolled with the real odds, so what slides past is what the case really holds.
 function decoy(tier, forceR = null) {
   const r = forceR == null ? weightedIndex(rarityWeights(0)) : forceR;
-  if (Math.random() < PET_CHANCE) {
+  if (S.caseKind === 'pet') {
     const sp = weightedPick(PET_IDS, id => PETS[id].weight);
     return { img: petUrl(sp, false, r), r, label: PETS[sp].name, odds: dropOdds(r) };
   }
@@ -873,7 +1109,7 @@ function showItem(id) {
     <div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}${it.lv ? ' +' + it.lv : ''}</div>
     <div class="rsub">${MATERIALS[it.t].name} (B${(it.t - 1) * MATERIAL_FLOORS + 1}+ material) · ${wearHtml(it)}</div>
-    <div class="rsub">${RARITY[it.r].name} ${WEAR[wearIndex(it.fl)].short} pulls are ${oddsLong(dropOdds(it.r, it.fl))} with your luck</div>
+    <div class="rsub">${RARITY[it.r].name} ${WEAR[wearIndex(it.fl)].short} pulls are ${oddsLong(dropOdds(it.r, it.fl))}</div>
     ${lines}<div class="rsub">Reforging adds +10% to every stat (max +${MAX_ITEM_LEVEL}).</div></div>${cmp}
     <div class="mbtns">${actions}</div>`, { dismissable: true });
 }
@@ -981,13 +1217,14 @@ function buildMore() {
   const gain = prestigeGain();
   const can = canPrestige();
   const nextCase = CASES.find(c => c.prestige === S.prestiges + 1);
+  const pg = powerGain();
   let h = `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
-    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap and cores. Each core adds +10% damage forever.</p>
-    <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor}</div>
-    <div class="big">+${gain} cores</div><div class="small muted">You have ${S.cores} (+${S.cores * 10}% damage)</div></div>
+    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. Power is permanent damage (+10% each) and grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
+    <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
+    <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (+${fmt(S.power * 10)}% → +${fmt((S.power + pg) * 10)}% damage)</div></div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
     ${S.prestiges < 3 ? `<div class="small">Prestige ${S.prestiges < 1 ? 1 : 3} adds a pet slot.</div>` : ''}
-    <div class="small">Every prestige also adds +${Math.round(PRESTIGE_LUCK * 100)}% luck to every case, forever.</div>
+    ${S.prestiges < PRESTIGE_LUCK_MAX ? `<div class="small">Each of your first ${PRESTIGE_LUCK_MAX} prestiges also adds +${Math.round(PRESTIGE_LUCK * 100)}% luck (${S.prestiges}/${PRESTIGE_LUCK_MAX}).</div>` : ''}
     <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : 'Reach B25 to prestige'}</button></div>`;
 
   const st = S.stats;
@@ -1049,6 +1286,7 @@ function showWelcomeBack(res) {
     <p style="text-align:center">Your drill kept digging for ${fmtTime(res.capped)}${res.sec > res.capped ? ` (max ${fmtTime(ST.offlineCap)})` : ''}.</p>
     <div class="big-gain">${icon('coin', '')} +${fmt(res.coins)}</div>
     <div class="kv"><span>XP</span><span>+${fmt(res.xp)}</span><span>Enemies defeated</span><span>${fmt(res.kills)}</span><span>Offline rate</span><span>${Math.round(ST.offlineRate * 100)}%</span></div>
+    ${freshActive() ? `<p class="small" style="text-align:center;color:var(--good)">Fresh Hands: 2× combo and coins for ${fmtClock(S.fresh.left)}${res.sec >= 4 * 3600 ? ', plus a free key' : ''}</p>` : ''}
     <p class="small muted">Double it: tap ${BONUS_TAPS} monsters in a row without one escaping.</p>
     <div class="mbtns"><button class="btn purple" data-act="startBonus">Double it</button><button class="btn good" data-act="close">Collect</button></div>`;
   UI.pendingBonus = { coins: res.coins, xp: res.xp };
@@ -1119,6 +1357,15 @@ on('dailyAuto', res => {
   toast(`Yesterday's login reward collected for you: ${what}`, 'gold', res.keys ? 'key' : res.scrap ? 'scrap' : res.drops ? 'chest' : 'coin');
 });
 on('floor', () => updateFloorBar());
+on('fresh', ({ dur, key }) => { SFX.reveal(2); toast(`Fresh Hands: 2× combo and coins for ${fmtClock(dur)}${key ? ' · +1 key' : ''}`, 'good'); });
+on('freshEnd', () => toast('Fresh Hands ended', ''));
+on('goldRush', ({ kind, floor, mult, left }) => {
+  if (kind === 'mother') { SFX.levelup(); banner('MOTHER LODE', `${mult}× COINS - ${left} KILLS`, '#ffcc4d', 2.4); vibrate([40, 50, 120]); }
+  else { SFX.reveal(1); toast(`Gold vein at B${floor}: ${mult}× coins for the next ${left} kills`, 'gold', 'coin'); }
+  updateFloorBar();
+});
+on('secondWind', ({ streak }) => toast(`Second Wind: back at a ${streak} combo (safe for 10s)`, 'purple'));
+on('tunnel', ({ floor }) => toast(`Tunneler: dropped straight to B${floor}`, 'good'));
 on('newDay', () => { if (!UI.booting) queueModal(showDailyPopup); });
 
 // ---------- input ----------
@@ -1127,15 +1374,35 @@ function handleAction(el) {
   const d = el.dataset;
   switch (a) {
     case 'close': closeModal(); break;
-    case 'autoResume': closeModal(); startAutoRoll(); break;
+    case 'openSkills': closeModal(); UI.skillView = 'web'; showTab('skills'); break;
+    case 'autoResume': closeModal(); startAutoRoll(!!UI.autoKeys); break;
     case 'buyAmt': S.settings.buyAmt = d.v; buildForge(); break;
     case 'buy':
       if (buyUpgrade(d.id)) { SFX.buy(); buildForge(); updateHud(); } else SFX.error();
       break;
-    case 'branch': UI.branch = d.v; buildSkills(); break;
-    case 'skill': tapSkill(d.id); break;
+    case 'caseKind': S.caseKind = d.v === 'pet' ? 'pet' : 'tool'; SFX.click(); buildCases(); break;
+    case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
+    case 'lockSkill': if (lockRank(d.id)) { SFX.buy(); toast('Rank locked: it stays through prestige', 'purple', 'lock'); } buildSkills(); break;
+    case 'unlockSkill': if (unlockRank(d.id)) SFX.click(); buildSkills(); break;
+    case 'autoSkills': { const n = autoSpendSkills(); if (n) { SFX.buy(); toast(`Auto spent ${n} ${n === 1 ? 'point' : 'points'}`, 'good'); } buildSkills(); break; }
+    case 'treeZoom': {
+      const k = Number(d.v);
+      if (k) UI.view.k = clamp(UI.view.k * k, TREE_MIN_K, 2); else UI.view = { cx: 0, cy: 0, k: 0.9 };
+      applyTreeView();
+      break;
+    }
+    case 'buyPrestige': if (buyPrestigeNode(d.id)) { SFX.buy(); refreshAll(); } else SFX.error(); buildSkills(); break;
     case 'respec': {
+      let spent = 0;
+      for (const k in S.run.skills) spent += S.run.skills[k] - (S.locks[k] || 0);
+      if (!spent) { toast('Nothing to refund', ''); break; }
+      openModal(`<h2>Respec?</h2><p>Refund all ${plural(spent, 'point')} so you can rebuild from the middle. It's free. Locked ranks stay.</p>
+        <div class="mbtns"><button class="btn gold" data-act="respecYes">Refund all</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
+      break;
+    }
+    case 'respecYes': {
+      closeModal();
       const n = respecSkills();
       toast(n ? `Refunded ${plural(n, 'point')}` : 'Nothing to refund', '');
       buildSkills();
@@ -1145,6 +1412,7 @@ function handleAction(el) {
     case 'openKey': startOpen(Number(d.t), 'key', 1); break;
     case 'openFree': startOpen(bestCaseTier(), 'free', 1); break;
     case 'autoStart': startAutoRoll(); break;
+    case 'autoStartKeys': startAutoRoll(true); break;
     case 'autoStop': stopAutoRoll(); break;
     case 'autoCase': cycleAutoCase(); break;
     case 'autoStopAt': S.settings.autoStop = S.settings.autoStop >= TOP_RARITY ? 2 : S.settings.autoStop + 1; SFX.click(); renderAutoBox(); break;
@@ -1250,8 +1518,8 @@ function handleAction(el) {
       closeModal();
       if (res) {
         SFX.levelup();
-        banner('MINE COLLAPSED', `+${res.gain} CORES`, '#b76dff', 2.6);
-        toast(`+${res.gain} cores. Damage is now +${S.cores * 10}%`, 'purple', 'core');
+        banner('MINE COLLAPSED', `+${fmt(res.power)} POWER`, '#b76dff', 2.6);
+        toast(`+${fmt(res.power)} power (damage now +${fmt(S.power * 10)}%) and +${res.gain} cores for the Prestige tree`, 'purple', 'core');
         if (res.newCase) toast(`Unlocked: ${res.newCase}`, 'gold', 'chest');
         if (res.newSlot) toast('New pet slot unlocked', 'good');
         showTab('fight');
@@ -1301,11 +1569,13 @@ function askPrestige() {
   const nextCase = CASES.find(c => c.prestige === S.prestiges + 1);
   openModal(`<h2>Collapse the mine?</h2>
     <div class="big-gain" style="color:var(--gambler)">+${gain} cores</div>
-    <div class="kv"><span>Damage bonus</span><span>+${S.cores * 10}% → +${(S.cores + gain) * 10}%</span>
-    <span>You keep</span><span>gear, pets, keys, scrap</span><span>You reset</span><span>coins, floor, Forge, level, skills</span></div>
+    <div class="kv"><span>Power</span><span>+${fmt(powerGain())} (damage +${fmt(S.power * 10)}% → +${fmt((S.power + powerGain()) * 10)}%)</span>
+    <span>Cores</span><span>+${gain} to spend in the Prestige tree</span>
+    <span>You keep</span><span>gear, pets, keys, scrap</span><span>Resets</span><span>coins, floor, Forge, level, skills</span></div>
     ${nextCase ? `<p class="small">Unlocks the ${nextCase.name}.</p>` : ''}
     ${S.prestiges === 0 || S.prestiges === 2 ? '<p class="small">Adds a pet slot.</p>' : ''}
-    <p class="small">Luck +${Math.round(PRESTIGE_LUCK * 100)}% on every case.</p>
+    ${S.prestiges < PRESTIGE_LUCK_MAX ? `<p class="small">Luck +${Math.round(PRESTIGE_LUCK * 100)}% on every case.</p>` : ''}
+    ${locksUsed() ? `<p class="small">${plural(locksUsed(), 'locked skill rank')} stay with you.</p>` : ''}
     <div class="mbtns"><button class="btn purple" data-act="doPrestige">Prestige</button><button class="btn" data-act="close">Not yet</button></div>`, { dismissable: true });
 }
 
@@ -1513,9 +1783,10 @@ function renderAutoBox() {
         <button class="btn small" data-act="autoCase">${c.name}</button>
         <button class="btn small" data-act="autoStopAt">Stop at <span class="tc${stop}">${RARITY[stop].name}+</span></button>
         <button class="btn small" data-act="autoScrap">Scrap: ${salvageLabel(S.settings.autoSalvage)}</button></div>
-      <button class="btn gold wide" data-act="autoStart" ${S.coins < cost ? 'disabled' : ''}>Start · ${costHtml(cost)} per case</button>`;
+      <div class="casebtns"><button class="btn gold" data-act="autoStart" ${S.coins < cost ? 'disabled' : ''}>Start · ${costHtml(cost)} per case</button>
+      <button class="btn purple" data-act="autoStartKeys" ${S.keys < 1 ? 'disabled' : ''}>${icon('key', '')} Use keys (${fmt(S.keys)})</button></div>`;
   } else {
-    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${c.name}: <b>${fmt(a.n)}</b> opened · ${fmt(a.spent)} coins · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
+    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${c.name}: <b>${fmt(a.n)}</b> opened · ${a.keys ? `${plural(a.spent, 'key')} used, ${fmt(S.keys)} left` : fmt(a.spent) + ' coins'} · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
       <div class="odds">${a.counts.map((n, r) => (n ? `<span class="tc${r}">${fmt(n)} ${RARITY[r].name}</span>` : '')).join('')}</div>
       <div class="autorecent">${a.recent.map(v => tileHtml(v, 'mini')).join('')}</div>
       ${a.best ? `<div class="small">Best this session: <span class="tc${a.best.r}">${RARITY[a.best.r].name}</span> · ${oddsLong(a.best.odds)}</div>` : ''}
@@ -1524,12 +1795,14 @@ function renderAutoBox() {
   box.innerHTML = h;
 }
 
-function startAutoRoll() {
+// keys: open with keys instead of coins, until the keys run out.
+function startAutoRoll(keys = false) {
   if (UI.auto) return;
   audioUnlock();
   const tier = autoTier();
-  if (S.coins < caseCost(CASES[tier - 1])) { SFX.error(); toast('Not enough coins yet.', 'bad'); return; }
-  UI.auto = { tier, n: 0, spent: 0, counts: RARITY.map(() => 0), recent: [], best: null, paused: false };
+  if (keys ? S.keys < 1 : S.coins < caseCost(CASES[tier - 1])) { SFX.error(); toast(keys ? 'No keys yet.' : 'Not enough coins yet.', 'bad'); return; }
+  UI.autoKeys = keys;
+  UI.auto = { tier, keys, n: 0, spent: 0, counts: RARITY.map(() => 0), recent: [], best: null, paused: false };
   clearInterval(UI.autoTimer);
   UI.autoTimer = setInterval(autoRollTick, AUTO_ROLL_MS);
   SFX.buy();
@@ -1555,9 +1828,9 @@ function autoRollTick() {
   if (a.paused) { if (!wasPaused) renderAutoBox(); return; }
   if (UI.modalOpen) return;
   const c = CASES[a.tier - 1];
-  const cost = caseCost(c);
-  if (S.coins < cost) { stopAutoRoll(`Auto-roll stopped: out of coins after ${plural(a.n, 'case')}.`); return; }
-  const drops = openCase(a.tier, 'coins', 1);
+  const cost = a.keys ? 1 : caseCost(c);
+  if (a.keys ? S.keys < 1 : S.coins < cost) { stopAutoRoll(`Auto-roll stopped: out of ${a.keys ? 'keys' : 'coins'} after ${plural(a.n, 'case')}.`); return; }
+  const drops = openCase(a.tier, a.keys ? 'key' : 'coins', 1);
   if (!drops) { stopAutoRoll(); return; }
   a.n++;
   a.spent += cost;
