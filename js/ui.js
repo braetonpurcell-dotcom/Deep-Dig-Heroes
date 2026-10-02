@@ -1257,6 +1257,7 @@ function buildMore() {
     ${settingRow('Screen shake', toggleBtn('shake'))}
     ${settingRow('Auto-salvage', `<button class="btn small" data-act="autoScrap">${salvageLabel(S.settings.autoSalvage)}</button>`, 'Scrap new gear at or below this rarity. Tap to change. Upgrades over your equipped gear are always kept.')}
     ${settingRow('Keep screen awake', toggleBtn('wake'), 'Handy for idling. Uses more battery.')}
+    ${settingRow('Share play stats', toggleBtn('stats'), 'Sends how long you play and how far you get (no other phone data) so the developer can balance the game.')}
     ${settingRow('Break reminder', segBtns('breakMin', [[0, 'Off'], [30, '30m'], [60, '60m'], [90, '90m']]))}
   </div>`;
 

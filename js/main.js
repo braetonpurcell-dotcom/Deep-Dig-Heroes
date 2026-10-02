@@ -241,6 +241,8 @@ function boot(hotData) {
   loadReplies();
   flushFeedback();
   setTimeout(() => sendScore(false), 5000);
+  tmStart('open', away);
+  tmFlush(false);
   window.DDH_BOOTED = true;
 }
 

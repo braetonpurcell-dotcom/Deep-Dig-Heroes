@@ -110,7 +110,7 @@ function freshState() {
       prestiges: 0, bestFloor: 1, maxHit: 0, dailyDone: 0, bestLogin: 0, days: {},
     },
     settings: {
-      sound: true, vibe: true,
+      sound: true, vibe: true, stats: true,
       autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA, bagSort: 'new',
     },
   };

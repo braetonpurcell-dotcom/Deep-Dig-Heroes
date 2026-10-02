@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.10.4
+- Play stats: each play session sends a short summary to the developer (how long you played, floors and levels gained, taps and accuracy, pace and multiplier, cases, bosses and so on), plus every prestige and every new best floor at a multiple of 10. It uses the same player name and id as the leaderboard and nothing else about your phone. Turn it off in More > Settings > Share play stats.
+
 ## v1.10.3
 - Bigger multipliers for fast, accurate tapping: the combo ceiling now climbs steeply with the pace you hold (about 80 at 40% pace, 155 at 60%, 210 at 70%, up to 400). In testing, good tappers reach about x16 and very fast ones about x21 with combo skills, up from about x10.
 
