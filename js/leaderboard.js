@@ -88,6 +88,7 @@ async function sendScore(force = false) {
 // Players kept off the board (by player ID), e.g. a broken duplicate account.
 const LB_HIDDEN = new Set([
   'p-muq5jgxxmd2ymf', // Waerin's old glitched save (B12, 6 min), not his real account
+  'p-muqbz6ihqbfiah', // R2-D2: retired, its owner no longer has access to the account
 ]);
 
 function lbValid(e) {

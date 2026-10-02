@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.2
+- Leaderboard: the R2-D2 account is hidden, since its owner no longer has access to it. Everyone else is unaffected.
+
 ## v1.11.1
 - **Learn a whole path in one tap:** on the skill web, pick any node (a Mastery, a keystone like All In, or anything far out) and tap **Learn path**. It spends points along the shortest route for you, and for a Mastery it maxes every node in that branch first. The button shows how many points it takes; if you're short, it goes as far as your points allow. Nodes with several ranks also get a **Learn max** button.
 
