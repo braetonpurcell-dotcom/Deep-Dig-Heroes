@@ -659,6 +659,7 @@ input[type="text"] {
 .treezoom .btn { min-width: 34px; padding: 4px 0; }
 .tnum { font: 700 10px sans-serif; fill: #fff; text-anchor: middle; paint-order: stroke; stroke: #000; stroke-width: 3px; pointer-events: none; }
 .tlabel { font: 12px 'Jersey 10', sans-serif; text-anchor: middle; paint-order: stroke; stroke: #0d0a12; stroke-width: 4px; pointer-events: none; }
+.tlabel.tclass { font-size: 15px; }
 .tglow { animation: tglow 1.2s steps(2) infinite; }
 @keyframes tglow { 50% { opacity: .25; } }
 .nodeinfo .col { display: flex; flex-direction: column; gap: 4px; }
@@ -689,3 +690,6 @@ body.fulltab #stage, body.fulltab #floorbar { display: none; }
   #tab-skills.web .nodeinfo { padding: 6px 8px; min-height: 52px; font-size: 13px; }
   #tab-skills.web > .small:last-child { display: none; }
 }
+.mathmeta .shield.fresh { color: #0d0a12; background: var(--good); padding: 0 4px; animation: pulse 1.6s steps(2) infinite; }
+.mathmeta .shield.rush { color: #2a1a00; background: var(--gold); padding: 0 4px; }
+.mathmeta { flex-wrap: wrap; row-gap: 4px; }

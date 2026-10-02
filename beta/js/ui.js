@@ -167,7 +167,8 @@ function updateHud() {
 function updateFloorBar() {
   const f = S.run.floor;
   $('#fName').textContent = 'B' + f + (isBossFloor(f) ? ' · Boss' : '');
-  $('#fBiome').textContent = biomeName(f) + (S.run.maxFloor > f ? ` · best this run B${S.run.maxFloor}` : '');
+  const vein = nextVein();
+  $('#fBiome').textContent = biomeName(f) + (S.run.maxFloor > f ? ` · best this run B${S.run.maxFloor}` : '') + (vein ? ` · ⛏ vein B${vein}` : '');
   $('#fUp').disabled = f <= 1;
   $('#fDown').disabled = f >= S.run.maxFloor;
   const auto = $('#fAuto');
@@ -256,6 +257,13 @@ function updateFight() {
   const left = (R.shieldUntil || 0) - R.time;
   const shTxt = left > 0 ? `Shield ${left.toFixed(1)}s` : R.shield ? 'Shield ready' : '';
   if (sh.textContent !== shTxt) { sh.textContent = shTxt; sh.hidden = !shTxt; sh.classList.toggle('on', left > 0); }
+  const fr = $('#cFresh');
+  const frTxt = freshActive() ? `Fresh ${fmtClock(S.fresh.left)}` : '';
+  if (fr && fr.textContent !== frTxt) { fr.textContent = frTxt; fr.hidden = !frTxt; }
+  const ru = $('#cRush');
+  const rush = S.run.rush;
+  const ruTxt = rush.left > 0 ? `${rush.mult}× · ${rush.left}` : '';
+  if (ru && ru.textContent !== ruTxt) { ru.textContent = ruTxt; ru.hidden = !ruTxt; ru.title = 'Gold Rush: boosted coins for the next kills'; }
   // The double-it progress lives in the ticker line, so the tap pad never loses space to it.
   if (R.bonusRound && performance.now() >= UI.tickerUntil) {
     const t = $('#ticker');
@@ -362,6 +370,11 @@ UI.skillView = UI.skillView || 'web';
 function skillBlock(id) {
   const n = SKILL_INDEX[id];
   if (skillRank(id) >= n.max) return 'Maxed out.';
+  if (n.kind === 'mastery' && !masteryReady(n.sub)) {
+    const sb = SUB_INDEX[n.sub];
+    const done = sb.nodes.filter(k => skillRank(k) >= SKILL_INDEX[k].max).length;
+    return `Own every node in ${sb.name} first (${done}/${sb.nodes.length} done).`;
+  }
   if (!nodeReachable(id)) {
     const d = pathDistance(id);
     return `Not connected yet: ${d} more ${d === 1 ? 'node' : 'nodes'} along the path to reach it.`;
@@ -387,7 +400,7 @@ function pathDistance(id) {
   return d;
 }
 
-function nodeKindName(n) { return n.kind === 'key' ? 'Keystone' : n.kind === 'big' ? 'Skill' : 'Node'; }
+function nodeKindName(n) { return { key: 'Keystone', big: 'Skill', mastery: 'Mastery', class: 'Class' }[n.kind] || 'Node'; }
 
 function skillInfoHtml(id) {
   const n = SKILL_INDEX[id];
@@ -400,7 +413,7 @@ function skillInfoHtml(id) {
   if (canLockRank(id)) btns += `<button class="btn purple small" data-act="lockSkill" data-id="${id}">${icon('lock')} Lock</button>`;
   if (lk) btns += `<button class="btn small" data-act="unlockSkill" data-id="${id}">Unlock</button>`;
   return `<div class="row"><div class="grow"><b style="color:${b.color}">${n.name}</b>
-    <span class="muted small">${nodeKindName(n)} · ${b.name}${n.max > 1 ? ` · ${skillRank(id)}/${n.max}` : skillRank(id) ? ' · owned' : ''}${lk ? ` · ${lk} locked` : ''}</span><br>
+    <span class="muted small">${nodeKindName(n)} · ${b.name}${n.sub ? ' · ' + SUB_INDEX[n.sub].name : ''}${n.max > 1 ? ` · ${skillRank(id)}/${n.max}` : skillRank(id) ? ' · owned' : ''}${lk ? ` · ${lk} locked` : ''}</span><br>
     <span class="small">${n.desc}</span>${block && skillRank(id) < n.max ? `<br><span class="small" style="color:var(--bad)">${block}</span>` : ''}</div>
     <div class="col">${btns}</div></div>`;
 }
@@ -424,7 +437,7 @@ function treeSvg() {
     const rank = skillRank(n.id);
     const can = canLearn(n.id);
     const reach = nodeReachable(n.id);
-    const r = n.kind === 'key' ? 19 : n.kind === 'big' ? 15 : 9;
+    const r = { key: 19, big: 15, mastery: 17, class: 21 }[n.kind] || 9;
     const fill = rank >= n.max ? col : rank > 0 ? col : '#17121f';
     const stroke = rank > 0 || can ? col : reach ? '#8a7f9c' : '#4a4058';
     const op = rank > 0 || reach ? 1 : 0.55;
@@ -433,15 +446,24 @@ function treeSvg() {
     if (sel) dots += `<circle cx="${x}" cy="${y}" r="${r + 7}" fill="none" stroke="#fff" stroke-width="2"/>`;
     if (can) dots += `<circle cx="${x}" cy="${y}" r="${r + 4}" fill="none" stroke="${col}" stroke-width="2" class="tglow"/>`;
     if (n.kind === 'key') dots += `<rect x="${x - r}" y="${y - r}" width="${2 * r}" height="${2 * r}" transform="rotate(45 ${x} ${y})" fill="${fill}" stroke="${stroke}" stroke-width="3"/>`;
+    else if (n.kind === 'mastery') dots += `<polygon points="${starPoints(x, y, r)}" fill="${rank ? 'var(--gold)' : '#17121f'}" stroke="${rank || can ? 'var(--gold)' : stroke}" stroke-width="3"/>`;
     else dots += `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${n.kind === 'big' ? 3 : 2}"/>`;
     if (rank > 0 && rank < n.max) dots += `<circle cx="${x}" cy="${y}" r="${r - 5}" fill="#17121f"/>`;
     if (n.max > 1) dots += `<text x="${x}" y="${y + 4}" class="tnum">${rank}/${n.max}</text>`;
     if (S.locks[n.id]) dots += `<circle cx="${x + r * 0.8}" cy="${y - r * 0.8}" r="5" fill="var(--gold)" stroke="#000"/>`;
     // A wide invisible hit area so small nodes are easy to tap.
     dots += `<circle cx="${x}" cy="${y}" r="${Math.max(r + 6, 20)}" fill="transparent"/></g>`;
-    if (n.kind !== 'small') labels += `<text x="${x}" y="${y + r + 14}" class="tlabel" fill="${rank > 0 ? col : '#b9aec9'}">${n.name}</text>`;
+    if (n.kind !== 'small') labels += `<text x="${x}" y="${y + r + 14}" class="tlabel ${n.kind === 'class' ? 'tclass' : ''}" fill="${n.kind === 'mastery' ? (rank ? 'var(--gold)' : '#d9c58a') : rank > 0 || n.kind === 'class' ? col : '#b9aec9'}">${n.name}</text>`;
   }
   return lines + dots + labels;
+}
+function starPoints(x, y, r) {
+  const p = [];
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.48 : r;
+    p.push(`${Math.round((x + Math.cos(a) * rr) * 10) / 10},${Math.round((y + Math.sin(a) * rr) * 10) / 10}`);
+  }
+  return p.join(' ');
 }
 
 function treeTransform() {
@@ -472,6 +494,12 @@ function buildSummary() {
   if (fx.xp) parts.push(`XP +${pct(fx.xp)}`);
   if (fx.crit) parts.push(`Crit +${Math.round(fx.crit * 1000) / 10}%`);
   if (fx.critdmg) parts.push(`Crit damage +${pct(fx.critdmg)}`);
+  if (fx.cap) parts.push(`Max combo +${fx.cap}`);
+  if (fx.disc) parts.push(`Cases ${pct(fx.disc)} cheaper`);
+  if (fx.scrap) parts.push(`Scrap +${pct(fx.scrap)}`);
+  if (fx.ore) parts.push(`Lucky ores +${pct(fx.ore)}`);
+  const m = TREE_SUBS.filter(sb => skillRank(sb.mastery)).map(sb => sb.name);
+  if (m.length) parts.push(`Masteries: ${m.join(', ')}`);
   return parts.length ? parts.join(' · ') : 'Nothing yet. Every point you spend shows up here.';
 }
 
@@ -511,12 +539,14 @@ function buildPrestigeTree() {
     const cost = ptCost(n.id);
     h += `<div class="card row"><div class="grow"><b>${n.name}</b> <span class="muted small">Lv ${lv}</span><br>
       <span class="small">${n.desc} per level${lv ? ` · now ${ptTotal(n, lv)}` : ''}</span></div>
-      <button class="btn purple small" data-act="buyPrestige" data-id="${n.id}" ${S.cores >= cost ? '' : 'disabled'}>${fmt(cost)} cores</button></div>`;
+      ${ptMaxed(n.id) ? '<button class="btn small" disabled>Maxed</button>'
+        : `<button class="btn purple small" data-act="buyPrestige" data-id="${n.id}" ${S.cores >= cost ? '' : 'disabled'}>${fmt(cost)} cores</button>`}</div>`;
   }
   $('#tab-skills').innerHTML = h;
 }
 function ptTotal(n, lv) {
   if (n.id === 'headstart') return `+${2 * lv} points`;
+  if (n.id === 'secondwind') return `${10 * lv}% of your best combo`;
   if (n.id === 'memory') return `${lv} ${lv === 1 ? 'lock' : 'locks'}`;
   return `+${(n.id === 'favor' ? 10 : 25) * lv}%`;
 }
@@ -1188,7 +1218,6 @@ function buildMore() {
     <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. Power is permanent damage (+10% each) and grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
     <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
     <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (+${fmt(S.power * 10)}% → +${fmt((S.power + pg) * 10)}% damage)</div></div>
-    <div class="small">Tip: in testing, prestiging somewhere between B75 and B150 grew strongest. Waiting a long time while stuck is wasted time.</div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
     ${S.prestiges < 3 ? `<div class="small">Prestige ${S.prestiges < 1 ? 1 : 3} adds a pet slot.</div>` : ''}
     ${S.prestiges < PRESTIGE_LUCK_MAX ? `<div class="small">Each of your first ${PRESTIGE_LUCK_MAX} prestiges also adds +${Math.round(PRESTIGE_LUCK * 100)}% luck (${S.prestiges}/${PRESTIGE_LUCK_MAX}).</div>` : ''}
@@ -1253,6 +1282,7 @@ function showWelcomeBack(res) {
     <p style="text-align:center">Your drill kept digging for ${fmtTime(res.capped)}${res.sec > res.capped ? ` (max ${fmtTime(ST.offlineCap)})` : ''}.</p>
     <div class="big-gain">${icon('coin', '')} +${fmt(res.coins)}</div>
     <div class="kv"><span>XP</span><span>+${fmt(res.xp)}</span><span>Enemies defeated</span><span>${fmt(res.kills)}</span><span>Offline rate</span><span>${Math.round(ST.offlineRate * 100)}%</span></div>
+    ${freshActive() ? `<p class="small" style="text-align:center;color:var(--good)">Fresh Hands: 2× combo and coins for ${fmtClock(S.fresh.left)}${res.sec >= 4 * 3600 ? ', plus a free key' : ''}</p>` : ''}
     <p class="small muted">Double it: tap ${BONUS_TAPS} monsters in a row without one escaping.</p>
     <div class="mbtns"><button class="btn purple" data-act="startBonus">Double it</button><button class="btn good" data-act="close">Collect</button></div>`;
   UI.pendingBonus = { coins: res.coins, xp: res.xp };
@@ -1323,6 +1353,14 @@ on('dailyAuto', res => {
   toast(`Yesterday's login reward collected for you: ${what}`, 'gold', res.keys ? 'key' : res.scrap ? 'scrap' : res.drops ? 'chest' : 'coin');
 });
 on('floor', () => updateFloorBar());
+on('fresh', ({ dur, key }) => { SFX.reveal(2); toast(`Fresh Hands: 2× combo and coins for ${fmtClock(dur)}${key ? ' · +1 key' : ''}`, 'good'); });
+on('freshEnd', () => toast('Fresh Hands ended', ''));
+on('goldRush', ({ kind, floor, mult, left }) => {
+  if (kind === 'mother') { SFX.levelup(); banner('MOTHER LODE', `${mult}× COINS · ${left} KILLS`, '#ffcc4d', 2.4); vibrate([40, 50, 120]); }
+  else { SFX.reveal(1); toast(`Gold vein at B${floor}: ${mult}× coins for the next ${left} kills`, 'gold', 'coin'); }
+  updateFloorBar();
+});
+on('secondWind', ({ streak }) => toast(`Second Wind: back at a ${streak} combo (safe for 10s)`, 'purple'));
 on('tunnel', ({ floor }) => toast(`Tunneler: dropped straight to B${floor}`, 'good'));
 on('newDay', () => { if (!UI.booting) queueModal(showDailyPopup); });
 

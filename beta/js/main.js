@@ -75,6 +75,7 @@ function onVisibility() {
   if (away >= 300) startPaceSession();
   if (away >= 60) {
     const res = applyOffline(away);
+    welcomeBack(away);
     if (res && res.coins > 0) queueModal(() => showWelcomeBack(res));
   } else if (away >= 10) {
     const res = applyOffline(away);
@@ -201,19 +202,24 @@ function boot(hotData) {
 
   const away = base ? (Date.now() - (S.lastSeen || Date.now())) / 1000 : 0;
   const offline = away >= 60 ? applyOffline(away) : null;
+  if (base) welcomeBack(away);
   UI.booting = false;
   if (!base) queueModal(showIntro);
   if (broken) toast('Your save could not be read, so the game started fresh. A copy was kept.', 'bad');
   if (S.migratedSkills != null) {
-    const n = S.migratedSkills;
     const rebuilt = rebuildOldSkills(S.oldSkills);
+    const fromV2 = !!S.fromV2;
     delete S.migratedSkills;
     delete S.oldSkills;
+    delete S.fromV2;
     recalc();
-    queueModal(() => openModal(`<h2>New: the skill web</h2>
-      <p>Skills are now a web you grow from the middle, with four directions: Fighter, Tycoon, Gambler and Miner. Your ${rebuilt} skill ${rebuilt === 1 ? 'rank was' : 'ranks were'} rebuilt in the web, and the small nodes on the paths to them are free${S.run.sp ? `. You have ${S.run.sp} ${S.run.sp === 1 ? 'point' : 'points'} to spend` : ''}. Respec any time to try a different route.</p>
+    const kept = `Your ${rebuilt} skill ${rebuilt === 1 ? 'rank was' : 'ranks were'} rebuilt along the new paths, and the small nodes on the way are free${S.run.sp ? `. You have ${S.run.sp} ${S.run.sp === 1 ? 'point' : 'points'} to spend` : ''}. Respec any time to try a different route.`;
+    queueModal(() => openModal(fromV2 ? `<h2>New: the skill web</h2>
+      <p>Skills are now a web you grow from the middle. Each class (Fighter, Tycoon, Gambler, Miner) splits into three branches, like Coins, XP and Speed, and each branch forks toward named skills. Own a whole branch to unlock its Mastery. ${kept}</p>
       <p>Prestige now gives <b>power</b> (permanent damage that grows with the level you reach) and <b>cores</b> to spend in the new Prestige tree, including locks that keep chosen skills through every prestige. Your cores so far became power, and you also kept them to spend.</p>
       <p>Cases now come in Tool and Pet versions, and every odds number shows the raw chance, with no luck mixed in.</p>
+      <div class="mbtns"><button class="btn gold" data-act="close">Let's see</button></div>` : `<h2>Skill web redesigned</h2>
+      <p>Each class now splits into three branches (like Coins, XP and Speed) that fork toward named skills, and owning a whole branch unlocks its Mastery. ${kept}</p>
       <div class="mbtns"><button class="btn gold" data-act="close">Let's see</button></div>`, { dismissable: true }));
   }
   if (S.bonusRound) toast(`Your double-it round is still on: ${BONUS_TAPS} taps in a row`, 'purple');

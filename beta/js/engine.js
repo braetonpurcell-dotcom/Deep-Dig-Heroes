@@ -63,6 +63,8 @@ function freshRun() {
     floor: 1, maxFloor: 1, kills: 0, auto: true,
     level: 1, xp: 0, sp: 0, skills: {}, upg: {}, bossDone: {}, cases: 0,
     started: Date.now(), recordAnnounced: false,
+    rush: { left: 0, mult: 1 }, // Gold Rush: kills left at the boosted coin rate
+    bestCombo: 0, // best combo this run (for Second Wind)
   };
 }
 
@@ -73,9 +75,11 @@ function freshState() {
     v: SAVE_VERSION, created: Date.now(), savedAt: 0, lastSeen: Date.now(),
     coins: 0, keys: 0, scrap: 0, cores: 0, trophies: 0, prestiges: 0, nextId: 1,
     power: 0, // permanent damage from the levels reached in past runs (+10% per point)
+    treeV: TREE_VERSION, // skill web layout version (see migrateTree)
     ptree: {}, // prestige tree levels, bought with cores
     locks: {}, // skill ranks kept through prestige (node id -> ranks)
     caseKind: 'tool', // which cases you open: 'tool' (gear) or 'pet'
+    fresh: { left: 0 }, // Fresh Hands seconds left (counts down only while the game is open)
     pityPet: { epic: 0, leg: 0 },
     run: freshRun(),
     math: { streak: 0 }, // the tap combo (the key name is kept so old saves load)
@@ -143,14 +147,38 @@ const nonNegInt = (v, d = 0) => (Number.isInteger(v) && v >= 0 ? v : d);
 // Version 1 had 5 materials (Copper, Iron, Gold, Crystal, Void). They keep their name and
 // their power in the 21-material list, where they sit at 1, 5, 9, 13 and 17.
 function migrateSave(obj) {
-  if (!obj || typeof obj !== 'object' || (obj.v || 1) >= 3) return obj;
-  if ((obj.v || 1) >= 2) return migrateV3(obj);
+  if (!obj || typeof obj !== 'object') return obj;
+  if ((obj.v || 1) >= 3) return migrateTree(obj);
+  if ((obj.v || 1) >= 2) return migrateTree(migrateV3(obj));
   const remap = it => { if (it && Number.isInteger(it.t) && it.t >= 1 && it.t <= 5) it.t = 1 + MATERIALS_PER_CASE * (it.t - 1); };
   const g = obj.gear || {};
   if (g.eq && typeof g.eq === 'object') Object.values(g.eq).forEach(remap);
   if (Array.isArray(g.bag)) g.bag.forEach(remap);
   obj.v = 2;
-  return migrateV3(obj);
+  return migrateTree(migrateV3(obj));
+}
+
+// When the skill web's layout changes, every point is refunded and the named skills you had are
+// rebuilt along the new paths on load (with the path nodes free), so nobody loses their build.
+function migrateTree(obj) {
+  if ((obj.treeV || 1) >= TREE_VERSION) return obj;
+  const run = obj.run && typeof obj.run === 'object' ? obj.run : null;
+  if (run && run.skills && typeof run.skills === 'object') {
+    let refund = 0;
+    const named = { ...(obj.oldSkills || {}) };
+    for (const k of Object.keys(run.skills)) {
+      const v = Math.max(0, Math.floor(Number(run.skills[k]) || 0));
+      refund += v;
+      if (NAMED[k]) named[k] = Math.max(named[k] || 0, v);
+    }
+    run.skills = {};
+    run.sp = (Number(run.sp) || 0) + refund;
+    obj.oldSkills = named;
+    obj.migratedSkills = (Number(obj.migratedSkills) || 0) + refund;
+  }
+  if (obj.locks && typeof obj.locks === 'object') for (const k of Object.keys(obj.locks)) if (!NAMED[k]) delete obj.locks[k];
+  obj.treeV = TREE_VERSION;
+  return obj;
 }
 
 // v3: the skill web replaces the three skill lists (points are refunded), and prestige damage moves
@@ -164,6 +192,7 @@ function migrateV3(obj) {
     obj.run.skills = {};
     obj.run.sp = (Number(obj.run.sp) || 0) + refund;
     obj.migratedSkills = refund;
+    obj.fromV2 = true;
   }
   obj.power = Number(obj.cores) || 0;
   obj.v = 3;
@@ -187,6 +216,12 @@ function hydrate(obj) {
   if (s.caseKind !== 'pet') s.caseKind = 'tool';
   if (!s.pityPet || typeof s.pityPet !== 'object') s.pityPet = { epic: 0, leg: 0 };
   s.pityPet.epic = nonNegInt(s.pityPet.epic); s.pityPet.leg = nonNegInt(s.pityPet.leg);
+  if (!s.fresh || typeof s.fresh !== 'object') s.fresh = { left: 0 };
+  s.fresh.left = clamp(nonNeg(s.fresh.left), 0, FRESH_MAX);
+  if (!s.run.rush || typeof s.run.rush !== 'object') s.run.rush = { left: 0, mult: 1 };
+  s.run.rush.left = Math.min(200, nonNegInt(s.run.rush.left));
+  s.run.rush.mult = s.run.rush.mult === 3 ? 3 : 2;
+  s.run.bestCombo = nonNegInt(s.run.bestCombo);
   s.nextId = nonNegInt(s.nextId, 1);
   // Run and combo numbers.
   const run = s.run;
@@ -363,22 +398,22 @@ function computeStats() {
   st.deepDiver = sk('deepdiver') > 0;
   st.baseDmg = sharpenDamage(up('sharpen'));
   st.dmgMult = (1 + add.dmg) * (1 + 0.02 * branchPoints('brawler')) * (1 + (fx.dmg || 0))
-    * (1 + TUNE.coreBonus * S.power) * (1 + 0.25 * ptLevel('might')) * trophy * coll;
+    * (1 + TUNE.coreBonus * S.power) * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1);
   st.hit = st.baseDmg * st.dmgMult;
   st.aps = 1.25 * (1 + 0.04 * up('fury')) * (1 + add.aps + 0.1 * sk('autodrill'))
-    * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner'));
+    * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner')) * (1 + 0.08 * sk('overclock')) * (sk('m-speed') ? 1.3 : 1);
   st.critChance = Math.min(0.75, 0.05 + 0.015 * up('crit') + add.crit + (fx.crit || 0) + 0.02 * sk('seismic'));
-  st.critMult = 2 + 0.15 * up('critdmg') + add.critdmg + (fx.critdmg || 0);
+  st.critMult = 2 + 0.15 * up('critdmg') + add.critdmg + (fx.critdmg || 0) + (sk('m-crits') ? 0.5 : 0);
   if (sk('earthquake')) { st.critChance *= 0.5; st.critMult *= 2; }
   st.dps = st.hit * st.aps * (1 + st.critChance * (st.critMult - 1));
-  st.strikeMult = (1 + 0.1 * up('brain')) * (1 + 0.2 * sk('quickwit')) * (1 + add.strike) * (1 + (fx.strike || 0));
+  st.strikeMult = (1 + 0.1 * up('brain')) * (1 + 0.2 * sk('quickwit')) * (1 + add.strike) * (1 + (fx.strike || 0)) * (sk('m-strike') ? 2 : 1);
   st.perfectBonus = PERFECT_BONUS * (1 + 0.2 * sk('perfectionist'));
   st.shieldEvery = SHIELD_EVERY - 2 * sk('steady');
   st.lossMult = sk('limitbreak') ? 2 : 1;
   st.hpMult = st.deepDiver ? 1.3 : 1;
-  st.skip = 0.05 * sk('tunneler');
-  st.oreMult = 1 + 0.25 * sk('prospector');
-  st.comboPer = 0.05 + 0.01 * sk('adrenaline');
+  st.skip = 0.05 * sk('tunneler') * (sk('m-depth') ? 2 : 1);
+  st.oreMult = (1 + 0.25 * sk('prospector')) * (sk('m-ores') ? 2 : 1);
+  st.comboPer = 0.05 + 0.01 * sk('adrenaline') + (sk('m-combo') ? 0.01 : 0);
   // The tap pad's own difficulty is the real limit on the combo.
   st.comboCap = paceComboCap();
   st.comboKeep = Math.min(0.96, TAP_KEEP + 0.02 * sk('ironmind'));
@@ -386,23 +421,29 @@ function computeStats() {
   st.bossMult = 1 + 0.3 * sk('executioner');
   st.overdrive = sk('overdrive') > 0;
   st.goldDrill = sk('golddrill') > 0 ? GOLD_DRILL : 1;
-  st.boost = Date.now() < S.boostUntil ? 2 : 1;
+  // The 2x coin boost and Fresh Hands don't stack: either one doubles coins.
+  st.boost = Date.now() < S.boostUntil || freshActive() ? 2 : 1;
   st.coinMult = (1 + 0.1 * up('magnet')) * (1 + add.coin) * (1 + 0.15 * sk('greed'))
     * (1 + 0.02 * branchPoints('tycoon')) * (1 + 0.003 * sk('compound') * S.run.maxFloor)
-    * trophy * coll * st.boost * (1 + (fx.coin || 0)) * (1 + 0.25 * ptLevel('fortune')) * (st.deepDiver ? 1.6 : 1);
-  st.xpMult = (1 + 0.1 * up('scholar')) * (1 + add.xp) * (1 + (fx.xp || 0)) * (1 + 0.25 * ptLevel('wisdom')) * (st.deepDiver ? 1.6 : 1);
-  st.luck = add.luck + 0.1 * sk('lucky') + 0.02 * branchPoints('gambler') + PRESTIGE_LUCK * Math.min(S.prestiges, PRESTIGE_LUCK_MAX)
-    + (fx.luck || 0) + 0.1 * ptLevel('favor') + (sk('allin') ? 1.5 : 0);
+    * trophy * coll * st.boost * (1 + (fx.coin || 0)) * (1 + 0.25 * ptLevel('fortune')) * (st.deepDiver ? 1.6 : 1) * (sk('m-coins') ? 1.5 : 1);
+  st.xpMult = (1 + 0.1 * up('scholar')) * (1 + add.xp) * (1 + (fx.xp || 0)) * (1 + 0.25 * ptLevel('wisdom')) * (st.deepDiver ? 1.6 : 1)
+    * (1 + 0.1 * sk('insight')) * (sk('m-xp') ? 1.5 : 1);
+  // The Gambler's luck multiplies all your luck (gear, prestige), so a luck build really is the luckiest.
+  const treeLuck = 0.1 * sk('lucky') + 0.02 * branchPoints('gambler') + (fx.luck || 0);
+  st.luck = (add.luck + PRESTIGE_LUCK * Math.min(S.prestiges, PRESTIGE_LUCK_MAX) + 0.1 * ptLevel('favor')) * (1 + treeLuck)
+    * (sk('allin') ? 2.5 : 1) * (sk('m-luck') ? 1.5 : 1) + treeLuck;
+  st.rareBoost = sk('m-luck') ? 1.5 : 1; // Luck Mastery: Legendary and up 1.5x more likely, on top of luck
   st.caseCostMult = sk('allin') ? 1.5 : 1;
-  st.caseDiscount = 0.06 * sk('haggler');
+  st.caseDiscount = Math.min(0.6, 0.06 * sk('haggler') + (fx.disc || 0));
   st.epicPity = EPIC_PITY - 2 * sk('pity');
-  st.scrapMult = 1 + 0.25 * sk('scrapper');
-  st.bonusItem = 0.06 * sk('doubledown');
+  st.scrapMult = 1 + 0.25 * sk('scrapper') + (fx.scrap || 0);
+  st.bonusItem = 0.06 * sk('doubledown') + (sk('m-cases') ? 0.1 : 0);
   st.bonusKey = 0.25 * sk('keymaster');
+  st.bossKeys = sk('m-loot') ? 1 : 0;
   st.jackpot = sk('jackpot') > 0 ? 2 : 1;
   st.offlineRate = 0.4 + 0.1 * sk('nightshift') + (sk('ledger') ? 0.4 : 0);
   st.offlineCap = (4 + 2 * sk('deeppockets')) * 3600;
-  st.oreRate = 1 + 0.2 * sk('oresense');
+  st.oreRate = 1 + 0.2 * sk('oresense') + (fx.ore || 0);
   return st;
 }
 
@@ -427,7 +468,7 @@ function gainXp(x) {
   while (run.xp >= xpNeed(run.level)) {
     run.xp -= xpNeed(run.level);
     run.level++;
-    run.sp++;
+    run.sp += 1 + (run.level % 10 === 0 ? skillRank('quickstudy') : 0);
     ups++;
     if (ups > 500) { run.xp = 0; break; }
   }
@@ -483,6 +524,11 @@ function killEnemy(e) {
   let coins = coinUnit(f) * def.coin * ST.coinMult;
   let xp = xpUnit(f) * def.xp * ST.xpMult;
   if (e.boss) { coins *= 10; xp *= 8; }
+  const rush = S.run.rush;
+  if (rush.left > 0) {
+    coins *= rush.mult;
+    if (--rush.left === 0) emit('rushEnd', {});
+  }
   addCoins(coins);
   S.stats.kills++;
   track('kill');
@@ -501,7 +547,7 @@ function killEnemy(e) {
     track('boss');
     if (!S.run.bossDone[f]) {
       S.run.bossDone[f] = 1;
-      const k = 1 + (Math.random() < ST.bonusKey ? 1 : 0);
+      const k = 1 + ST.bossKeys + (Math.random() < ST.bonusKey ? 1 : 0);
       S.keys += k;
       emit('bossDown', { keys: k, name: e.name });
     } else {
@@ -539,6 +585,8 @@ function changeFloor(f) {
   R.atkT = 0;
   if (f > S.run.maxFloor) {
     S.run.maxFloor = f;
+    const v = veinKind(f);
+    if (v) startGoldRush(v, f);
     if (skillRank('compound')) recalc();
   }
   if (f > S.stats.bestFloor) {
@@ -681,7 +729,7 @@ const PACE_HOLD_TIME = 20;
 function paceComboCap() {
   const k = clamp(((R.paceHold || 0) - PACE_LOW) / (PACE_HIGH - PACE_LOW), 0, 1);
   return Math.max(10, Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * k) + 4 * skillRank('momentum')
-    + (skillRank('limitbreak') ? 40 : 0) - (skillRank('ledger') ? 20 : 0));
+    + (skillRank('limitbreak') ? 40 : 0) - (skillRank('ledger') ? 20 : 0) + (treeFx().cap || 0));
 }
 // Each step counts in proportion to the time since the previous tap or escape, so the climb takes
 // about as long for everyone while the ~88% hit-rate balance stays the same.
@@ -723,7 +771,8 @@ function tapHit(quality) {
     R.cleanHits = 0;
     emit('shield', { on: false, ready: true });
   }
-  S.math.streak++;
+  S.math.streak += freshActive() ? 2 : 1; // Fresh Hands builds the combo twice as fast
+  if (S.math.streak > S.run.bestCombo) S.run.bestCombo = S.math.streak;
   R.lastAnswer = R.time;
   R.decayAcc = 0;
   const st = S.stats;
@@ -771,8 +820,8 @@ function tapMiss() {
     R.shieldUntil = R.time + SHIELD_TIME + 1.5 * comboFill();
     emit('shield', { on: true, until: R.shieldUntil });
   }
-  if (shieldActive()) {
-    // The shield protects the combo, but the pace still eases off so it stays comfortable.
+  if (shieldActive() || R.time < (R.windUntil || 0)) {
+    // The shield (or a fresh Second Wind) protects the combo, but the pace still eases off so it stays comfortable.
     paceStep(-PACE_DOWN);
     const res = { ok: false, lost: 0, shielded: true, streak: S.math.streak, bonus: null };
     emit('tap', res);
@@ -882,7 +931,11 @@ function step(dt) {
   if (R.frenzyT > 0) R.frenzyT = Math.max(0, R.frenzyT - dt);
   if (R.swingT > 0) R.swingT = Math.max(0, R.swingT - dt);
 
-  if (S.math.streak > 0 && R.time - R.lastAnswer > ST.decay) {
+  if (freshActive()) {
+    S.fresh.left = Math.max(0, S.fresh.left - dt);
+    if (S.fresh.left === 0) { recalc(); emit('freshEnd', {}); }
+  }
+  if (S.math.streak > 0 && R.time - R.lastAnswer > ST.decay && R.time >= (R.windUntil || 0)) {
     R.decayAcc += dt;
     while (R.decayAcc >= COMBO_FADE_STEP && S.math.streak > 0) {
       R.decayAcc -= COMBO_FADE_STEP;
@@ -996,6 +1049,11 @@ function canLearn(id) {
   if (!n) return false;
   return S.run.sp > 0 && skillRank(id) < n.max && nodeReachable(id);
 }
+// A Mastery opens once every node in its branch is maxed (keystones aside).
+function masteryReady(subId) {
+  const sb = SUB_INDEX[subId];
+  return !!sb && sb.nodes.every(id => skillRank(id) >= SKILL_INDEX[id].max);
+}
 // Shortest route through the web from what you own to a node; learns the first step on it.
 function learnToward(target) {
   if (!SKILL_INDEX[target] || skillRank(target) >= SKILL_INDEX[target].max) return false;
@@ -1044,6 +1102,7 @@ function rebuildOldSkills(old) {
 // A node opens once a neighbour is owned (the centre counts as owned).
 function nodeReachable(id) {
   if (skillRank(id) > 0) return true;
+  if (SKILL_INDEX[id] && SKILL_INDEX[id].kind === 'mastery') return masteryReady(SKILL_INDEX[id].sub);
   return (TREE_ADJ[id] || []).some(o => o === 'core' || skillRank(o) > 0);
 }
 
@@ -1083,7 +1142,7 @@ function effectiveLuck() { const l = Math.max(0, ST.luck); return (10 * l) / (l 
 function luckPower(i) { return 0.35 * Math.min(i, 4) + 0.08 * Math.max(0, i - 4); }
 function rarityWeights(minR = 0) {
   const L = 1 + effectiveLuck();
-  return RARITY.map((r, i) => (i < minR ? 0 : r.weight * Math.pow(L, luckPower(i)) * (i >= 3 ? ST.jackpot : 1)));
+  return RARITY.map((r, i) => (i < minR ? 0 : r.weight * Math.pow(L, luckPower(i)) * (i >= 3 ? ST.jackpot * ST.rareBoost : 1)));
 }
 
 function rarityOdds() {
@@ -1544,6 +1603,72 @@ function claimableCounts() {
   return { daily: S.daily.claimed ? 0 : 1, quests, bonus: questBonusReady() ? 1 : 0, ach };
 }
 
+// ---------- coming back ----------
+// Fresh Hands: back after more than an hour away, the combo builds twice as fast and coins are
+// doubled for 3 minutes (1 hour away) up to 15 minutes (8+ hours), plus a key after 4+ hours.
+const FRESH_MIN_AWAY = 3600;
+const FRESH_MAX = 900;
+function freshActive() { return !!(S.fresh && S.fresh.left > 0); }
+function grantFreshHands(away) {
+  if (!(away > FRESH_MIN_AWAY)) return null;
+  const dur = Math.round(clamp(180 + ((away - FRESH_MIN_AWAY) / (7 * 3600)) * (FRESH_MAX - 180), 180, FRESH_MAX));
+  S.fresh.left = Math.max(S.fresh.left, dur);
+  const key = away >= 4 * 3600;
+  if (key) S.keys++;
+  recalc();
+  const res = { dur, key };
+  emit('fresh', res);
+  return res;
+}
+// Second Wind (prestige tree): start back with part of your best combo this run, safe for 10s.
+function secondWind() {
+  const lv = ptLevel('secondwind');
+  if (!lv) return 0;
+  const target = Math.floor(S.run.bestCombo * 0.1 * lv);
+  if (target <= S.math.streak) return 0;
+  S.math.streak = target;
+  R.windUntil = R.time + 10;
+  R.lastAnswer = R.time;
+  R.decayAcc = 0;
+  emit('secondWind', { streak: target });
+  return target;
+}
+// Coming back after a break (60s or more): Second Wind, and Fresh Hands after an hour.
+function welcomeBack(away) {
+  if (!(away >= 60)) return null;
+  secondWind();
+  return grantFreshHands(away);
+}
+
+// ---------- gold veins ----------
+// About 1 in 10 regular floors is a gold vein (Prospector adds 2% per rank) and 1 in 100 is a
+// Mother Lode. Reaching one for the first time in a run starts a Gold Rush: the next 20 kills pay
+// 2x coins (30 kills at 3x for a Mother Lode). It's decided per floor from the run's start time,
+// so the floor bar can show the next vein ahead of time.
+function veinRoll(f) {
+  let h = (Math.floor(S.run.started / 1000) ^ Math.imul(f, 2654435761)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 2246822507) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 3266489909) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function veinKind(f) {
+  if (isBossFloor(f) || f < 2) return null;
+  const r = veinRoll(f);
+  if (r < 0.01) return 'mother';
+  return r < 0.1 + 0.02 * skillRank('prospector') ? 'vein' : null;
+}
+function nextVein() {
+  for (let f = S.run.maxFloor + 1; f <= S.run.maxFloor + 3; f++) if (veinKind(f)) return f;
+  return 0;
+}
+function startGoldRush(kind, f) {
+  const r = S.run.rush;
+  const mother = kind === 'mother';
+  r.mult = Math.max(r.left > 0 ? r.mult : 1, mother ? 3 : 2); // a running Mother Lode keeps its 3x
+  r.left = Math.min(200, r.left + (mother ? 30 : 20));
+  emit('goldRush', { kind, floor: f, left: r.left, mult: r.mult });
+}
+
 // ---------- prestige ----------
 // Prestiging pays two things. Power (+10% damage each, forever) grows with the square of the level
 // you reached, so deep runs count for much more than quick ones. Cores are spent in the prestige tree.
@@ -1591,8 +1716,9 @@ function ptCost(id) {
   const lv = ptLevel(id);
   return n.step ? n.base + n.step * lv : Math.ceil(n.base * Math.pow(n.growth, lv));
 }
+function ptMaxed(id) { const n = PRESTIGE_TREE.find(x => x.id === id); return !!(n && n.max && ptLevel(id) >= n.max); }
 function buyPrestigeNode(id) {
-  if (!PRESTIGE_TREE.some(x => x.id === id)) return false;
+  if (!PRESTIGE_TREE.some(x => x.id === id) || ptMaxed(id)) return false;
   const cost = ptCost(id);
   if (S.cores < cost) return false;
   S.cores -= cost;
