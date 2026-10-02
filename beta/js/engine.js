@@ -27,7 +27,9 @@ const CURVE_OLD = { hpBase: 6, hpGrowth: 1.25, hpLinear: 0.015, coinGrowth: 1.15
 // Balance knobs. Enemy health grows a little faster than coins, so every run
 // eventually hits a wall that prestige cores push further back.
 const TUNE = {
-  // v1.11 pace: about 10 minutes to the first prestige and an hour to B100 for an active player.
+  // Measured in 2-hour sims (beta 1.13, tools/playtest/sim.js, personas A-E): first prestige at
+  // 6-22 minutes and B100 at 27-63 minutes depending on tapping speed, each prestige pushing the
+  // best floor further. The old mine reached B100 in about 8 minutes.
   hpBase: 25, hpGrowth: 1.35, hpLinear: 0.015,
   coinGrowth: 1.15, coinScale: 0.3,
   // Floors of strength from power: powerScale * power^powerExp. Below 1, each extra power counts a

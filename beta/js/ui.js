@@ -226,7 +226,7 @@ function goalMessages() {
   const toEpic = epicPityLeft();
   if (toEpic <= 3) out.push([`Epic or better guaranteed within ${plural(toEpic, 'case')}`, '']);
   out.push([`Level ${S.run.level + 1} in ${fmt(Math.max(0, xpNeed(S.run.level) - S.run.xp))} XP`, '']);
-  if (S.math.streak === 0) out.push(['Answer problems to strike and build a combo', '']);
+  if (S.math.streak === 0) out.push(['Tap the monsters on the pad to strike and build a combo', '']);
   return out;
 }
 
@@ -538,7 +538,7 @@ function buildPrestigeTree() {
   let h = skillTabsHtml();
   h += `<div class="card prestige-card"><div class="row"><div class="grow"><b style="color:var(--gambler)">${fmt(S.cores)}</b> cores to spend</div>
     <span class="small muted">Power ${fmt(S.power)} · ${powerText(S.power)}</span></div>
-    <p class="small muted">Prestiging gives cores (for this tree) and power (permanent damage that grows with the level you reached). Everything here is kept forever.</p>
+    <p class="small muted">Prestiging gives cores (for this tree) and power (permanent strength that grows with the level you reached). Everything here is kept forever.</p>
     <p class="small">Locks used: <b>${locksUsed()}/${lockSlots()}</b>. Lock skill ranks from a node's card in the Skill web; they stay through every prestige.</p></div>`;
   for (const n of PRESTIGE_TREE) {
     const lv = ptLevel(n.id);
@@ -1228,8 +1228,12 @@ function buildMore() {
   const can = canPrestige();
   const nextCase = CASES.find(c => c.prestige === S.prestiges + 1);
   const pg = powerGain();
+  // Before their first prestige on the tougher mine, power still adds +10% damage per point.
+  const powerNow = S.curve === 1
+    ? 'Power is permanent strength. Right now it adds +10% damage per point; from your next prestige on, every run is on the tougher mine, where it counts in floors of strength: the more you have, the deeper your miner hits like.'
+    : 'Power is permanent strength, counted in floors: the more you have, the deeper your miner hits like.';
   let h = `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
-    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. Power is permanent strength, counted in floors: the more you have, the deeper your miner hits like. It grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
+    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. ${powerNow} It grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
     <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
     <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (${powerText(S.power)} → ${powerText(S.power + pg, true)})</div></div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
