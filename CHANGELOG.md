@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.7
+- Every case now has **×1, ×10, ×25 and Max** buttons, plus Use key. Max opens as many as you can afford (up to 100 at once) and shows how many on the button. Big batches reveal faster so a Max open doesn't drag on.
+
 ## v1.11.6
 - The small mine view on the other tabs now keeps all its info: floor number, kill dots, the BOSS tag, "Tap fight boss", the boss and treasure timers, Frenzy and 2× coins, and every monster's health bar all move down into the visible strip.
 

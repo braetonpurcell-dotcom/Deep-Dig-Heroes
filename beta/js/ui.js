@@ -707,9 +707,8 @@ function buildCases() {
     h += `<div class="card casecard"><div class="chest"><img src="${chestUrl(c.tier)}" alt=""></div><div>
       <b>${c.name}${pet ? ' (pets)' : ''}</b> <span class="small muted">· ${pet ? 'pets' : MATERIALS[dropMaterial(c.tier)].name + ' gear'}</span>
       <div class="casebtns">
-        <button class="btn gold" data-act="openCase" data-t="${c.tier}" data-n="1" data-cost="${cost}">Open ${costHtml(cost)}</button>
-        <button class="btn gold" data-act="openCase" data-t="${c.tier}" data-n="10" data-cost="${cost * 10}">×10 ${costHtml(cost * 10)}</button>
-        <button class="btn purple" data-act="openKey" data-t="${c.tier}">${icon('key', '')} Use key</button>
+        ${[1, 10, 25, 'max'].map(n => `<button class="btn gold" data-act="openCase" data-t="${c.tier}" data-n="${n}"></button>`).join('')}
+        <button class="btn purple wide" data-act="openKey" data-t="${c.tier}">${icon('key', '')} Use key</button>
       </div></div></div>`;
   }
   $('#tab-cases').innerHTML = h;
@@ -718,15 +717,21 @@ function buildCases() {
 
 // Case prices follow the deepest floor of the run, which keeps changing while the miner digs,
 // so every price on screen (Cases tab and the 'Open another' button) is re-quoted live.
+const CASE_MAX = 100;
 function refreshCaseButtons() {
   for (const b of $$('[data-act="openCase"], [data-act="again"][data-t]')) {
     const c = CASES[Number(b.dataset.t) - 1];
     if (!c) continue;
-    const n = Number(b.dataset.n) || 1;
+    // Max opens as many as you can afford, up to CASE_MAX at a time.
+    const max = b.dataset.n === 'max';
+    const n = max ? clamp(Math.floor(S.coins / caseCost(c)), 1, CASE_MAX) : Number(b.dataset.n) || 1;
     const cost = caseCost(c) * n;
-    if (Number(b.dataset.cost) !== cost) {
+    const key = cost + '|' + n;
+    if (b.dataset.key !== key) {
+      b.dataset.key = key;
       b.dataset.cost = cost;
-      b.innerHTML = `${b.dataset.act === 'again' ? 'Open another' : n > 1 ? '×' + n : 'Open'} ${costHtml(cost)}`;
+      const label = b.dataset.act === 'again' ? 'Open another' : max ? 'Max ×' + n : '×' + n;
+      b.innerHTML = `${label} ${costHtml(cost)}`;
     }
     b.disabled = S.coins < cost;
   }
@@ -953,7 +958,7 @@ function showMulti(drops, ctx) {
           SFX.tick(i / tiles.length);
           if (views[i].r >= 2) tiles[i].classList.add('win');
           i++;
-          UI.reelTimer = setTimeout(next, 120);
+          UI.reelTimer = setTimeout(next, Math.max(25, Math.round(120 * Math.min(1, 25 / tiles.length))));
           return;
         }
         const best = Math.max(...views.map(v => v.r));
@@ -1457,7 +1462,7 @@ function handleAction(el) {
       buildSkills();
       break;
     }
-    case 'openCase': startOpen(Number(d.t), 'coins', Number(d.n)); break;
+    case 'openCase': startOpen(Number(d.t), 'coins', d.n === 'max' ? clamp(Math.floor(S.coins / caseCost(CASES[Number(d.t) - 1])), 1, CASE_MAX) : Number(d.n)); break;
     case 'openKey': startOpen(Number(d.t), 'key', 1); break;
     case 'openFree': startOpen(bestCaseTier(), 'free', 1); break;
     case 'autoStart': startAutoRoll(); break;
