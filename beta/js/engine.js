@@ -18,19 +18,21 @@ const TREASURE_TIME = 10;
 const COMBO_FADE_STEP = 0.8; // seconds per lost stack once the combo starts fading
 const PRESTIGE_LUCK = 0.1; // each of your first 10 prestiges makes every case a little luckier, forever
 const PRESTIGE_LUCK_MAX = 10;
+const BALANCE_VERSION = 2; // difficulty curve version: bumping it moves players to a floor they can fight (settleFloor)
 
 // ---------- formulas ----------
 // Balance knobs. Enemy health grows a little faster than coins, so every run
 // eventually hits a wall that prestige cores push further back.
 const TUNE = {
-  hpBase: 6, hpGrowth: 1.25, hpLinear: 0.015,
-  coinGrowth: 1.15,
+  // v1.11 pace: about 10 minutes to the first prestige and an hour to B100 for an active player.
+  hpBase: 25, hpGrowth: 1.35, hpLinear: 0.015,
+  coinGrowth: 1.15, coinScale: 0.3,
   xpGrowth: 1.10, xpNeedBase: 12, xpNeedGrowth: 1.25,
   sharpenPeriod: 25,
   coreScale: 1, coreExp: 1.5, coreBonus: 0.1,
 };
 function hpFor(f) { return TUNE.hpBase * Math.pow(TUNE.hpGrowth, f - 1) * (1 + TUNE.hpLinear * (f - 1)); }
-function coinUnit(f) { return Math.pow(TUNE.coinGrowth, f - 1) * (1 + TUNE.hpLinear * (f - 1)); }
+function coinUnit(f) { return TUNE.coinScale * Math.pow(TUNE.coinGrowth, f - 1) * (1 + TUNE.hpLinear * (f - 1)); }
 function xpUnit(f) { return Math.pow(TUNE.xpGrowth, f - 1); }
 function xpNeed(level) { return Math.floor(TUNE.xpNeedBase * Math.pow(TUNE.xpNeedGrowth, level - 1)); }
 function sharpenDamage(L) {
@@ -77,6 +79,7 @@ function freshState() {
     coins: 0, keys: 0, scrap: 0, cores: 0, trophies: 0, prestiges: 0, nextId: 1,
     power: 0, // permanent damage from the levels reached in past runs (+10% per point)
     treeV: TREE_VERSION, // skill web layout version (see migrateTree)
+    balanceV: BALANCE_VERSION, // difficulty curve version (see settleFloor)
     ptree: {}, // prestige tree levels, bought with cores
     locks: {}, // skill ranks kept through prestige (node id -> ranks)
     caseKind: 'tool', // which cases you open: 'tool' (gear) or 'pet'
@@ -149,6 +152,7 @@ const nonNegInt = (v, d = 0) => (Number.isInteger(v) && v >= 0 ? v : d);
 // their power in the 21-material list, where they sit at 1, 5, 9, 13 and 17.
 function migrateSave(obj) {
   if (!obj || typeof obj !== 'object') return obj;
+  if (obj.balanceV == null) obj.balanceV = 1; // saved before difficulty versions existed
   if ((obj.v || 1) >= 3) return migrateTree(obj);
   if ((obj.v || 1) >= 2) return migrateTree(migrateV3(obj));
   const remap = it => { if (it && Number.isInteger(it.t) && it.t >= 1 && it.t <= 5) it.t = 1 + MATERIALS_PER_CASE * (it.t - 1); };
@@ -255,7 +259,7 @@ function hydrate(obj) {
   }
   if (!run.bossDone || typeof run.bossDone !== 'object') run.bossDone = {};
   s.math.streak = nonNegInt(s.math.streak);
-  s.pace = isFinite(s.pace) ? clamp(s.pace, 0, 1) : 0;
+  s.pace = isFinite(s.pace) ? clamp(s.pace, 0, PACE_TOP) : 0;
   if (typeof s.profile.name !== 'string') s.profile.name = '';
   s.profile.name = s.profile.name.slice(0, 20);
   if (typeof s.profile.pid !== 'string') s.profile.pid = '';
@@ -730,17 +734,20 @@ const PACE_UP = 0.004;
 const PACE_DOWN = 0.03;
 const PACE_WARMUP = 0.6; // a new session starts at 60% of the pace you settled at last time
 const PACE_CAP_MIN = 20; // combo cap (x2) up to PACE_LOW
-const PACE_CAP_MAX = 100; // combo cap (x6) from PACE_HIGH
 const PACE_LOW = 0.2;
-const PACE_HIGH = 0.8;
+// The combo ceiling climbs steeply with the pace you hold, so faster, more accurate tappers reach far
+// bigger multipliers: about 80 at 40% pace, 155 at 60%, 210 at 70%, 400 at 100%.
+const PACE_TOP = 1;
+const PACE_CAP_TOP = 400;
+const PACE_CAP_CURVE = 1.5;
 const PACE_STEP_TIME = 0.6; // seconds: steps are weighted by time, so fast tappers don't climb faster per second
 
 // The combo ceiling follows the pace you've held over the last ~20 seconds (paceHold), not the
 // instant pace, so a short dip (a glance away, a couple of escapes) barely moves your multiplier.
 const PACE_HOLD_TIME = 20;
 function paceComboCap() {
-  const k = clamp(((R.paceHold || 0) - PACE_LOW) / (PACE_HIGH - PACE_LOW), 0, 1);
-  return Math.max(10, Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * k) + 4 * skillRank('momentum')
+  const k = clamp(((R.paceHold || 0) - PACE_LOW) / (PACE_TOP - PACE_LOW), 0, 1);
+  return Math.max(10, Math.round(PACE_CAP_MIN + (PACE_CAP_TOP - PACE_CAP_MIN) * Math.pow(k, PACE_CAP_CURVE)) + 4 * skillRank('momentum')
     + (skillRank('limitbreak') ? 40 : 0) - (skillRank('ledger') ? 20 : 0) + (treeFx().cap || 0));
 }
 // Each step counts in proportion to the time since the previous tap or escape, so the climb takes
@@ -751,9 +758,9 @@ function paceStep(delta) {
   R.paceHold = (R.paceHold || 0) + (R.pace - (R.paceHold || 0)) * (1 - Math.exp(-since / PACE_HOLD_TIME));
   setPace(R.pace + delta * clamp(since / PACE_STEP_TIME, 0.25, 1));
 }
-function startPaceSession() { R.pace = R.paceHold = clamp((S.pace || 0) * PACE_WARMUP, 0, 1); }
+function startPaceSession() { R.pace = R.paceHold = clamp((S.pace || 0) * PACE_WARMUP, 0, PACE_TOP); }
 function setPace(p) {
-  R.pace = clamp(p, 0, 1);
+  R.pace = clamp(p, 0, PACE_TOP);
   S.pace = R.pace;
   if (ST) ST.comboCap = paceComboCap();
 }
@@ -1621,6 +1628,22 @@ function claimableCounts() {
   return { daily: S.daily.claimed ? 0 : 1, quests, bonus: questBonusReady() ? 1 : 0, ach };
 }
 
+// ---------- difficulty updates ----------
+// When the difficulty curve changes, monsters at a player's current depth can become far tougher.
+// Move them up to the deepest floor where a regular monster falls in about 4 seconds, so the game
+// keeps moving; best floors, records and the leaderboard are untouched.
+function settleFloor() {
+  const dps = Math.max(1e-9, ST.dps);
+  let f = S.run.floor;
+  while (f > 1 && (hpFor(f) * ST.hpMult) / dps > 4) f--;
+  if (f >= S.run.floor) return null;
+  const from = S.run.floor;
+  S.run.floor = f;
+  S.run.kills = 0;
+  S.run.auto = true;
+  return { from, to: f };
+}
+
 // ---------- coming back ----------
 // Fresh Hands: back after more than an hour away, the combo builds twice as fast and coins are
 // doubled for 3 minutes (1 hour away) up to 15 minutes (8+ hours), plus a key after 4+ hours.
@@ -1890,6 +1913,7 @@ function loadState(obj) {
       delete S.migratedSkills;
       recalc();
     }
+    if ((S.balanceV || 1) < BALANCE_VERSION) { S.settled = settleFloor(); S.balanceV = BALANCE_VERSION; }
     ensureDay();
     R.dayKey = dateKey();
   } catch (e) {

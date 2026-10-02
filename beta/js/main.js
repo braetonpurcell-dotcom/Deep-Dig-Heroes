@@ -218,6 +218,14 @@ function boot(hotData) {
       <p>Each class now splits into three branches (like Coins, XP and Speed) that fork toward named skills, and owning a whole branch unlocks its Mastery. ${kept}</p>
       <div class="mbtns"><button class="btn gold" data-act="openSkills">Let's see</button></div>`, { dismissable: true }));
   }
+  if (S.settled) {
+    const { from, to } = S.settled;
+    delete S.settled;
+    queueModal(() => openModal(`<h2>The mine got tougher</h2>
+      <p>Monsters now get much stronger with every floor, so the climb is slower and each new floor means more. Big combos also count for far more now: fast, accurate tapping can push your multiplier past x20.</p>
+      <p>Your miner moved up from B${from} to B${to}, where it can keep digging. Your best floor and leaderboard records stay.</p>
+      <div class="mbtns"><button class="btn gold" data-act="close">Dig in</button></div>`, { dismissable: true }));
+  }
   if (S.bonusRound) toast(`Your double-it round is still on: ${BONUS_TAPS} taps in a row`, 'purple');
   if (offline && offline.coins > 0) queueModal(() => showWelcomeBack(offline));
   if (!S.daily.claimed) queueModal(showDailyPopup);

@@ -252,7 +252,9 @@ function updateFight() {
   fill.style.width = Math.min(100, (Math.min(streak, ST.comboCap) / ST.comboCap) * 100) + '%';
   fill.classList.toggle('fading', streak > 0 && R.time - R.lastAnswer > ST.decay - 2);
   $('#cStreak').textContent = `${streak}/${ST.comboCap}`;
-  $('#cPace').textContent = `Pace ${Math.round((R.pace || 0) * 100)}%`;
+  const pc = Math.round((R.pace || 0) * 100);
+  $('#cPace').textContent = `Pace ${pc}%`;
+  $('#cPace').classList.toggle('over', pc > 100);
   const sh = $('#cShield');
   const left = (R.shieldUntil || 0) - R.time;
   const shTxt = left > 0 ? `Shield ${left.toFixed(1)}s` : R.shield ? 'Shield ready' : '';
