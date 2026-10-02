@@ -253,14 +253,18 @@ function updateFight() {
   fill.classList.toggle('fading', streak > 0 && R.time - R.lastAnswer > ST.decay - 2);
   $('#cStreak').textContent = `${streak}/${ST.comboCap}`;
   const pc = Math.round((R.pace || 0) * 100);
-  $('#cPace').textContent = `Pace ${pc}%`;
+  // With two or more chips showing, the pace drops its label so everything stays on one line.
+  const chips = [S.run.rush.left > 0, freshActive(), R.shield || (R.shieldUntil || 0) > R.time].filter(Boolean).length;
+  $('#cPace').textContent = chips >= 2 ? `${pc}%` : `Pace ${pc}%`;
   $('#cPace').classList.toggle('over', pc > 100);
   const sh = $('#cShield');
   const left = (R.shieldUntil || 0) - R.time;
-  const shTxt = left > 0 ? `Shield ${left.toFixed(1)}s` : R.shield ? 'Shield ready' : '';
-  if (sh.textContent !== shTxt) { sh.textContent = shTxt; sh.hidden = !shTxt; sh.classList.toggle('on', left > 0); }
+  // No countdown: the chip just lights up while the shield is up, so the row never changes size.
+  const shTxt = left > 0 || R.shield ? 'Shield' : '';
+  if (sh.textContent !== shTxt) { sh.textContent = shTxt; sh.hidden = !shTxt; }
+  sh.classList.toggle('on', left > 0);
   const fr = $('#cFresh');
-  const frTxt = freshActive() ? `Fresh ${fmtClock(S.fresh.left)}` : '';
+  const frTxt = freshActive() ? 'Fresh' : '';
   if (fr && fr.textContent !== frTxt) { fr.textContent = frTxt; fr.hidden = !frTxt; }
   const ru = $('#cRush');
   const rush = S.run.rush;

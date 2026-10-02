@@ -692,7 +692,13 @@ body.fulltab #stage, body.fulltab #floorbar { display: none; }
 }
 .mathmeta .shield.fresh { color: #0d0a12; background: var(--good); padding: 0 4px; animation: pulse 1.6s steps(2) infinite; }
 .mathmeta .shield.rush { color: #2a1a00; background: var(--gold); padding: 0 4px; }
-.mathmeta { flex-wrap: wrap; row-gap: 4px; }
+.mathmeta { flex-wrap: nowrap; white-space: nowrap; }
+.mathmeta > * { flex-shrink: 0; }
+.mathmeta .streakbar { flex: 1 1 0; flex-shrink: 1; min-width: 16px; }
+.mathmeta .pace { min-width: 0; }
+.mathmeta .shield { font-size: 12px; }
+.mathmeta .shield.fresh, .mathmeta .shield.rush, .mathmeta .shield.on { padding: 0 3px; }
+@media (max-width: 380px) { .mathmeta { gap: 6px; } }
 
 .mathmeta .pace.over { color: var(--gold); }
 

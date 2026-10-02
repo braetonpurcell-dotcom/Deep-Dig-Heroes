@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.4
+- The combo bar no longer jumps around while you tap: it stays on one line, so the tap pad never moves. The Shield chip just lights up while it's active (no countdown), Fresh Hands shows without its timer, and when several chips are showing, the pace shows as just a percentage.
+
 ## v1.11.3
 - **Flow:** when you're crushing a floor (one-shotting monsters with room to spare), kills speed up over the next few monsters and the kill "ding" climbs higher in pitch, with a sparkle on top at full speed. When monsters start taking a few hits, it eases back down to the normal pace and pitch, so you can hear when you're getting stronger and when the mine is catching up.
 
