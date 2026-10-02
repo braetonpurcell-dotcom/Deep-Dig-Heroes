@@ -131,54 +131,155 @@ const UPGRADES = [
     desc: '+10% XP' },
 ];
 
-// One skill tree with three branches. Points spent in a branch unlock its deeper tiers.
-const TIER_REQ = [0, 5, 10, 15];
+// The skill web. You start in the middle and each point unlocks a node next to one you own, so you
+// choose a path instead of filling lists. Four directions: Fighter (up), Tycoon (right), Gambler
+// (down) and Miner (left). Small nodes give a little of one stat, big nodes are the named skills,
+// and keystones on the outer edge change how you play, usually with a cost.
 const BRANCHES = [
-  {
-    id: 'brawler', name: 'Brawler', color: '#ff6b5a',
-    blurb: 'Active play: tap strikes, combos and bosses.',
-    passive: '+2% damage per point',
-    nodes: [
-      { id: 'quickwit', name: 'Quick Hands', tier: 0, max: 5, desc: '+20% tap strike damage per rank' },
-      { id: 'momentum', name: 'Momentum', tier: 0, max: 5, desc: '+4 max combo per rank' },
-      { id: 'ironmind', name: 'Iron Mind', tier: 1, max: 3, desc: 'An escaped monster costs less: keep 2% more of your combo per rank' },
-      { id: 'adrenaline', name: 'Adrenaline', tier: 1, max: 3, desc: 'Each combo stack gives +1% more damage per rank' },
-      { id: 'focus', name: 'Battle Focus', tier: 2, max: 3, desc: 'Your combo waits 2s longer before it starts to fade, per rank' },
-      { id: 'executioner', name: 'Executioner', tier: 2, max: 5, desc: '+30% damage to bosses per rank' },
-      { id: 'overdrive', name: 'Overdrive', tier: 3, max: 1, desc: 'Every 25th tap in a combo lands a MEGA strike (x5)' },
-    ],
-  },
-  {
-    id: 'tycoon', name: 'Tycoon', color: '#ffcc4d',
-    blurb: 'Idle play: coins, auto-drilling and offline earnings.',
-    passive: '+2% coins per point',
-    nodes: [
-      { id: 'greed', name: 'Greed', tier: 0, max: 5, desc: '+15% coins per rank' },
-      { id: 'autodrill', name: 'Auto-Drill', tier: 0, max: 5, desc: '+10% attack speed per rank' },
-      { id: 'nightshift', name: 'Night Shift', tier: 1, max: 5, desc: '+10% offline earning rate per rank (base 40%)' },
-      { id: 'deeppockets', name: 'Deep Pockets', tier: 1, max: 3, desc: '+2h max offline time per rank (base 4h)' },
-      { id: 'oresense', name: 'Ore Sense', tier: 2, max: 3, desc: 'Lucky ores appear 20% more often per rank' },
-      { id: 'compound', name: 'Compound', tier: 2, max: 3, desc: '+0.3% coins per floor reached this run, per rank' },
-      { id: 'golddrill', name: 'Golden Drill', tier: 3, max: 1, desc: 'x1.5 damage while your combo is 0 (pure idle)' },
-    ],
-  },
-  {
-    id: 'gambler', name: 'Gambler', color: '#b76dff',
-    blurb: 'Luck: better cases, cheaper rolls, more keys.',
-    passive: '+2% luck per point',
-    nodes: [
-      { id: 'lucky', name: 'Lucky Charm', tier: 0, max: 5, desc: '+10% luck per rank' },
-      { id: 'haggler', name: 'Haggler', tier: 0, max: 5, desc: 'Cases cost 6% less per rank' },
-      { id: 'pity', name: 'Pity Pact', tier: 1, max: 3, desc: 'Guaranteed Epic+ comes 2 opens sooner per rank' },
-      { id: 'scrapper', name: 'Scrapper', tier: 1, max: 3, desc: '+25% scrap from salvaging per rank' },
-      { id: 'doubledown', name: 'Double Down', tier: 2, max: 5, desc: '6% chance per rank to get a bonus item from a case' },
-      { id: 'keymaster', name: 'Key Master', tier: 2, max: 4, desc: '25% chance per rank for an extra key from bosses' },
-      { id: 'jackpot', name: 'Jackpot', tier: 3, max: 1, desc: 'Legendary and Mythic odds x2' },
-    ],
-  },
+  { id: 'brawler', name: 'Fighter', color: '#ff6b5a', dir: [0, -1],
+    blurb: 'Active play: tap strikes, combos and bosses.', passive: '+2% damage per point' },
+  { id: 'tycoon', name: 'Tycoon', color: '#ffcc4d', dir: [1, 0],
+    blurb: 'Idle play: coins, auto-drilling and offline earnings.', passive: '+2% coins per point' },
+  { id: 'gambler', name: 'Gambler', color: '#b76dff', dir: [0, 1],
+    blurb: 'Luck: better cases, cheaper rolls, more keys.', passive: '+2% luck per point' },
+  { id: 'miner', name: 'Miner', color: '#5ad1ff', dir: [-1, 0],
+    blurb: 'Digging: speed, ores, crits and depth.', passive: '+1% attack speed per point' },
 ];
+// Small-node stats (per node). These multiply on top of gear, so they matter all game long.
+const TREE_STAT = {
+  dmg: { v: 0.04, name: 'damage' }, strike: { v: 0.08, name: 'tap strike' }, crit: { v: 0.005, name: 'crit chance', flat: true },
+  critdmg: { v: 0.08, name: 'crit damage', flat: true }, coin: { v: 0.06, name: 'coins' }, aps: { v: 0.02, name: 'attack speed' },
+  xp: { v: 0.06, name: 'XP' }, luck: { v: 0.04, name: 'luck', flat: true },
+};
+const BIG_NODES = {
+  brawler: [
+    { id: 'quickwit', name: 'Quick Hands', max: 5, desc: '+20% tap strike damage per rank' },
+    { id: 'momentum', name: 'Momentum', max: 5, desc: '+4 max combo per rank' },
+    { id: 'ironmind', name: 'Iron Mind', max: 3, desc: 'An escaped monster costs less: keep 2% more of your combo per rank' },
+    { id: 'adrenaline', name: 'Adrenaline', max: 3, desc: 'Each combo stack gives +1% more damage per rank' },
+    { id: 'steady', name: 'Steady Hands', max: 3, desc: 'Focus Shield is earned 2 taps sooner per rank (15 → 9)' },
+    { id: 'focus', name: 'Battle Focus', max: 3, desc: 'Your combo waits 2s longer before it starts to fade, per rank' },
+    { id: 'perfectionist', name: 'Perfectionist', max: 3, desc: 'PERFECT taps hit 20% harder per rank' },
+    { id: 'executioner', name: 'Executioner', max: 5, desc: '+30% damage to bosses per rank' },
+  ],
+  tycoon: [
+    { id: 'greed', name: 'Greed', max: 5, desc: '+15% coins per rank' },
+    { id: 'autodrill', name: 'Auto-Drill', max: 5, desc: '+10% attack speed per rank' },
+    { id: 'nightshift', name: 'Night Shift', max: 5, desc: '+10% offline earning rate per rank (base 40%)' },
+    { id: 'deeppockets', name: 'Deep Pockets', max: 3, desc: '+2h max offline time per rank (base 4h)' },
+    { id: 'compound', name: 'Compound', max: 3, desc: '+0.3% coins per floor reached this run, per rank' },
+  ],
+  gambler: [
+    { id: 'lucky', name: 'Lucky Charm', max: 5, desc: '+10% luck per rank' },
+    { id: 'haggler', name: 'Haggler', max: 5, desc: 'Cases cost 6% less per rank' },
+    { id: 'pity', name: 'Pity Pact', max: 3, desc: 'Guaranteed Epic+ comes 2 opens sooner per rank' },
+    { id: 'scrapper', name: 'Scrapper', max: 3, desc: '+25% scrap from salvaging per rank' },
+    { id: 'doubledown', name: 'Double Down', max: 5, desc: '6% chance per rank to get a bonus item from a case' },
+    { id: 'keymaster', name: 'Key Master', max: 4, desc: '25% chance per rank for an extra key from bosses' },
+  ],
+  miner: [
+    { id: 'oresense', name: 'Ore Sense', max: 3, desc: 'Lucky ores appear 20% more often per rank' },
+    { id: 'seismic', name: 'Seismic Swing', max: 5, desc: '+2% crit chance per rank' },
+    { id: 'prospector', name: 'Prospector', max: 4, desc: 'Lucky ores pay 25% more coins per rank' },
+    { id: 'tunneler', name: 'Tunneler', max: 3, desc: '5% chance per rank to drop two floors at once (never past a boss)' },
+  ],
+};
+const KEYSTONES = {
+  brawler: [
+    { id: 'overdrive', name: 'Overdrive', desc: 'Every 25th tap in a combo lands a MEGA strike (x5)' },
+    { id: 'limitbreak', name: 'Limit Break', desc: '+40 max combo, so your multiplier can pass x10.6. But an escape costs twice as much combo.' },
+  ],
+  tycoon: [
+    { id: 'golddrill', name: 'Golden Drill', desc: 'x1.5 damage while your combo is 0 (pure idle)' },
+    { id: 'ledger', name: 'Night Ledger', desc: 'Offline earnings +40% (rate). But your max combo is 20 lower.' },
+  ],
+  gambler: [
+    { id: 'jackpot', name: 'Jackpot', desc: 'Legendary and Mythic odds x2' },
+    { id: 'allin', name: 'All In', desc: '+150% luck. But cases cost 50% more.' },
+  ],
+  miner: [
+    { id: 'deepdiver', name: 'Deep Diver', desc: 'Monsters have 30% more health but give 60% more coins and XP' },
+    { id: 'earthquake', name: 'Earthquake', desc: 'Crits hit twice as hard. But your crit chance is halved.' },
+  ],
+};
+const SPINE_STATS = {
+  brawler: ['strike', 'dmg', 'crit', 'critdmg'], tycoon: ['coin', 'aps', 'xp', 'coin'],
+  gambler: ['luck', 'xp', 'luck', 'coin'], miner: ['aps', 'dmg', 'critdmg', 'xp'],
+};
+// Ring links between neighbouring directions, so you can cross over into a second path.
+const RING_STATS = { 'brawler-tycoon': ['dmg', 'xp', 'coin'], 'tycoon-gambler': ['coin', 'xp', 'luck'],
+  'gambler-miner': ['luck', 'crit', 'aps'], 'miner-brawler': ['aps', 'critdmg', 'dmg'] };
+const SPINE_LEN = 10;
+const RING_AT = 5;
+
+const TREE_NODES = [{ id: 'core', kind: 'core', name: 'Heart of the Mine', branch: null, max: 0, x: 0, y: 0, desc: 'Where every path starts.' }];
+const TREE_EDGES = [];
+(function buildTree() {
+  const add = n => { TREE_NODES.push(n); return n.id; };
+  const link = (a, b) => TREE_EDGES.push([a, b]);
+  const smallNode = (id, branch, k, x, y) => add({ id, kind: 'small', branch, max: 1, x, y, fx: { [k]: TREE_STAT[k].v },
+    name: (k === 'dmg' ? 'Might' : k === 'strike' ? 'Strike' : k === 'crit' ? 'Precision' : k === 'critdmg' ? 'Brutality'
+      : k === 'coin' ? 'Wealth' : k === 'aps' ? 'Haste' : k === 'xp' ? 'Insight' : 'Fortune'),
+    desc: `+${TREE_STAT[k].flat && k !== 'critdmg' ? Math.round(TREE_STAT[k].v * 1000) / 10 : Math.round(TREE_STAT[k].v * 100)}% ${TREE_STAT[k].name}` });
+  const spines = {};
+  for (const b of BRANCHES) {
+    const [dx, dy] = b.dir, px = -dy, py = dx; // outward and sideways
+    const at = (r, o) => [Math.round((dx * r + px * o) * 100) / 100, Math.round((dy * r + py * o) * 100) / 100];
+    const st = SPINE_STATS[b.id];
+    let prev = 'core';
+    const spine = [];
+    for (let i = 0; i < SPINE_LEN; i++) {
+      const [x, y] = at(1.2 + i, 0);
+      const id = smallNode(`${b.id}-s${i}`, b.id, st[i % st.length], x, y);
+      link(prev, id); prev = id; spine.push(id);
+    }
+    spines[b.id] = spine;
+    BIG_NODES[b.id].forEach((n, j) => {
+      const i = 1 + j, side = j % 2 ? -1 : 1;
+      let [x, y] = at(1.5 + i, side);
+      const sid = smallNode(`${b.id}-b${j}`, b.id, st[(j + 1) % st.length], x, y);
+      link(spine[i], sid);
+      [x, y] = at(1.8 + i, side * 2);
+      add({ ...n, kind: 'big', branch: b.id, x, y });
+      link(sid, n.id);
+    });
+    KEYSTONES[b.id].forEach((n, j) => {
+      const [x, y] = at(11.4, j ? -1.3 : 1.3);
+      add({ ...n, kind: 'key', branch: b.id, max: 1, x, y });
+      link(spine[SPINE_LEN - 1], n.id);
+    });
+  }
+  // Ring between neighbouring spines.
+  const R = 1.2 + RING_AT;
+  for (let k = 0; k < BRANCHES.length; k++) {
+    const a = BRANCHES[k], b = BRANCHES[(k + 1) % BRANCHES.length];
+    const stats = RING_STATS[`${a.id}-${b.id}`];
+    const angA = Math.atan2(a.dir[1], a.dir[0]);
+    let prev = spines[a.id][RING_AT];
+    stats.forEach((sk, j) => {
+      const ang = angA + (Math.PI / 12) * (j + 2); // 30, 45 and 60 degrees: clear of the side branches
+      const owner = j < stats.length / 2 ? a.id : b.id;
+      const id = smallNode(`ring-${a.id}-${j}`, owner, sk, Math.round(Math.cos(ang) * R * 100) / 100, Math.round(Math.sin(ang) * R * 100) / 100);
+      link(prev, id); prev = id;
+    });
+    link(prev, spines[b.id][RING_AT]);
+  }
+})();
 const SKILL_INDEX = {};
-for (const b of BRANCHES) for (const n of b.nodes) SKILL_INDEX[n.id] = { ...n, branch: b.id };
+for (const n of TREE_NODES) if (n.kind !== 'core') SKILL_INDEX[n.id] = n;
+const TREE_ADJ = {};
+for (const [a, b] of TREE_EDGES) { (TREE_ADJ[a] = TREE_ADJ[a] || []).push(b); (TREE_ADJ[b] = TREE_ADJ[b] || []).push(a); }
+const TREE_TOTAL = Object.values(SKILL_INDEX).reduce((a, n) => a + n.max, 0);
+
+// Prestige tree: bought with cores, kept forever.
+const PRESTIGE_TREE = [
+  { id: 'might', name: 'Might', desc: '+25% damage', base: 10, growth: 1.25 },
+  { id: 'fortune', name: 'Fortune', desc: '+25% coins', base: 10, growth: 1.25 },
+  { id: 'wisdom', name: 'Wisdom', desc: '+25% XP', base: 15, growth: 1.3 },
+  { id: 'favor', name: 'Lady Luck', desc: '+10% luck', base: 20, growth: 1.35 },
+  { id: 'headstart', name: 'Head Start', desc: '+2 skill points at the start of every run', base: 15, growth: 1.4 },
+  { id: 'memory', name: 'Memory', desc: '+1 lock: keep 1 skill rank of your choice through every prestige', base: 5, growth: 0, step: 3 },
+];
 
 // Gear stats. Values are fractions (0.30 = +30%) except crit, which is flat percentage points.
 const STATS = {
@@ -231,7 +332,6 @@ const CASES = [
 ];
 let CASE_INFLATION = 1.005; // each case bought with coins this run costs 0.5% more
 const AUTO_ROLL_MS = 450; // auto-roll speed while the game is open
-const PET_CHANCE = 0.3;
 const EPIC_PITY = 10;
 const LEGENDARY_PITY = 60;
 const FREE_CRATE_HOURS = 4;

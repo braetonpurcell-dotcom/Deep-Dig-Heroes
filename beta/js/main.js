@@ -204,6 +204,15 @@ function boot(hotData) {
   UI.booting = false;
   if (!base) queueModal(showIntro);
   if (broken) toast('Your save could not be read, so the game started fresh. A copy was kept.', 'bad');
+  if (S.migratedSkills != null) {
+    const n = S.migratedSkills;
+    delete S.migratedSkills;
+    queueModal(() => openModal(`<h2>New: the skill web</h2>
+      <p>Skills are now a web you grow from the middle, with four directions: Fighter, Tycoon, Gambler and Miner. Your ${n} skill ${n === 1 ? 'point was' : 'points were'} refunded so you can rebuild.</p>
+      <p>Prestige now gives <b>power</b> (permanent damage that grows with the level you reach) and <b>cores</b> to spend in the new Prestige tree, including locks that keep chosen skills through every prestige. Your cores so far became power, and you also kept them to spend.</p>
+      <p>Cases now come in Tool and Pet versions, and every odds number shows the raw chance, with no luck mixed in.</p>
+      <div class="mbtns"><button class="btn gold" data-act="close">Let's see</button></div>`, { dismissable: true }));
+  }
   if (S.bonusRound) toast(`Your double-it round is still on: ${BONUS_TAPS} taps in a row`, 'purple');
   if (offline && offline.coins > 0) queueModal(() => showWelcomeBack(offline));
   if (!S.daily.claimed) queueModal(showDailyPopup);

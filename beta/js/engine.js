@@ -3,7 +3,7 @@
 // Nothing here touches the DOM. Visual and UI code listens through on()/emit().
 
 const SAVE_KEY = 'ddh-save-v1';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 const KILLS_PER_FLOOR = 6;
 const BOSS_TIME = 45; // duel length in seconds
 const DUEL_LIVES = 3;
@@ -16,7 +16,8 @@ const ENTER_TIME = 0.25;
 const TREASURE_CHANCE = 1 / 35;
 const TREASURE_TIME = 10;
 const COMBO_FADE_STEP = 0.8; // seconds per lost stack once the combo starts fading
-const PRESTIGE_LUCK = 0.1; // every prestige makes every case a little luckier, forever
+const PRESTIGE_LUCK = 0.1; // each of your first 10 prestiges makes every case a little luckier, forever
+const PRESTIGE_LUCK_MAX = 10;
 
 // ---------- formulas ----------
 // Balance knobs. Enemy health grows a little faster than coins, so every run
@@ -71,6 +72,11 @@ function freshState() {
   return {
     v: SAVE_VERSION, created: Date.now(), savedAt: 0, lastSeen: Date.now(),
     coins: 0, keys: 0, scrap: 0, cores: 0, trophies: 0, prestiges: 0, nextId: 1,
+    power: 0, // permanent damage from the levels reached in past runs (+10% per point)
+    ptree: {}, // prestige tree levels, bought with cores
+    locks: {}, // skill ranks kept through prestige (node id -> ranks)
+    caseKind: 'tool', // which cases you open: 'tool' (gear) or 'pet'
+    pityPet: { epic: 0, leg: 0 },
     run: freshRun(),
     math: { streak: 0 }, // the tap combo (the key name is kept so old saves load)
     gear: { eq: { pick: null, helm: null, charm: null }, bag: [] },
@@ -137,12 +143,29 @@ const nonNegInt = (v, d = 0) => (Number.isInteger(v) && v >= 0 ? v : d);
 // Version 1 had 5 materials (Copper, Iron, Gold, Crystal, Void). They keep their name and
 // their power in the 21-material list, where they sit at 1, 5, 9, 13 and 17.
 function migrateSave(obj) {
-  if (!obj || typeof obj !== 'object' || (obj.v || 1) >= 2) return obj;
+  if (!obj || typeof obj !== 'object' || (obj.v || 1) >= 3) return obj;
+  if ((obj.v || 1) >= 2) return migrateV3(obj);
   const remap = it => { if (it && Number.isInteger(it.t) && it.t >= 1 && it.t <= 5) it.t = 1 + MATERIALS_PER_CASE * (it.t - 1); };
   const g = obj.gear || {};
   if (g.eq && typeof g.eq === 'object') Object.values(g.eq).forEach(remap);
   if (Array.isArray(g.bag)) g.bag.forEach(remap);
   obj.v = 2;
+  return migrateV3(obj);
+}
+
+// v3: the skill web replaces the three skill lists (points are refunded), and prestige damage moves
+// from cores to power. Existing cores become power one-for-one and are also kept to spend.
+function migrateV3(obj) {
+  if ((obj.v || 1) >= 3) return obj;
+  if (obj.run && obj.run.skills && typeof obj.run.skills === 'object') {
+    let refund = 0;
+    for (const k of Object.keys(obj.run.skills)) refund += Math.max(0, Math.floor(Number(obj.run.skills[k]) || 0));
+    obj.run.skills = {};
+    obj.run.sp = (Number(obj.run.sp) || 0) + refund;
+    obj.migratedSkills = refund;
+  }
+  obj.power = Number(obj.cores) || 0;
+  obj.v = 3;
   return obj;
 }
 
@@ -150,7 +173,19 @@ function hydrate(obj) {
   const s = deepMerge(freshState(), migrateSave(obj) || {});
   s.v = SAVE_VERSION;
   const now = Date.now();
-  for (const k of ['coins', 'keys', 'scrap', 'cores', 'trophies', 'prestiges']) s[k] = nonNeg(s[k]);
+  for (const k of ['coins', 'keys', 'scrap', 'cores', 'trophies', 'prestiges', 'power']) s[k] = nonNeg(s[k]);
+  if (!s.ptree || typeof s.ptree !== 'object') s.ptree = {};
+  for (const k of Object.keys(s.ptree)) if (!PRESTIGE_TREE.some(n => n.id === k)) delete s.ptree[k]; else s.ptree[k] = nonNegInt(s.ptree[k]);
+  if (!s.locks || typeof s.locks !== 'object') s.locks = {};
+  for (const k of Object.keys(s.locks)) {
+    const n = SKILL_INDEX[k];
+    if (!n || !Number.isInteger(s.locks[k]) || s.locks[k] <= 0) delete s.locks[k]; else s.locks[k] = Math.min(n.max, s.locks[k]);
+  }
+  let lockUsed = 0;
+  for (const k of Object.keys(s.locks)) { const room = Math.max(0, (s.ptree.memory || 0) - lockUsed); s.locks[k] = Math.min(s.locks[k], room); lockUsed += s.locks[k]; if (!s.locks[k]) delete s.locks[k]; }
+  if (s.caseKind !== 'pet') s.caseKind = 'tool';
+  if (!s.pityPet || typeof s.pityPet !== 'object') s.pityPet = { epic: 0, leg: 0 };
+  s.pityPet.epic = nonNegInt(s.pityPet.epic); s.pityPet.leg = nonNegInt(s.pityPet.leg);
   s.nextId = nonNegInt(s.nextId, 1);
   // Run and combo numbers.
   const run = s.run;
@@ -168,6 +203,7 @@ function hydrate(obj) {
     if (!n || !Number.isInteger(run.skills[id]) || run.skills[id] <= 0) delete run.skills[id];
     else run.skills[id] = Math.min(n.max, run.skills[id]);
   }
+  for (const id of Object.keys(s.locks)) run.skills[id] = Math.max(run.skills[id] || 0, s.locks[id]);
   if (!run.upg || typeof run.upg !== 'object') run.upg = {};
   for (const id of Object.keys(run.upg)) {
     const u = UPGRADES.find(x => x.id === id);
@@ -232,6 +268,16 @@ function hydrate(obj) {
     const b = s.best[k];
     if (!b || !Number.isInteger(b.r) || b.r < 0 || b.r > TOP_RARITY || !isFinite(b.odds) || b.odds < 1) delete s.best[k];
   }
+  // Older saves stored odds with the luck of the moment; recompute the raw odds from rarity and wear.
+  for (const k of Object.keys(s.best)) {
+    const b = s.best[k];
+    b.odds = Math.round(dropOdds(b.r, b.fl == null ? null : b.fl));
+  }
+  if (s.best.all) {
+    let top = null;
+    for (const k of Object.keys(s.best)) if (k !== 'all' && (!top || s.best[k].odds > top.odds)) top = k;
+    if (top && s.best[top].odds > s.best.all.odds) s.best.all = { ...s.best[top], kind: top === 'pet' ? 'pet' : 'gear' };
+  }
   // Stats.
   const fresh = freshState().stats;
   for (const k of Object.keys(fresh)) {
@@ -281,9 +327,19 @@ function skillRank(id) { return S.run.skills[id] || 0; }
 function upgradeLevel(id) { return S.run.upg[id] || 0; }
 function branchPoints(bid) {
   let p = 0;
-  for (const b of BRANCHES) if (b.id === bid) for (const n of b.nodes) p += skillRank(n.id);
+  for (const id in S.run.skills) if (SKILL_INDEX[id] && SKILL_INDEX[id].branch === bid) p += S.run.skills[id];
   return p;
 }
+// Small-node stats summed over the nodes you own.
+function treeFx() {
+  const fx = {};
+  for (const id in S.run.skills) {
+    const n = SKILL_INDEX[id];
+    if (n && n.fx) for (const k in n.fx) fx[k] = (fx[k] || 0) + n.fx[k] * S.run.skills[id];
+  }
+  return fx;
+}
+function ptLevel(id) { return S.ptree[id] || 0; }
 function collectionCount() { return Object.keys(S.coll).length; }
 
 function computeStats() {
@@ -301,14 +357,26 @@ function computeStats() {
   const trophy = 1 + TROPHY_BONUS * S.trophies;
   const coll = 1 + COLLECTION_BONUS * collectionCount();
   const st = { add };
+  const fx = treeFx();
+  st.fx = fx;
+  st.deepDiver = sk('deepdiver') > 0;
   st.baseDmg = sharpenDamage(up('sharpen'));
-  st.dmgMult = (1 + add.dmg) * (1 + 0.02 * branchPoints('brawler')) * (1 + TUNE.coreBonus * S.cores) * trophy * coll;
+  st.dmgMult = (1 + add.dmg) * (1 + 0.02 * branchPoints('brawler')) * (1 + (fx.dmg || 0))
+    * (1 + TUNE.coreBonus * S.power) * (1 + 0.25 * ptLevel('might')) * trophy * coll;
   st.hit = st.baseDmg * st.dmgMult;
-  st.aps = 1.25 * (1 + 0.04 * up('fury')) * (1 + add.aps + 0.1 * sk('autodrill'));
-  st.critChance = Math.min(0.75, 0.05 + 0.015 * up('crit') + add.crit);
-  st.critMult = 2 + 0.15 * up('critdmg') + add.critdmg;
+  st.aps = 1.25 * (1 + 0.04 * up('fury')) * (1 + add.aps + 0.1 * sk('autodrill'))
+    * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner'));
+  st.critChance = Math.min(0.75, 0.05 + 0.015 * up('crit') + add.crit + (fx.crit || 0) + 0.02 * sk('seismic'));
+  st.critMult = 2 + 0.15 * up('critdmg') + add.critdmg + (fx.critdmg || 0);
+  if (sk('earthquake')) { st.critChance *= 0.5; st.critMult *= 2; }
   st.dps = st.hit * st.aps * (1 + st.critChance * (st.critMult - 1));
-  st.strikeMult = (1 + 0.1 * up('brain')) * (1 + 0.2 * sk('quickwit')) * (1 + add.strike);
+  st.strikeMult = (1 + 0.1 * up('brain')) * (1 + 0.2 * sk('quickwit')) * (1 + add.strike) * (1 + (fx.strike || 0));
+  st.perfectBonus = PERFECT_BONUS * (1 + 0.2 * sk('perfectionist'));
+  st.shieldEvery = SHIELD_EVERY - 2 * sk('steady');
+  st.lossMult = sk('limitbreak') ? 2 : 1;
+  st.hpMult = st.deepDiver ? 1.3 : 1;
+  st.skip = 0.05 * sk('tunneler');
+  st.oreMult = 1 + 0.25 * sk('prospector');
   st.comboPer = 0.05 + 0.01 * sk('adrenaline');
   // The tap pad's own difficulty is the real limit on the combo.
   st.comboCap = paceComboCap();
@@ -320,16 +388,18 @@ function computeStats() {
   st.boost = Date.now() < S.boostUntil ? 2 : 1;
   st.coinMult = (1 + 0.1 * up('magnet')) * (1 + add.coin) * (1 + 0.15 * sk('greed'))
     * (1 + 0.02 * branchPoints('tycoon')) * (1 + 0.003 * sk('compound') * S.run.maxFloor)
-    * trophy * coll * st.boost;
-  st.xpMult = (1 + 0.1 * up('scholar')) * (1 + add.xp);
-  st.luck = add.luck + 0.1 * sk('lucky') + 0.02 * branchPoints('gambler') + PRESTIGE_LUCK * S.prestiges;
+    * trophy * coll * st.boost * (1 + (fx.coin || 0)) * (1 + 0.25 * ptLevel('fortune')) * (st.deepDiver ? 1.6 : 1);
+  st.xpMult = (1 + 0.1 * up('scholar')) * (1 + add.xp) * (1 + (fx.xp || 0)) * (1 + 0.25 * ptLevel('wisdom')) * (st.deepDiver ? 1.6 : 1);
+  st.luck = add.luck + 0.1 * sk('lucky') + 0.02 * branchPoints('gambler') + PRESTIGE_LUCK * Math.min(S.prestiges, PRESTIGE_LUCK_MAX)
+    + (fx.luck || 0) + 0.1 * ptLevel('favor') + (sk('allin') ? 1.5 : 0);
+  st.caseCostMult = sk('allin') ? 1.5 : 1;
   st.caseDiscount = 0.06 * sk('haggler');
   st.epicPity = EPIC_PITY - 2 * sk('pity');
   st.scrapMult = 1 + 0.25 * sk('scrapper');
   st.bonusItem = 0.06 * sk('doubledown');
   st.bonusKey = 0.25 * sk('keymaster');
   st.jackpot = sk('jackpot') > 0 ? 2 : 1;
-  st.offlineRate = 0.4 + 0.1 * sk('nightshift');
+  st.offlineRate = 0.4 + 0.1 * sk('nightshift') + (sk('ledger') ? 0.4 : 0);
   st.offlineCap = (4 + 2 * sk('deeppockets')) * 3600;
   st.oreRate = 1 + 0.2 * sk('oresense');
   return st;
@@ -373,7 +443,7 @@ function spawnEnemy(boss = false) {
   if (boss) type = BOSS_ORDER[(f / 10) % BOSS_ORDER.length];
   else if (f >= ENEMIES.goldie.minFloor && Math.random() < TREASURE_CHANCE) type = 'goldie';
   else type = weightedPick(NORMAL_ENEMIES.filter(t => ENEMIES[t].minFloor <= f), t => ENEMIES[t].weight);
-  const hp = hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1);
+  const hp = hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult;
   const name = boss ? `${biome.adj} ${BOSS_NAMES[type]}` : ENEMIES[type].name(biome);
   R.enemy = {
     type, boss, name, hp, max: hp, enter: ENTER_TIME, flash: 0,
@@ -449,7 +519,12 @@ function killEnemy(e) {
 function floorCleared(bossBeaten = false) {
   S.run.kills = 0;
   track('floor');
-  if (S.run.auto || bossBeaten) changeFloor(S.run.floor + 1);
+  if (!(S.run.auto || bossBeaten)) return;
+  const f = S.run.floor;
+  // Tunneler: sometimes drop two floors, but never past a boss.
+  const skip = ST.skip > 0 && !isBossFloor(f + 1) && Math.random() < ST.skip;
+  changeFloor(f + (skip ? 2 : 1));
+  if (skip) emit('tunnel', { floor: f + 2 });
 }
 
 function changeFloor(f) {
@@ -536,7 +611,7 @@ function duelHit(quality) {
 function duelMiss() {
   if (!R.duel) return;
   R.duel.lives--;
-  S.math.streak = Math.floor(S.math.streak * ST.comboKeep);
+  S.math.streak = Math.floor(S.math.streak * (1 - (1 - ST.comboKeep) * ST.lossMult));
   emit('duelMiss', R.duel);
   if (R.duel.lives <= 0) bossFailed();
 }
@@ -604,7 +679,8 @@ const PACE_STEP_TIME = 0.6; // seconds: steps are weighted by time, so fast tapp
 const PACE_HOLD_TIME = 20;
 function paceComboCap() {
   const k = clamp(((R.paceHold || 0) - PACE_LOW) / (PACE_HIGH - PACE_LOW), 0, 1);
-  return Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * k) + 4 * skillRank('momentum');
+  return Math.max(10, Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * k) + 4 * skillRank('momentum')
+    + (skillRank('limitbreak') ? 40 : 0) - (skillRank('ledger') ? 20 : 0));
 }
 // Each step counts in proportion to the time since the previous tap or escape, so the climb takes
 // about as long for everyone while the ~88% hit-rate balance stays the same.
@@ -641,7 +717,7 @@ function tapHit(quality) {
   const perfect = quality >= 0.5;
   paceStep(PACE_UP);
   R.cleanHits = (R.cleanHits || 0) + 1;
-  if (!R.shield && !shieldActive() && R.cleanHits >= SHIELD_EVERY) {
+  if (!R.shield && !shieldActive() && R.cleanHits >= ST.shieldEvery) {
     R.shield = 1;
     R.cleanHits = 0;
     emit('shield', { on: false, ready: true });
@@ -658,7 +734,7 @@ function tapHit(quality) {
     st.bestStreak = S.math.streak;
   }
   st.bestMult = Math.max(st.bestMult, comboMult());
-  let mult = TAP_STRIKE * ST.strikeMult * (perfect ? PERFECT_BONUS : 1);
+  let mult = TAP_STRIKE * ST.strikeMult * (perfect ? ST.perfectBonus : 1);
   const mega = ST.overdrive && S.math.streak % OVERDRIVE_EVERY === 0;
   if (mega) mult *= 5;
   queueStrike(mult, mega ? 'mega' : perfect ? 'quick' : 'strike');
@@ -704,7 +780,7 @@ function tapMiss() {
   const before = S.math.streak;
   R.cleanHits = 0;
   paceStep(-PACE_DOWN);
-  const keep = lerp(ST.comboKeep, Math.max(ST.comboKeep, PEAK_KEEP), comboFill());
+  const keep = 1 - (1 - lerp(ST.comboKeep, Math.max(ST.comboKeep, PEAK_KEEP), comboFill())) * ST.lossMult;
   S.math.streak = Math.floor(S.math.streak * keep);
   const bonus = R.bonusRound ? finishBonusRound(false) : null;
   const res = { ok: false, lost: before - S.math.streak, streak: S.math.streak, bonus };
@@ -780,7 +856,7 @@ function collectOre() {
   const roll = Math.random();
   let res;
   if (roll < 0.6) {
-    const c = Math.max(25, idleRates().coins * 60);
+    const c = Math.max(25, idleRates().coins * 60 * ST.oreMult);
     addCoins(c);
     res = { kind: 'coins', amount: c };
   } else if (roll < 0.85) {
@@ -917,7 +993,12 @@ function buyUpgrade(id, mode = S.settings.buyAmt) {
 function canLearn(id) {
   const n = SKILL_INDEX[id];
   if (!n) return false;
-  return S.run.sp > 0 && skillRank(id) < n.max && branchPoints(n.branch) >= TIER_REQ[n.tier];
+  return S.run.sp > 0 && skillRank(id) < n.max && nodeReachable(id);
+}
+// A node opens once a neighbour is owned (the centre counts as owned).
+function nodeReachable(id) {
+  if (skillRank(id) > 0) return true;
+  return (TREE_ADJ[id] || []).some(o => o === 'core' || skillRank(o) > 0);
 }
 
 function learnSkill(id) {
@@ -930,8 +1011,8 @@ function learnSkill(id) {
 
 function respecSkills() {
   let refund = 0;
-  for (const k in S.run.skills) refund += S.run.skills[k];
-  S.run.skills = {};
+  for (const k in S.run.skills) refund += S.run.skills[k] - (S.locks[k] || 0);
+  S.run.skills = { ...S.locks };
   S.run.sp += refund;
   recalc();
   return refund;
@@ -946,7 +1027,7 @@ function bestCaseTier() {
 }
 function caseCost(c) {
   const runInflation = Math.pow(CASE_INFLATION, S.run.cases || 0);
-  return Math.ceil(c.base * coinUnit(S.run.maxFloor) * runInflation * (1 - ST.caseDiscount));
+  return Math.ceil(c.base * coinUnit(S.run.maxFloor) * runInflation * (1 - ST.caseDiscount) * ST.caseCostMult);
 }
 function freeCrateReady() { return Date.now() >= S.freeCrateAt; }
 
@@ -965,14 +1046,17 @@ function rarityOdds() {
   return ws.map(w => w / tot);
 }
 
-function rollRarity(minR = 0) {
+// Tool cases and pet cases each keep their own pity counters.
+function pityFor(kind = S.caseKind) { return kind === 'pet' ? S.pityPet : S.pity; }
+function rollRarity(minR = 0, kind = S.caseKind) {
+  const pity = pityFor(kind);
   let lo = minR;
-  if (S.pity.leg + 1 >= LEGENDARY_PITY) lo = Math.max(lo, 3);
-  else if (S.pity.epic + 1 >= ST.epicPity) lo = Math.max(lo, 2);
+  if (pity.leg + 1 >= LEGENDARY_PITY) lo = Math.max(lo, 3);
+  else if (pity.epic + 1 >= ST.epicPity) lo = Math.max(lo, 2);
   const r = weightedIndex(rarityWeights(lo));
-  if (r >= 3) { S.pity.leg = 0; S.pity.epic = 0; }
-  else if (r === 2) { S.pity.epic = 0; S.pity.leg++; }
-  else { S.pity.epic++; S.pity.leg++; }
+  if (r >= 3) { pity.leg = 0; pity.epic = 0; }
+  else if (r === 2) { pity.epic = 0; pity.leg++; }
+  else { pity.epic++; pity.leg++; }
   return r;
 }
 
@@ -987,16 +1071,23 @@ function rollFloat(rng = Math.random) {
 }
 function wearIndex(fl) { const i = WEAR.findIndex(w => fl < w.max); return i < 0 ? WEAR.length - 1 : i; }
 
-// "1 in N" for a drop as the reel shows it: rarity odds with your current luck, times the
-// wear band's share for gear. Pets have no wear.
+// Raw rarity chances with no luck at all. Every "1 in N" in the game uses these, so a pull's odds
+// never change with your gear or skills; luck is shown on its own as a % boost.
+function baseRarityOdds() {
+  const tot = RARITY.reduce((a, r) => a + r.weight, 0);
+  return RARITY.map(r => r.weight / tot);
+}
+
+// "1 in N" for a drop: the raw rarity odds times the wear band's share for gear. Pets have no wear.
 function dropOdds(r, fl = null) {
-  const p = rarityOdds()[r] * (fl == null ? 1 : WEAR[wearIndex(fl)].share);
+  const p = baseRarityOdds()[r] * (fl == null ? 1 : WEAR[wearIndex(fl)].share);
   return p > 0 ? 1 / p : Infinity;
 }
 
-function rollDrop(tier, minR = 0) {
-  const r = rollRarity(minR);
-  if (Math.random() < PET_CHANCE) {
+// Tool cases drop gear only and pet cases drop pets only; the case kind is picked on the Cases tab.
+function rollDrop(tier, minR = 0, kind = S.caseKind) {
+  const r = rollRarity(minR, kind);
+  if (kind === 'pet') {
     return { kind: 'pet', sp: weightedPick(PET_IDS, id => PETS[id].weight), r, odds: dropOdds(r) };
   }
   const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight);
@@ -1408,19 +1499,26 @@ function claimableCounts() {
 }
 
 // ---------- prestige ----------
+// Prestiging pays two things. Power (+10% damage each, forever) grows with the square of the level
+// you reached, so deep runs count for much more than quick ones. Cores are spent in the prestige tree.
 function prestigeGain() { return coresFor(S.run.maxFloor); }
+function powerGain() { return Math.round((S.run.level * S.run.level) / 40); }
 function canPrestige() { return S.run.maxFloor >= 25 && prestigeGain() > 0; }
 
 function doPrestige() {
   if (!canPrestige()) return null;
   const gain = prestigeGain();
+  const power = powerGain();
   const slotsBefore = petSlots();
   const tierBefore = bestCaseTier();
   S.cores += gain;
+  S.power += power;
   S.prestiges++;
   S.stats.prestiges = S.prestiges;
   S.coins = 0;
   S.run = freshRun();
+  S.run.skills = { ...S.locks };
+  S.run.sp = 2 * ptLevel('headstart');
   S.math.streak = 0;
   R.enemy = null;
   R.spawnT = 1;
@@ -1434,17 +1532,50 @@ function doPrestige() {
   const tierAfter = bestCaseTier();
   return {
     gain,
+    power,
     total: S.cores,
     newSlot: petSlots() > slotsBefore,
     newCase: tierAfter > tierBefore ? CASES[tierAfter - 1].name : null,
   };
 }
 
+// Prestige tree.
+function ptCost(id) {
+  const n = PRESTIGE_TREE.find(x => x.id === id);
+  const lv = ptLevel(id);
+  return n.step ? n.base + n.step * lv : Math.ceil(n.base * Math.pow(n.growth, lv));
+}
+function buyPrestigeNode(id) {
+  if (!PRESTIGE_TREE.some(x => x.id === id)) return false;
+  const cost = ptCost(id);
+  if (S.cores < cost) return false;
+  S.cores -= cost;
+  S.ptree[id] = ptLevel(id) + 1;
+  track('ptree');
+  recalc();
+  return true;
+}
+
+// Locks keep chosen skill ranks through every prestige. Memory levels are the slots.
+function lockSlots() { return ptLevel('memory'); }
+function locksUsed() { let n = 0; for (const k in S.locks) n += S.locks[k]; return n; }
+function canLockRank(id) { return locksUsed() < lockSlots() && skillRank(id) > (S.locks[id] || 0); }
+function lockRank(id) {
+  if (!canLockRank(id)) return false;
+  S.locks[id] = (S.locks[id] || 0) + 1;
+  return true;
+}
+function unlockRank(id) {
+  if (!S.locks[id]) return false;
+  if (--S.locks[id] <= 0) delete S.locks[id];
+  return true;
+}
+
 // ---------- idle and offline ----------
 function idleRates() {
   const f = S.run.floor; // on a boss floor the miner farms that floor's regular enemies
   const dps = Math.max(1e-9, ST.dps * ST.goldDrill);
-  const t = (hpFor(f) * 0.975) / dps + SPAWN_GAP + ENTER_TIME;
+  const t = (hpFor(f) * 0.975 * ST.hpMult) / dps + SPAWN_GAP + ENTER_TIME;
   return {
     coins: (coinUnit(f) * 1.4 * ST.coinMult) / t,
     xp: (xpUnit(f) * 0.985 * ST.xpMult) / t,
