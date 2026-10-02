@@ -41,11 +41,14 @@ function curve() { return S && S.curve === 1 ? CURVE_OLD : TUNE; }
 // Prestige power. On the tougher mine it counts in floors of strength (1.5 x the square root of
 // power): the miner hits as if that many floors stronger, so each prestige keeps pushing you a few
 // floors deeper, even after hundreds of them. The old mine kept +10% damage per power.
+// Everything exponential is capped at a huge but finite value, so an absurd depth or power can never
+// turn health or damage into Infinity (an enemy with infinite health would stall a run for good).
+const BIG = 1e300;
 function powerFloors() { return TUNE.powerScale * Math.pow(S.power || 0, TUNE.powerExp); }
-function powerMult() { return S.curve === 1 ? 1 + TUNE.coreBonus * S.power : Math.pow(TUNE.hpGrowth, powerFloors()); }
-function hpFor(f) { const c = curve(); return c.hpBase * Math.pow(c.hpGrowth, f - 1) * (1 + c.hpLinear * (f - 1)); }
-function coinUnit(f) { const c = curve(); return c.coinScale * Math.pow(c.coinGrowth, f - 1) * (1 + c.hpLinear * (f - 1)); }
-function xpUnit(f) { return Math.pow(TUNE.xpGrowth, f - 1); }
+function powerMult() { return Math.min(BIG, S.curve === 1 ? 1 + TUNE.coreBonus * S.power : Math.pow(TUNE.hpGrowth, powerFloors())); }
+function hpFor(f) { const c = curve(); return Math.min(BIG, c.hpBase * Math.pow(c.hpGrowth, f - 1) * (1 + c.hpLinear * (f - 1))); }
+function coinUnit(f) { const c = curve(); return Math.min(BIG, c.coinScale * Math.pow(c.coinGrowth, f - 1) * (1 + c.hpLinear * (f - 1))); }
+function xpUnit(f) { return Math.min(BIG, Math.pow(TUNE.xpGrowth, f - 1)); }
 function xpNeed(level) { return Math.floor(TUNE.xpNeedBase * Math.pow(TUNE.xpNeedGrowth, level - 1)); }
 function sharpenDamage(L) {
   return (2 + L) * Math.pow(2, Math.floor(L / TUNE.sharpenPeriod));
@@ -427,7 +430,7 @@ function computeStats() {
   st.baseDmg = sharpenDamage(up('sharpen'));
   st.dmgMult = (1 + add.dmg) * (1 + 0.02 * branchPoints('brawler')) * (1 + (fx.dmg || 0))
     * powerMult() * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1);
-  st.hit = st.baseDmg * st.dmgMult;
+  st.hit = Math.min(BIG, st.baseDmg * st.dmgMult);
   st.aps = 1.25 * (1 + 0.04 * up('fury')) * (1 + add.aps + 0.1 * sk('autodrill'))
     * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner')) * (1 + 0.08 * sk('overclock')) * (sk('m-speed') ? 1.3 : 1);
   st.critChance = Math.min(0.75, 0.05 + 0.015 * up('crit') + add.crit + (fx.crit || 0) + 0.02 * sk('seismic'));
@@ -513,7 +516,7 @@ function spawnEnemy(boss = false) {
   if (boss) type = BOSS_ORDER[(f / 10) % BOSS_ORDER.length];
   else if (f >= ENEMIES.goldie.minFloor && Math.random() < TREASURE_CHANCE) type = 'goldie';
   else type = weightedPick(NORMAL_ENEMIES.filter(t => ENEMIES[t].minFloor <= f), t => ENEMIES[t].weight);
-  const hp = hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult;
+  const hp = Math.min(BIG, hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult);
   const name = boss ? `${biome.adj} ${BOSS_NAMES[type]}` : ENEMIES[type].name(biome);
   R.enemy = {
     type, boss, name, hp, max: hp, enter: ENTER_TIME, flash: 0,
@@ -1789,8 +1792,8 @@ function unlockRank(id) {
 // ---------- idle and offline ----------
 function idleRates() {
   const f = S.run.floor; // on a boss floor the miner farms that floor's regular enemies
-  const dps = Math.max(1e-9, ST.dps * ST.goldDrill);
-  const t = (hpFor(f) * 0.975 * ST.hpMult) / dps + SPAWN_GAP + ENTER_TIME;
+  const dps = Math.min(BIG, Math.max(1e-9, ST.dps * ST.goldDrill));
+  const t = Math.min(BIG, (hpFor(f) * 0.975 * ST.hpMult) / dps + SPAWN_GAP + ENTER_TIME);
   return {
     coins: (coinUnit(f) * 1.4 * ST.coinMult) / t,
     xp: (xpUnit(f) * 0.985 * ST.xpMult) / t,
