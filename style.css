@@ -601,6 +601,10 @@ input[type="text"] {
 
 .bagtools { display: flex; flex-wrap: wrap; gap: 6px; }
 .bagtools .btn { flex: 1 1 auto; }
+.bagsearch { display: flex; gap: 6px; margin: 6px 0; }
+.bagsearch input { flex: 1; min-width: 0; min-height: 38px; font: inherit; font-size: 16px; padding: 4px 8px; background: var(--ink); color: var(--fg); border: 2px solid var(--line); -webkit-user-select: text; user-select: text; }
+.bagsearch input:focus { outline: none; border-color: var(--gold); }
+.bagsearch .btn { flex: none; width: 42px; }
 .sortlist { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
 
 /* Tap pad */

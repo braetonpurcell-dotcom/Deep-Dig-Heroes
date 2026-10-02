@@ -995,6 +995,8 @@ function buildBag() {
   else if (UI.bagView === 'pets') h += petsViewHtml();
   else h += indexViewHtml();
   $('#tab-bag').innerHTML = h;
+  const q = $('#bagSearch');
+  if (q) q.addEventListener('input', onBagSearch);
 }
 
 function gearViewHtml() {
@@ -1016,20 +1018,69 @@ function gearViewHtml() {
       <button class="btn small bad" data-act="salvageBelow" data-r="${bulkR()}">Salvage</button>
       <button class="btn small" data-act="bagSort">Sort: ${BAG_SORT_LABEL[S.settings.bagSort]} ▾</button>
       <button class="btn small" data-act="bagShow">Show: ${bagShowText()} ▾</button></div>`;
-  const shown = sortedBag();
-  if (S.gear.bag.length && !shown.length) {
-    h += '<div class="card muted small">Nothing here with this filter. Tap Show to change it.</div>';
-  } else if (!S.gear.bag.length) {
-    h += '<div class="card muted small">Your bag is empty. Open cases to find pickaxes, helmets and charms. Compare the numbers and equip the best ones.</div>';
-  } else {
-    h += '<div class="baggrid">';
-    for (const it of shown) {
-      h += `<button class="bagtile rc${it.r}" data-act="item" data-id="${it.id}" aria-label="${RARITY[it.r].name} ${itemName(it)}">
-        <img src="${gearUrl(it.slot, it.t, it.r)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
-    }
-    h += '</div>';
+  if (S.gear.bag.length) {
+    h += `<div class="bagsearch"><input type="search" id="bagSearch" enterkeyhint="search" autocomplete="off" spellcheck="false"
+      placeholder="Search: eclipse charm fn, luck>50, t20" value="${escapeHtml(UI.bagQuery || '')}">
+      <button class="btn small" data-act="bagSearchHelp" aria-label="Search help">?</button></div>`;
   }
+  h += `<div id="bagList">${bagListHtml()}</div>`;
   return h;
+}
+
+function bagListHtml() {
+  const shown = sortedBag();
+  if (!S.gear.bag.length) return '<div class="card muted small">Your bag is empty. Open cases to find pickaxes, helmets and charms. Compare the numbers and equip the best ones.</div>';
+  if (!shown.length) return `<div class="card muted small">Nothing matches${(UI.bagQuery || '').trim() ? ' your search' : ''}. ${S.settings.bagShow !== 'all' || S.settings.bagOnly !== 'any' ? 'The Show filter is on too. ' : ''}</div>`;
+  let h = (UI.bagQuery || '').trim() ? `<div class="small muted" style="margin-bottom:4px">${plural(shown.length, 'match')}</div>` : '';
+  h += '<div class="baggrid">';
+  for (const it of shown) {
+    h += `<button class="bagtile rc${it.r}" data-act="item" data-id="${it.id}" aria-label="${RARITY[it.r].name} ${itemName(it)}">
+      <img src="${gearUrl(it.slot, it.t, it.r)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
+  }
+  return h + '</div>';
+}
+
+// ---------- bag search ----------
+// Words narrow it down (all must match, each as the start of a word): rarity, material, slot, wear, stat names, "locked", "new".
+// Comparisons check numbers: luck>50 means over +50% luck (main and sub-stats added up),
+// t>=20 is tier, lv>0 is upgraded, float<0.01 is a very clean float.
+const SEARCH_KEYS = {
+  dmg: 'dmg', damage: 'dmg', coin: 'coin', coins: 'coin', luck: 'luck', aps: 'aps', speed: 'aps', as: 'aps',
+  crit: 'crit', critdmg: 'critdmg', cd: 'critdmg', xp: 'xp', strike: 'strike', tap: 'strike',
+  t: 'tier', tier: 'tier', lv: 'lv', level: 'lv', plus: 'lv', float: 'fl', fl: 'fl', wear: 'fl', r: 'r', rarity: 'r',
+};
+function itemSearchText(it) {
+  const w = WEAR[wearIndex(it.fl)];
+  const stats = itemStats(it).map(s => STATS[s.k].name.toLowerCase() + ' ' + s.k).join(' ');
+  return [RARITY[it.r].name, MATERIALS[it.t].name, SLOTS[it.slot].name, SLOTS[it.slot].name + 's', w.name, w.short, stats,
+    it.locked ? 'locked' : 'unlocked', it.isNew ? 'new' : '', it.lv ? 'upgraded +' + it.lv : ''].join(' ').toLowerCase().split(/\s+/);
+}
+function searchValue(it, key) {
+  if (key === 'tier') return it.t;
+  if (key === 'lv') return it.lv;
+  if (key === 'fl') return it.fl;
+  if (key === 'r') return it.r;
+  return itemStatTotal(it, key) * 100;
+}
+function bagSearchTest(query) {
+  const parts = String(query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return () => true;
+  const tests = parts.map(p => {
+    const m = p.match(/^([a-z]+)(>=|<=|>|<|=)(-?\d*\.?\d+)%?$/);
+    if (m && SEARCH_KEYS[m[1]]) {
+      const key = SEARCH_KEYS[m[1]], n = Number(m[3]), op = m[2];
+      return it => { const v = searchValue(it, key); return op === '>' ? v > n : op === '<' ? v < n : op === '>=' ? v >= n : op === '<=' ? v <= n : Math.abs(v - n) < 1e-9; };
+    }
+    const tier = p.match(/^t(\d+)$/);
+    if (tier) return it => it.t === Number(tier[1]);
+    return it => itemSearchText(it).some(w => w.startsWith(p)); // word starts, so "locked" skips "unlocked"
+  });
+  return it => tests.every(t => t(it));
+}
+function onBagSearch(e) {
+  UI.bagQuery = e.target.value;
+  const list = $('#bagList');
+  if (list) list.innerHTML = bagListHtml();
 }
 
 const BAG_SORT_LABEL = {
@@ -1059,7 +1110,8 @@ function bulkR() { return clamp(UI.bulkR || 1, 1, TOP_RARITY); }
 function sortedBag() {
   const show = S.settings.bagShow;
   const only = BAG_ONLY_TEST[S.settings.bagOnly] || BAG_ONLY_TEST.any;
-  const bag = S.gear.bag.filter(it => (show === 'all' || it.slot === show) && only(it));
+  const hit = bagSearchTest(UI.bagQuery);
+  const bag = S.gear.bag.filter(it => (show === 'all' || it.slot === show) && only(it) && hit(it));
   const mode = S.settings.bagSort;
   if (mode === 'rarity') bag.sort((a, b) => b.r - a.r || b.t - a.t || b.lv - a.lv);
   else if (mode === 'best') bag.sort((a, b) => SLOT_IDS.indexOf(a.slot) - SLOT_IDS.indexOf(b.slot) || itemStats(b)[0].v - itemStats(a)[0].v);
@@ -1538,6 +1590,15 @@ function handleAction(el) {
     case 'setBagShow': S.settings.bagShow = d.v; SFX.click(); openBagShow(); buildBag(); break;
     case 'setBagOnly': S.settings.bagOnly = d.v; SFX.click(); openBagShow(); buildBag(); break;
     case 'bagShowDone': closeModal(); break;
+    case 'bagSearchHelp':
+      openModal(`<h2>Search the bag</h2><div class="small" style="line-height:1.6">
+        <p>Type words and every one has to match: <b>eclipse charm</b>, <b>fn pickaxe</b>, <b>legendary crit</b>, <b>locked</b>, <b>new</b>.</p>
+        <p>Compare numbers with &gt; &lt; &gt;= &lt;= or =:</p>
+        <p><b>luck&gt;50</b> over +50% luck (main and sub-stats added up)<br><b>dmg&gt;1000</b>, <b>coins&gt;200</b>, <b>speed&gt;10</b>, <b>crit&gt;5</b>, <b>cd&gt;100</b>, <b>xp&gt;20</b>, <b>tap&gt;50</b><br>
+        <b>t20</b> or <b>t&gt;=20</b> tier · <b>lv&gt;0</b> upgraded · <b>float&lt;0.01</b> cleanest floats</p>
+        <p>Mix them: <b>charm fn luck&gt;100 t&gt;=17</b></p></div>
+        <button class="btn good" style="width:100%" data-act="close">Got it</button>`);
+      break;
     case 'again': {
       const lo = UI.lastOpen;
       closeModal();

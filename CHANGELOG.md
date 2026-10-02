@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.9
+- **Bag search:** type to find exactly what you want. Words all have to match (rarity, material, Pickaxe/Helmet/Charm, wear like FN, stat names, locked, new), and you can compare numbers: `luck>50`, `dmg>1000`, `crit>5`, `t>=20`, `lv>0`, `float<0.01`. Mix them, like `charm fn luck>100 t>=17`. Tap ? next to the box for the full list. Search works together with Sort and Show.
+
 ## v1.11.8
 - **Bigger bag:** it now holds 500 items instead of 60.
 - **Sort the bag 14 ways:** tap Sort to pick Newest, Rarity, Best by type, Highest tier, Most upgraded, Best wear (FN first), or any stat: Damage, Coins, Luck, Attack speed, Crit chance, Crit damage, XP or Tap strike. Stat sorts add up the main stat and sub-stats.
