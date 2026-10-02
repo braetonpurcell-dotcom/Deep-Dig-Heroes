@@ -730,17 +730,20 @@ const PACE_UP = 0.004;
 const PACE_DOWN = 0.03;
 const PACE_WARMUP = 0.6; // a new session starts at 60% of the pace you settled at last time
 const PACE_CAP_MIN = 20; // combo cap (x2) up to PACE_LOW
-const PACE_CAP_MAX = 100; // combo cap (x6) from PACE_HIGH
 const PACE_LOW = 0.2;
-const PACE_HIGH = 0.8;
+// The combo ceiling climbs steeply with the pace you hold, so faster, more accurate tappers reach far
+// bigger multipliers: about 80 at 40% pace, 155 at 60%, 210 at 70%, 400 at 100%.
+const PACE_TOP = 1;
+const PACE_CAP_TOP = 400;
+const PACE_CAP_CURVE = 1.5;
 const PACE_STEP_TIME = 0.6; // seconds: steps are weighted by time, so fast tappers don't climb faster per second
 
 // The combo ceiling follows the pace you've held over the last ~20 seconds (paceHold), not the
 // instant pace, so a short dip (a glance away, a couple of escapes) barely moves your multiplier.
 const PACE_HOLD_TIME = 20;
 function paceComboCap() {
-  const k = clamp(((R.paceHold || 0) - PACE_LOW) / (PACE_HIGH - PACE_LOW), 0, 1);
-  return Math.max(10, Math.round(PACE_CAP_MIN + (PACE_CAP_MAX - PACE_CAP_MIN) * k) + 4 * skillRank('momentum')
+  const k = clamp(((R.paceHold || 0) - PACE_LOW) / (PACE_TOP - PACE_LOW), 0, 1);
+  return Math.max(10, Math.round(PACE_CAP_MIN + (PACE_CAP_TOP - PACE_CAP_MIN) * Math.pow(k, PACE_CAP_CURVE)) + 4 * skillRank('momentum')
     + (skillRank('limitbreak') ? 40 : 0) - (skillRank('ledger') ? 20 : 0) + (treeFx().cap || 0));
 }
 // Each step counts in proportion to the time since the previous tap or escape, so the climb takes

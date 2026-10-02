@@ -98,7 +98,7 @@ function lbValid(e) {
   if (![e.floor, e.mult, e.combo, e.prestiges, e.rare, e.play, e.taps, e.kills, e.cases].every(num)) return false;
   if (e.floor < 1 || e.floor > 5000 || e.mult < 1) return false;
   if (e.combo > 2 * e.taps + 1) return false; // a combo is built from taps (Fresh Hands counts 2 per tap)
-  if (e.mult > 1 + 0.09 * Math.min(e.combo, 200) + 0.01) return false; // best skills, Combo Mastery and Limit Break
+  if (e.mult > 1 + 0.09 * Math.min(e.combo, 500) + 0.01) return false; // best skills, Combo Mastery, Limit Break, top pace
   if (e.power != null && !num(e.power)) return false;
   if (e.kills < 2.5 * (e.floor - 1)) return false; // floors take 6 kills, minus Tunneler skips and 1-kill boss floors
   if (e.taps > e.play * 8 + 50) return false; // nobody taps 8 times a second for a whole session
