@@ -730,7 +730,7 @@ function refreshCaseButtons() {
     if (b.dataset.key !== key) {
       b.dataset.key = key;
       b.dataset.cost = cost;
-      const label = b.dataset.act === 'again' ? 'Open another' : max ? 'Max ×' + n : '×' + n;
+      const label = b.dataset.act === 'again' ? 'Open another' : '×' + n;
       b.innerHTML = `${label} ${costHtml(cost)}`;
     }
     b.disabled = S.coins < cost;
@@ -1014,12 +1014,16 @@ function gearViewHtml() {
     <div class="bagtools">
       <button class="btn small" data-act="bulkPick">${salvageLabel(bulkR())} ▸</button>
       <button class="btn small bad" data-act="salvageBelow" data-r="${bulkR()}">Salvage</button>
-      <button class="btn small" data-act="bagSort">Sort: ${BAG_SORT_LABEL[S.settings.bagSort]}</button></div>`;
-  if (!S.gear.bag.length) {
+      <button class="btn small" data-act="bagSort">Sort: ${BAG_SORT_LABEL[S.settings.bagSort]} ▾</button>
+      <button class="btn small" data-act="bagShow">Show: ${bagShowText()} ▾</button></div>`;
+  const shown = sortedBag();
+  if (S.gear.bag.length && !shown.length) {
+    h += '<div class="card muted small">Nothing here with this filter. Tap Show to change it.</div>';
+  } else if (!S.gear.bag.length) {
     h += '<div class="card muted small">Your bag is empty. Open cases to find pickaxes, helmets and charms. Compare the numbers and equip the best ones.</div>';
   } else {
     h += '<div class="baggrid">';
-    for (const it of sortedBag()) {
+    for (const it of shown) {
       h += `<button class="bagtile rc${it.r}" data-act="item" data-id="${it.id}" aria-label="${RARITY[it.r].name} ${itemName(it)}">
         <img src="${gearUrl(it.slot, it.t, it.r)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
     }
@@ -1028,15 +1032,60 @@ function gearViewHtml() {
   return h;
 }
 
-const BAG_SORT_LABEL = { new: 'Newest', rarity: 'Rarity', best: 'Best by type' };
+const BAG_SORT_LABEL = {
+  new: 'Newest', rarity: 'Rarity', best: 'Best by type', tier: 'Highest tier', lv: 'Most upgraded', fn: 'Best wear (FN)',
+  dmg: 'Damage', coin: 'Coins', luck: 'Luck', aps: 'Attack speed', crit: 'Crit chance', critdmg: 'Crit damage', xp: 'XP', strike: 'Tap strike',
+};
+const BAG_SHOW_LABEL = { all: 'All', pick: 'Pickaxes', helm: 'Helmets', charm: 'Charms' };
+const BAG_ONLY_LABEL = {
+  any: 'Anything', r3: 'Legendary+', r5: 'Exotic+', r7: 'Celestial+', fn: 'Factory New', locked: 'Locked', unlocked: 'Unlocked', new: 'New', upg: 'Upgraded',
+};
+const BAG_ONLY_TEST = {
+  any: () => true, r3: it => it.r >= 3, r5: it => it.r >= 5, r7: it => it.r >= 7, fn: it => it.fl < 0.07,
+  locked: it => it.locked, unlocked: it => !it.locked, new: it => it.isNew, upg: it => it.lv > 0,
+};
+function bagShowText() {
+  const a = S.settings.bagShow, b = S.settings.bagOnly;
+  if (b === 'any') return BAG_SHOW_LABEL[a];
+  return a === 'all' ? BAG_ONLY_LABEL[b] : `${BAG_SHOW_LABEL[a]}, ${BAG_ONLY_LABEL[b]}`;
+}
+function pickListHtml(act, labels, cur) {
+  return `<div class="sortlist">${Object.entries(labels).map(([k, l]) => `<button class="btn ${k === cur ? 'gold' : ''}" data-act="${act}" data-v="${k}">${l}</button>`).join('')}</div>`;
+}
+// Everything an item gives of one stat, main stat and sub-stats together.
+function itemStatTotal(it, k) { return itemStats(it).reduce((a, s) => a + (s.k === k ? s.v : 0), 0); }
 function bulkR() { return clamp(UI.bulkR || 1, 1, TOP_RARITY); }
 // The bag is shown sorted; the stored order (newest first) is left alone.
 function sortedBag() {
-  const bag = S.gear.bag.slice();
+  const show = S.settings.bagShow;
+  const only = BAG_ONLY_TEST[S.settings.bagOnly] || BAG_ONLY_TEST.any;
+  const bag = S.gear.bag.filter(it => (show === 'all' || it.slot === show) && only(it));
   const mode = S.settings.bagSort;
   if (mode === 'rarity') bag.sort((a, b) => b.r - a.r || b.t - a.t || b.lv - a.lv);
   else if (mode === 'best') bag.sort((a, b) => SLOT_IDS.indexOf(a.slot) - SLOT_IDS.indexOf(b.slot) || itemStats(b)[0].v - itemStats(a)[0].v);
+  else if (mode === 'fn') bag.sort((a, b) => a.fl - b.fl || b.r - a.r);
+  else if (mode === 'tier') bag.sort((a, b) => b.t - a.t || b.r - a.r || a.fl - b.fl);
+  else if (mode === 'lv') bag.sort((a, b) => b.lv - a.lv || b.r - a.r);
+  else if (STATS[mode]) {
+    const v = new Map(bag.map(it => [it, itemStatTotal(it, mode)]));
+    bag.sort((a, b) => v.get(b) - v.get(a) || b.r - a.r);
+  }
   return bag;
+}
+
+// Two choices that stack: which kind of item, and which ones of it.
+function openBagShow() {
+  const n = sortedBag().length;
+  const html = `<h2>Show</h2><b class="small">Type</b>${pickListHtml('setBagShow', BAG_SHOW_LABEL, S.settings.bagShow)}
+    <b class="small" style="display:block;margin-top:10px">Only</b>${pickListHtml('setBagOnly', BAG_ONLY_LABEL, S.settings.bagOnly)}
+    <button class="btn good" style="width:100%;margin-top:10px" data-act="bagShowDone">Show ${plural(n, 'item')}</button>`;
+  if (UI.modalOpen && $('#bagShowMark')) {
+    const sheet = $('#modal .sheet'), y = sheet.scrollTop;
+    sheet.innerHTML = html + '<i id="bagShowMark" hidden></i>';
+    sheet.scrollTop = y;
+    return;
+  }
+  openModal(html + '<i id="bagShowMark" hidden></i>');
 }
 
 function partyBonusText() {
@@ -1478,12 +1527,17 @@ function handleAction(el) {
       break;
     case 'bulkPick': UI.bulkR = (bulkR() % TOP_RARITY) + 1; SFX.click(); buildBag(); break;
     case 'bagSort': {
-      const order = ['new', 'rarity', 'best'];
-      S.settings.bagSort = order[(order.indexOf(S.settings.bagSort) + 1) % order.length];
       SFX.click();
-      buildBag();
+      const cur = S.settings.bagSort;
+      openModal(`<h2>Sort bag</h2>${pickListHtml('setBagSort', BAG_SORT_LABEL, cur)}
+        <p class="small muted">Stat sorts add up the main stat and sub-stats.</p>`);
       break;
     }
+    case 'setBagSort': S.settings.bagSort = d.v; SFX.click(); closeModal(); buildBag(); break;
+    case 'bagShow': SFX.click(); openBagShow(); break;
+    case 'setBagShow': S.settings.bagShow = d.v; SFX.click(); openBagShow(); buildBag(); break;
+    case 'setBagOnly': S.settings.bagOnly = d.v; SFX.click(); openBagShow(); buildBag(); break;
+    case 'bagShowDone': closeModal(); break;
     case 'again': {
       const lo = UI.lastOpen;
       closeModal();

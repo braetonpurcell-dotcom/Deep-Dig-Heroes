@@ -128,7 +128,7 @@ function freshState() {
     },
     settings: {
       sound: true, vibe: true,
-      autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA, bagSort: 'new',
+      autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA, bagSort: 'new', bagShow: 'all', bagOnly: 'any',
     },
   };
 }
@@ -371,7 +371,9 @@ function hydrate(obj) {
   if (!['low', 'med', 'high'].includes(st.juice)) st.juice = 'high';
   st.shake = st.shake !== false;
   st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, TOP_RARITY) : 0;
-  if (!['new', 'rarity', 'best'].includes(st.bagSort)) st.bagSort = 'new';
+  if (!['new', 'rarity', 'best', 'tier', 'lv', 'fn', ...Object.keys(STATS)].includes(st.bagSort)) st.bagSort = 'new';
+  if (!['all', 'pick', 'helm', 'charm'].includes(st.bagShow)) st.bagShow = 'all';
+  if (!['any', 'r3', 'r5', 'r7', 'fn', 'locked', 'unlocked', 'new', 'upg'].includes(st.bagOnly)) st.bagOnly = 'any';
   st.autoStop = Number.isInteger(st.autoStop) ? clamp(st.autoStop, 2, TOP_RARITY) : ULTRA;
   st.breakMin = nonNeg(st.breakMin);
   if (!['1', '10', 'max'].includes(String(st.buyAmt))) st.buyAmt = '1';

@@ -348,7 +348,7 @@ const WEAR = [
   { min: 0.45, max: 1, name: 'Battle-Scarred', short: 'BS', share: 0.16 },
 ];
 const MAX_ITEM_LEVEL = 10;
-const BAG_SIZE = 60;
+const BAG_SIZE = 500; // measured: 500 items is ~47 KB of save and ~0.1s to draw on a slow phone
 
 const PETS = {
   mole: { name: 'Mole', weight: 26, stats: { dmg: 0.05 }, fly: false },

@@ -3,6 +3,12 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.8
+- **Bigger bag:** it now holds 500 items instead of 60.
+- **Sort the bag 14 ways:** tap Sort to pick Newest, Rarity, Best by type, Highest tier, Most upgraded, Best wear (FN first), or any stat: Damage, Coins, Luck, Attack speed, Crit chance, Crit damage, XP or Tap strike. Stat sorts add up the main stat and sub-stats.
+- **Show filter:** tap Show to pick a type (All, Pickaxes, Helmets, Charms) and narrow it down (Legendary+, Exotic+, Celestial+, Factory New, Locked, Unlocked, New, Upgraded). The two stack, so you can show just Legendary+ charms, for example.
+- On the Cases tab, the max button now just shows the count (like ×37) without the word Max.
+
 ## v1.11.7
 - Every case now has **×1, ×10, ×25 and Max** buttons, plus Use key. Max opens as many as you can afford (up to 100 at once) and shows how many on the button. Big batches reveal faster so a Max open doesn't drag on.
 
