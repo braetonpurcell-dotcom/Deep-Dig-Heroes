@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.11
+- Tapping flow now powers up your swings as well as speeding them up: at full flow your miner hits 50% harder on top of swinging up to 60% faster. When you're not tapping, everything runs at its normal speed and strength, and attack speed from skills and gear works as before.
+
 ## v1.11.10
 - **Flow now comes from tapping:** every tap strike on the pad builds it. As it builds, your miner swings faster (up to +60% attack speed), monsters come in quicker, the swing sounds get brighter and the kill "ding" climbs higher. Stop tapping and it eases back down within a couple of seconds. Being strong on its own no longer speeds things up.
 

@@ -535,13 +535,15 @@ function spawnEnemy(boss = false) {
 }
 
 // Flow comes from tapping: every tap strike on the pad builds it, and it drains once you stop.
-// The more of it you have, the faster your miner swings (up to +FLOW_APS), the sooner the next
+// The more of it you have, the faster and harder your miner swings (FLOW_APS, FLOW_DMG), the sooner the next
 // monster arrives, and the higher the kill "ding" climbs, so a tapping streak speeds everything up.
 const FLOW_TAP = 0.2; // per successful tap
 const FLOW_DRAIN = 0.15; // per second while tapping
 const FLOW_IDLE_DRAIN = 0.6; // per second after FLOW_IDLE seconds without a tap
 const FLOW_IDLE = 1.5;
 let FLOW_APS = 0.6; // +60% attack speed at full flow
+let FLOW_DMG = 0.5; // +50% swing damage at full flow
+function flowDmg() { return 1 + FLOW_DMG * clamp(R.flow || 0, 0, 1); }
 function flowTap(ok) { R.flow = ok ? Math.min(1, (R.flow || 0) + FLOW_TAP) : (R.flow || 0) * 0.7; }
 function updateFlow(dt) {
   if (!R.flow) return;
@@ -560,7 +562,7 @@ function situational(e) {
 
 function heroHit(e) {
   const crit = Math.random() < ST.critChance;
-  const d = ST.hit * comboMult() * situational(e) * (crit ? ST.critMult : 1);
+  const d = ST.hit * comboMult() * flowDmg() * situational(e) * (crit ? ST.critMult : 1);
   R.swingT = Math.min(0.22, 0.7 / ST.aps);
   dealDamage(e, d, crit ? 'crit' : 'hit');
 }
