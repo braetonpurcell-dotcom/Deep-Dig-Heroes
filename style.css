@@ -694,6 +694,8 @@ body.fulltab #stage, body.fulltab #floorbar { display: none; }
 .mathmeta .shield.rush { color: #2a1a00; background: var(--gold); padding: 0 4px; }
 .mathmeta { flex-wrap: wrap; row-gap: 4px; }
 
+.mathmeta .pace.over { color: var(--gold); }
+
 /* During a mini-game the boss scene shrinks so the game fits on short phones */
 body.in-mg #cv { height: min(calc((100vw - 36px) * 0.6), 20svh, 300px); }
 @supports not (height: 1svh) { body.in-mg #cv { height: min(calc((100vw - 36px) * 0.6), 20vh, 300px); } }

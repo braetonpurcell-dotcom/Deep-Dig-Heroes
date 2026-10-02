@@ -18,20 +18,39 @@ const TREASURE_TIME = 10;
 const COMBO_FADE_STEP = 0.8; // seconds per lost stack once the combo starts fading
 const PRESTIGE_LUCK = 0.1; // each of your first 10 prestiges makes every case a little luckier, forever
 const PRESTIGE_LUCK_MAX = 10;
+// Difficulty curves. Saves from before the tougher mine keep the old curve until their next
+// prestige; every run after that (and every new player) uses TUNE.
+const CURVE_LATEST = 2;
+const CURVE_OLD = { hpBase: 6, hpGrowth: 1.25, hpLinear: 0.015, coinGrowth: 1.15, coinScale: 1 };
 
 // ---------- formulas ----------
 // Balance knobs. Enemy health grows a little faster than coins, so every run
 // eventually hits a wall that prestige cores push further back.
 const TUNE = {
-  hpBase: 6, hpGrowth: 1.25, hpLinear: 0.015,
-  coinGrowth: 1.15,
+  // Measured in 2-hour sims (beta 1.13, tools/playtest/sim.js, personas A-E): first prestige at
+  // 6-22 minutes and B100 at 27-63 minutes depending on tapping speed, each prestige pushing the
+  // best floor further. The old mine reached B100 in about 8 minutes.
+  hpBase: 25, hpGrowth: 1.35, hpLinear: 0.015,
+  coinGrowth: 1.15, coinScale: 0.3,
+  // Floors of strength from power: powerScale * power^powerExp. Below 1, each extra power counts a
+  // little less, which keeps the gain per run steady instead of snowballing over hundreds of prestiges.
+  powerScale: 1.5, powerExp: 0.5,
   xpGrowth: 1.10, xpNeedBase: 12, xpNeedGrowth: 1.25,
   sharpenPeriod: 25,
   coreScale: 1, coreExp: 1.5, coreBonus: 0.1,
 };
-function hpFor(f) { return TUNE.hpBase * Math.pow(TUNE.hpGrowth, f - 1) * (1 + TUNE.hpLinear * (f - 1)); }
-function coinUnit(f) { return Math.pow(TUNE.coinGrowth, f - 1) * (1 + TUNE.hpLinear * (f - 1)); }
-function xpUnit(f) { return Math.pow(TUNE.xpGrowth, f - 1); }
+function curve() { return S && S.curve === 1 ? CURVE_OLD : TUNE; }
+// Prestige power. On the tougher mine it counts in floors of strength (1.5 x the square root of
+// power): the miner hits as if that many floors stronger, so each prestige keeps pushing you a few
+// floors deeper, even after hundreds of them. The old mine kept +10% damage per power.
+// Everything exponential is capped at a huge but finite value, so an absurd depth or power can never
+// turn health or damage into Infinity (an enemy with infinite health would stall a run for good).
+const BIG = 1e300;
+function powerFloors() { return TUNE.powerScale * Math.pow(S.power || 0, TUNE.powerExp); }
+function powerMult() { return Math.min(BIG, S.curve === 1 ? 1 + TUNE.coreBonus * S.power : Math.pow(TUNE.hpGrowth, powerFloors())); }
+function hpFor(f) { const c = curve(); return Math.min(BIG, c.hpBase * Math.pow(c.hpGrowth, f - 1) * (1 + c.hpLinear * (f - 1))); }
+function coinUnit(f) { const c = curve(); return Math.min(BIG, c.coinScale * Math.pow(c.coinGrowth, f - 1) * (1 + c.hpLinear * (f - 1))); }
+function xpUnit(f) { return Math.min(BIG, Math.pow(TUNE.xpGrowth, f - 1)); }
 function xpNeed(level) { return Math.floor(TUNE.xpNeedBase * Math.pow(TUNE.xpNeedGrowth, level - 1)); }
 function sharpenDamage(L) {
   return (2 + L) * Math.pow(2, Math.floor(L / TUNE.sharpenPeriod));
@@ -77,6 +96,7 @@ function freshState() {
     coins: 0, keys: 0, scrap: 0, cores: 0, trophies: 0, prestiges: 0, nextId: 1,
     power: 0, // permanent damage from the levels reached in past runs (+10% per point)
     treeV: TREE_VERSION, // skill web layout version (see migrateTree)
+    curve: CURVE_LATEST, // difficulty curve for this run (see CURVE_OLD)
     ptree: {}, // prestige tree levels, bought with cores
     locks: {}, // skill ranks kept through prestige (node id -> ranks)
     caseKind: 'tool', // which cases you open: 'tool' (gear) or 'pet'
@@ -149,6 +169,9 @@ const nonNegInt = (v, d = 0) => (Number.isInteger(v) && v >= 0 ? v : d);
 // their power in the 21-material list, where they sit at 1, 5, 9, 13 and 17.
 function migrateSave(obj) {
   if (!obj || typeof obj !== 'object') return obj;
+  // Saved before the curve was recorded: beta 1.12 saves were already on the tougher mine, every
+  // other save keeps the old curve until it prestiges.
+  if (obj.curve == null) obj.curve = /^1\.12\./.test(String(obj.gameVersion || '')) ? CURVE_LATEST : 1;
   if ((obj.v || 1) >= 3) return migrateTree(obj);
   if ((obj.v || 1) >= 2) return migrateTree(migrateV3(obj));
   const remap = it => { if (it && Number.isInteger(it.t) && it.t >= 1 && it.t <= 5) it.t = 1 + MATERIALS_PER_CASE * (it.t - 1); };
@@ -229,6 +252,7 @@ function hydrate(obj) {
   s.run.rush.mult = s.run.rush.mult === 3 ? 3 : 2;
   s.run.bestCombo = nonNegInt(s.run.bestCombo);
   s.run.giftSp = nonNegInt(s.run.giftSp);
+  if (s.curve !== 1) s.curve = CURVE_LATEST;
   s.nextId = nonNegInt(s.nextId, 1);
   // Run and combo numbers.
   const run = s.run;
@@ -255,7 +279,7 @@ function hydrate(obj) {
   }
   if (!run.bossDone || typeof run.bossDone !== 'object') run.bossDone = {};
   s.math.streak = nonNegInt(s.math.streak);
-  s.pace = isFinite(s.pace) ? clamp(s.pace, 0, 1) : 0;
+  s.pace = isFinite(s.pace) ? clamp(s.pace, 0, PACE_TOP) : 0;
   if (typeof s.profile.name !== 'string') s.profile.name = '';
   s.profile.name = s.profile.name.slice(0, 20);
   if (typeof s.profile.pid !== 'string') s.profile.pid = '';
@@ -407,8 +431,8 @@ function computeStats() {
   st.deepDiver = sk('deepdiver') > 0;
   st.baseDmg = sharpenDamage(up('sharpen'));
   st.dmgMult = (1 + add.dmg) * (1 + 0.02 * branchPoints('brawler')) * (1 + (fx.dmg || 0))
-    * (1 + TUNE.coreBonus * S.power) * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1);
-  st.hit = st.baseDmg * st.dmgMult;
+    * powerMult() * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1);
+  st.hit = Math.min(BIG, st.baseDmg * st.dmgMult);
   st.aps = 1.25 * (1 + 0.04 * up('fury')) * (1 + add.aps + 0.1 * sk('autodrill'))
     * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner')) * (1 + 0.08 * sk('overclock')) * (sk('m-speed') ? 1.3 : 1);
   st.critChance = Math.min(0.75, 0.05 + 0.015 * up('crit') + add.crit + (fx.crit || 0) + 0.02 * sk('seismic'));
@@ -494,7 +518,7 @@ function spawnEnemy(boss = false) {
   if (boss) type = BOSS_ORDER[(f / 10) % BOSS_ORDER.length];
   else if (f >= ENEMIES.goldie.minFloor && Math.random() < TREASURE_CHANCE) type = 'goldie';
   else type = weightedPick(NORMAL_ENEMIES.filter(t => ENEMIES[t].minFloor <= f), t => ENEMIES[t].weight);
-  const hp = hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult;
+  const hp = Math.min(BIG, hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult);
   const name = boss ? `${biome.adj} ${BOSS_NAMES[type]}` : ENEMIES[type].name(biome);
   R.enemy = {
     type, boss, name, hp, max: hp, enter: ENTER_TIME, flash: 0,
@@ -754,9 +778,9 @@ function paceStep(delta) {
   R.paceHold = (R.paceHold || 0) + (R.pace - (R.paceHold || 0)) * (1 - Math.exp(-since / PACE_HOLD_TIME));
   setPace(R.pace + delta * clamp(since / PACE_STEP_TIME, 0.25, 1));
 }
-function startPaceSession() { R.pace = R.paceHold = clamp((S.pace || 0) * PACE_WARMUP, 0, 1); }
+function startPaceSession() { R.pace = R.paceHold = clamp((S.pace || 0) * PACE_WARMUP, 0, PACE_TOP); }
 function setPace(p) {
-  R.pace = clamp(p, 0, 1);
+  R.pace = clamp(p, 0, PACE_TOP);
   S.pace = R.pace;
   if (ST) ST.comboCap = paceComboCap();
 }
@@ -1705,6 +1729,8 @@ function doPrestige() {
   const tierBefore = bestCaseTier();
   S.cores += gain;
   S.power += power;
+  const newCurve = S.curve !== CURVE_LATEST;
+  S.curve = CURVE_LATEST;
   S.prestiges++;
   S.stats.prestiges = S.prestiges;
   S.coins = 0;
@@ -1726,6 +1752,7 @@ function doPrestige() {
     gain,
     power,
     total: S.cores,
+    newCurve,
     newSlot: petSlots() > slotsBefore,
     newCase: tierAfter > tierBefore ? CASES[tierAfter - 1].name : null,
   };
@@ -1767,8 +1794,8 @@ function unlockRank(id) {
 // ---------- idle and offline ----------
 function idleRates() {
   const f = S.run.floor; // on a boss floor the miner farms that floor's regular enemies
-  const dps = Math.max(1e-9, ST.dps * ST.goldDrill);
-  const t = (hpFor(f) * 0.975 * ST.hpMult) / dps + SPAWN_GAP + ENTER_TIME;
+  const dps = Math.min(BIG, Math.max(1e-9, ST.dps * ST.goldDrill));
+  const t = Math.min(BIG, (hpFor(f) * 0.975 * ST.hpMult) / dps + SPAWN_GAP + ENTER_TIME);
   return {
     coins: (coinUnit(f) * 1.4 * ST.coinMult) / t,
     xp: (xpUnit(f) * 0.985 * ST.xpMult) / t,

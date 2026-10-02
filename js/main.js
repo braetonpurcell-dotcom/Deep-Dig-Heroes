@@ -17,7 +17,7 @@ function showIntro() {
   openModal(`<h2>Deep Dig Heroes</h2>
     <div style="text-align:center"><img src="${spriteUrl(heroSprite(false), 5, 'intro:hero')}" alt="" style="width:80px;image-rendering:pixelated"></div>
     <p>Your miner digs and fights on their own. Coins keep coming in, even while the app is closed.</p>
-    <p><b>Tap the monsters on the pad before their ring closes.</b> Each tap strikes and adds to your combo, and the combo multiplies all your damage, up to x6. Tap early for a PERFECT. A monster that escapes cuts your combo, and the faster you are, the faster they come.</p>
+    <p><b>Tap the monsters on the pad before their ring closes.</b> Each tap strikes and adds to your combo, and the combo multiplies all your damage: the faster and more accurately you tap, the higher it climbs. Tap early for a PERFECT. A monster that escapes cuts your combo, and the faster you are, the faster they come.</p>
     <p>Spend coins in the <b>Forge</b>, open <b>Cases</b> for gear and pets, and put skill points into your build. Reach B25 to prestige for permanent power.</p>
     <div class="mbtns"><button class="btn gold" data-act="close">Start digging</button></div>`, { dismissable: true });
 }

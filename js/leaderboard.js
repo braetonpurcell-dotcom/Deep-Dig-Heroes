@@ -17,7 +17,7 @@ const LB_CATS = [
   { k: 'pick', name: 'Top pickaxe', fmt: (v, e) => e.pickLabel || oddsLong(v) },
   { k: 'helm', name: 'Top helmet', fmt: (v, e) => e.helmLabel || oddsLong(v) },
   { k: 'charm', name: 'Top charm', fmt: (v, e) => e.charmLabel || oddsLong(v) },
-  { k: 'power', name: 'Power', fmt: v => fmt(v) + ` (+${fmt(v * 10)}% dmg)` },
+  { k: 'power', name: 'Power', fmt: v => fmt(v) + ' power' },
   { k: 'prestiges', name: 'Prestiges', fmt: v => fmt(v) },
   { k: 'play', name: 'Time played', fmt: v => fmtTime(v) },
   { k: 'cases', name: 'Cases opened', fmt: v => fmt(v) },
@@ -98,7 +98,7 @@ function lbValid(e) {
   if (![e.floor, e.mult, e.combo, e.prestiges, e.rare, e.play, e.taps, e.kills, e.cases].every(num)) return false;
   if (e.floor < 1 || e.floor > 5000 || e.mult < 1) return false;
   if (e.combo > 2 * e.taps + 1) return false; // a combo is built from taps (Fresh Hands counts 2 per tap)
-  if (e.mult > 1 + 0.09 * Math.min(e.combo, 500) + 0.01) return false; // best skills, Combo Mastery, Limit Break, top pace
+  if (e.mult > 1 + 0.09 * Math.min(e.combo, 500) + 0.01) return false; // best skills, Combo Mastery, Limit Break and 200% pace
   if (e.power != null && !num(e.power)) return false;
   if (e.kills < 2.5 * (e.floor - 1)) return false; // floors take 6 kills, minus Tunneler skips and 1-kill boss floors
   if (e.taps > e.play * 8 + 50) return false; // nobody taps 8 times a second for a whole session
