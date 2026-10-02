@@ -164,7 +164,9 @@ const nonNegInt = (v, d = 0) => (Number.isInteger(v) && v >= 0 ? v : d);
 // their power in the 21-material list, where they sit at 1, 5, 9, 13 and 17.
 function migrateSave(obj) {
   if (!obj || typeof obj !== 'object') return obj;
-  if (obj.curve == null) obj.curve = 1; // saved before the tougher mine: keeps the old curve until it prestiges
+  // Saved before the curve was recorded: beta 1.12 saves were already on the tougher mine, every
+  // other save keeps the old curve until it prestiges.
+  if (obj.curve == null) obj.curve = /^1\.12\./.test(String(obj.gameVersion || '')) ? CURVE_LATEST : 1;
   if ((obj.v || 1) >= 3) return migrateTree(obj);
   if ((obj.v || 1) >= 2) return migrateTree(migrateV3(obj));
   const remap = it => { if (it && Number.isInteger(it.t) && it.t >= 1 && it.t <= 5) it.t = 1 + MATERIALS_PER_CASE * (it.t - 1); };
