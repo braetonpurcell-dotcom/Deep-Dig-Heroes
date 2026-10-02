@@ -26,6 +26,8 @@ function startMinigame(game, mode) {
   const run = { game, mode, level: 1, alive: true, timers: [], busy: false };
   MG.active = run;
   $('#tab-fight').classList.add('in-mg');
+  document.body.classList.add('in-mg'); // the boss scene shrinks so the mini-game gets the room
+  resizeCanvas();
   run.win = (quality, best, label) => mgWin(run, quality, best, label);
   run.lose = msg => mgLose(run, msg);
   mgShell(run);
@@ -40,6 +42,8 @@ function stopMinigame() {
   run.timers.forEach(clearTimeout);
   MG.active = null;
   $('#tab-fight').classList.remove('in-mg');
+  document.body.classList.remove('in-mg');
+  resizeCanvas();
   $('#arena').innerHTML = '';
   updateFight();
 }
@@ -78,7 +82,41 @@ function mgRound(run) {
   run.busy = false;
   mgStatus(run);
   ({ reaction: roundReaction, sequence: roundSequence, number: roundNumber, chimp: roundChimp })[run.game](run);
+  mgFit();
 }
+
+// Shrink a round's grid or keypad just enough that nothing ends up below the screen, so a round
+// never needs scrolling on a short phone.
+function mgFit() {
+  const stage = $('#mgStage');
+  if (!stage || !MG.active) return;
+  const bottom = $('#panel').getBoundingClientRect().bottom - 4;
+  const note = $('#mgNote');
+  const low = () => Math.max(stage.getBoundingClientRect().top, ...[...stage.querySelectorAll('button, .mg-vein, .mg-number, .mg-empty')].map(e => e.getBoundingClientRect().bottom))
+    + (note ? note.offsetHeight + 6 : 0);
+  const grid = stage.querySelector('.mg-grid');
+  const pad = stage.querySelector('.mg-pad');
+  if (grid) {
+    grid.style.maxWidth = '';
+    grid.style.removeProperty('--cmax');
+    let over = low() - bottom;
+    if (over > 0 && grid.classList.contains('g3')) {
+      // Crystal rows are capped by height, so shrink that cap first.
+      grid.style.setProperty('--cmax', Math.max(34, 64 - Math.ceil(over / 3)) + 'px');
+      over = low() - bottom;
+    }
+    if (over > 0) {
+      const r = grid.getBoundingClientRect();
+      grid.style.maxWidth = Math.max(170, Math.floor(r.width * (r.height - over) / r.height)) + 'px';
+    }
+  }
+  if (pad) {
+    pad.style.removeProperty('--padh');
+    const over = low() - bottom;
+    if (over > 0) pad.style.setProperty('--padh', Math.max(30, 40 - Math.ceil(over / 4)) + 'px');
+  }
+}
+window.addEventListener('resize', () => mgFit());
 
 function mgWin(run, quality, best, label) {
   if (run.busy) return;
@@ -217,6 +255,7 @@ function roundNumber(run) {
       <div class="mg-pad">${['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0'].map(k =>
         `<button data-mg="key" data-k="${k}" class="${k === 'del' ? 'fn' : ''}">${k === 'del' ? '⌫' : k}</button>`).join('')}</div>`;
     mgNote(`Type the ${digits}-digit number`);
+    mgFit();
     run.onTap = t => {
       if (run.busy) return;
       const k = t.dataset.k;

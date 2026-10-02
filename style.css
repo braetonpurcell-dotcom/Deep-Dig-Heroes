@@ -545,7 +545,7 @@ input[type="text"] {
 .mg-grid { display: grid; gap: 8px; width: 100%; max-width: 360px; margin: 0 auto; touch-action: none; }
 .mg-grid.g3 { grid-template-columns: repeat(3, 1fr); }
 .mg-grid.g5 { grid-template-columns: repeat(5, 1fr); gap: 5px; }
-.mg-crystal { aspect-ratio: 1; max-height: 64px; width: 100%; border: 3px solid var(--line-hi); clip-path: var(--notch); background: #1c2a3d; touch-action: none; transition: background .08s; }
+.mg-crystal { aspect-ratio: 1; max-height: var(--cmax, 64px); width: 100%; border: 3px solid var(--line-hi); clip-path: var(--notch); background: #1c2a3d; touch-action: none; transition: background .08s; }
 .mg-crystal.c1 { background: #2a1d3d; } .mg-crystal.c2 { background: #1d3a30; }
 .mg-crystal.lit { background: #7ff6ff; border-color: #ffffff; box-shadow: 0 0 18px #7ff6ff; }
 .mg-ore { aspect-ratio: 1; width: 100%; border: 2px solid #c98e1a; clip-path: var(--notch); background: #6b4f12; color: #fff3cf; font-size: 20px; font-weight: 700; touch-action: none; }
@@ -556,7 +556,7 @@ input[type="text"] {
 .mg-number { text-align: center; font-size: clamp(34px, 11vw, 52px); font-weight: 700; color: var(--gold); letter-spacing: .08em; min-height: 56px; }
 .mg-number.typed { color: var(--fg); background: var(--ink); border: 2px solid var(--line-hi); }
 .mg-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.mg-pad button { min-height: 40px; font-size: 22px; font-weight: 700; background: var(--raise); border: 2px solid var(--line-hi); clip-path: var(--notch); touch-action: none; }
+.mg-pad button { min-height: var(--padh, 40px); font-size: 22px; font-weight: 700; background: var(--raise); border: 2px solid var(--line-hi); clip-path: var(--notch); touch-action: none; }
 .mg-pad button.fn { color: var(--dim); }
 .mg-result { text-align: center; display: flex; flex-direction: column; gap: 8px; }
 .mg-keys { font-size: 20px; color: var(--gold); }
@@ -693,3 +693,12 @@ body.fulltab #stage, body.fulltab #floorbar { display: none; }
 .mathmeta .shield.fresh { color: #0d0a12; background: var(--good); padding: 0 4px; animation: pulse 1.6s steps(2) infinite; }
 .mathmeta .shield.rush { color: #2a1a00; background: var(--gold); padding: 0 4px; }
 .mathmeta { flex-wrap: wrap; row-gap: 4px; }
+
+/* During a mini-game the boss scene shrinks so the game fits on short phones */
+body.in-mg #cv { height: min(calc((100vw - 36px) * 0.6), 20svh, 300px); }
+@supports not (height: 1svh) { body.in-mg #cv { height: min(calc((100vw - 36px) * 0.6), 20vh, 300px); } }
+@media (max-height: 600px) {
+  body.in-mg #cv { height: min(calc((100vw - 36px) * 0.6), 16svh, 300px); }
+  body.in-mg .mg-head .muted { display: none; }
+  body.in-mg .mg-number { min-height: 40px; font-size: clamp(28px, 9vw, 40px); }
+}
