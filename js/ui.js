@@ -415,6 +415,14 @@ function skillInfoHtml(id) {
   const lk = S.locks[id] || 0;
   let btns = '';
   if (!block) btns += `<button class="btn gold small" data-act="learnSkill" data-id="${id}">Learn +1</button>`;
+  // One tap to place a whole route: the path to a far node, a Mastery's branch, or every rank of a node.
+  if (S.run.sp > 0 && skillRank(id) < n.max && (block || n.max - skillRank(id) > 1)) {
+    const cost = skillPlan(id, true).length;
+    if (cost > 1) {
+      const label = block ? 'Learn path' : 'Learn max';
+      btns += `<button class="btn gold small" data-act="learnPlan" data-id="${id}">${label} (${cost > S.run.sp ? S.run.sp + ' of ' : ''}${cost} pts)</button>`;
+    }
+  }
   if (canLockRank(id)) btns += `<button class="btn purple small" data-act="lockSkill" data-id="${id}">${icon('lock')} Lock</button>`;
   if (lk) btns += `<button class="btn small" data-act="unlockSkill" data-id="${id}">Unlock</button>`;
   const where = n.kind === 'class' ? 'Class' : `${nodeKindName(n)} · ${b.name}${n.sub ? ' · ' + SUB_INDEX[n.sub].name : ''}`;
@@ -631,6 +639,14 @@ function autoSpendSkills() {
 function tapSkill(id) {
   UI.skillInfo = id;
   SFX.click();
+  buildSkills();
+}
+
+function doLearnPlan(id) {
+  UI.skillInfo = id;
+  const n = learnPlan(id, true);
+  if (n) { SFX.buy(); toast(`Learned ${n} ${n === 1 ? 'point' : 'points'} toward ${SKILL_INDEX[id].name}`); }
+  else SFX.error();
   buildSkills();
 }
 
@@ -1397,6 +1413,7 @@ function handleAction(el) {
     case 'caseKind': S.caseKind = d.v === 'pet' ? 'pet' : 'tool'; SFX.click(); buildCases(); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
+    case 'learnPlan': doLearnPlan(d.id); break;
     case 'lockSkill': if (lockRank(d.id)) { SFX.buy(); toast('Rank locked: it stays through prestige', 'purple', 'lock'); } buildSkills(); break;
     case 'unlockSkill': if (unlockRank(d.id)) SFX.click(); buildSkills(); break;
     case 'autoSkills': { const n = autoSpendSkills(); if (n) { SFX.buy(); toast(`Auto spent ${n} ${n === 1 ? 'point' : 'points'}`, 'good'); } buildSkills(); break; }

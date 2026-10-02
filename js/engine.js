@@ -1124,6 +1124,51 @@ function learnTargets(targets) {
   return n;
 }
 
+// Every point it takes to get a node (to its max rank if toMax), in order: the shortest route from
+// what you own, and for a Mastery, every node in its branch maxed first. Nothing is spent here.
+function skillPlan(target, toMax = false) {
+  const t = SKILL_INDEX[target];
+  if (!t) return [];
+  const ranks = { ...S.run.skills }, plan = [];
+  const r = id => ranks[id] || 0;
+  const own = id => id === 'core' || r(id) > 0;
+  const take = id => { ranks[id] = r(id) + 1; plan.push(id); };
+  // Grow the route toward id until id itself can take a point.
+  const reach = id => {
+    while (r(id) === 0 && !(TREE_ADJ[id] || []).some(own)) {
+      const prev = {}, q = Object.keys(ranks).filter(own).concat('core');
+      for (const a of q) prev[a] = null;
+      while (q.length) {
+        const a = q.shift();
+        if (a === id) break;
+        for (const o of TREE_ADJ[a] || []) if (!(o in prev)) { prev[o] = a; q.push(o); }
+      }
+      if (!(id in prev)) return false;
+      let n = id;
+      while (prev[n] && !own(prev[n])) n = prev[n];
+      take(n);
+    }
+    return true;
+  };
+  const fill = (id, want) => { if (!reach(id)) return false; while (r(id) < want) take(id); return true; };
+  if (t.kind === 'mastery') {
+    const nodes = SUB_INDEX[t.sub].nodes.slice().sort((a, b) => Math.hypot(SKILL_INDEX[a].x, SKILL_INDEX[a].y) - Math.hypot(SKILL_INDEX[b].x, SKILL_INDEX[b].y));
+    for (const id of nodes) if (!fill(id, SKILL_INDEX[id].max)) return [];
+    if (r(target) < 1) take(target);
+  } else if (!fill(target, toMax ? t.max : Math.min(t.max, r(target) + 1))) return [];
+  return plan;
+}
+
+// Spend points along skillPlan, as far as your points go.
+function learnPlan(target, toMax = false) {
+  let n = 0;
+  for (const id of skillPlan(target, toMax)) {
+    if (S.run.sp <= 0 || !learnSkill(id)) break;
+    n++;
+  }
+  return n;
+}
+
 // Old saves: rebuild the skills you had in the new web (paths included) so your build carries over.
 // The small nodes on the way are free, so nobody comes out of the update weaker than before.
 function rebuildOldSkills(old) {

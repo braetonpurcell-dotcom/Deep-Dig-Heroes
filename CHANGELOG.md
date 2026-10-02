@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.1
+- **Learn a whole path in one tap:** on the skill web, pick any node (a Mastery, a keystone like All In, or anything far out) and tap **Learn path**. It spends points along the shortest route for you, and for a Mastery it maxes every node in that branch first. The button shows how many points it takes; if you're short, it goes as far as your points allow. Nodes with several ranks also get a **Learn max** button.
+
 ## v1.11.0
 - **A tougher mine (from your next prestige):** monsters get much stronger with every floor and coins come in slower, so the climb takes real effort and every new floor means more. Your current run stays as it is; your next prestige switches you over, keeping all your power, cores, gear and pets. New players start on the tougher mine. In testing, an active player reaches B100 in about 30-60 minutes from a fresh start.
 - **Power counts in floors of strength** on the tougher mine: the more power you have, the more floors' worth of strength your miner hits with. Every prestige keeps pushing your best floor deeper (about +5 to +15 floors a run in testing), even after hundreds of prestiges.
