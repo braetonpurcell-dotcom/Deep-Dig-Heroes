@@ -521,18 +521,16 @@ function ptTotal(n, lv) {
   return `+${(n.id === 'favor' ? 10 : 25) * lv}%`;
 }
 
-// Auto: spend every point for you. It heads for the skills that make tapping strong first (combo
-// size and value), then coins, luck and speed, then fills in whatever is nearest. A planned build
-// can still beat it, but Auto never leaves your combo weak.
-const AUTO_ORDER = [['momentum', 5], ['adrenaline', 3], ['quickwit', 5], ['ironmind', 3], ['greed', 5], ['autodrill', 5],
-  ['focus', 3], ['steady', 3], ['seismic', 5], ['lucky', 5], ['perfectionist', 3], ['executioner', 5], ['compound', 3],
-  ['haggler', 5], ['overdrive', 1], ['doubledown', 5], ['oresense', 3], ['prospector', 4], ['nightshift', 5], ['jackpot', 1]];
+// Auto: grow the web from the middle out, evenly. Each point goes to the direction with the fewest
+// points so far, on its node closest to the centre. Keystones are left for you to choose, since
+// most of them change how you play.
 function autoSpendSkills() {
-  let n = learnTargets(AUTO_ORDER);
+  let n = 0;
+  const dist = id => Math.hypot(SKILL_INDEX[id].x, SKILL_INDEX[id].y);
   while (S.run.sp > 0 && n < 500) {
     const opts = Object.keys(SKILL_INDEX).filter(id => canLearn(id) && SKILL_INDEX[id].kind !== 'key');
     if (!opts.length) break;
-    opts.sort((a, b) => Math.hypot(SKILL_INDEX[a].x, SKILL_INDEX[a].y) - Math.hypot(SKILL_INDEX[b].x, SKILL_INDEX[b].y));
+    opts.sort((a, b) => branchPoints(SKILL_INDEX[a].branch) - branchPoints(SKILL_INDEX[b].branch) || dist(a) - dist(b));
     if (!learnSkill(opts[0])) break;
     n++;
   }
