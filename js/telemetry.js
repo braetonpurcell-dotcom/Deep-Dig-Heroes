@@ -3,7 +3,7 @@
 // it lasted, what you did and how far you got), plus a few key moments: every prestige and every new
 // best floor at a multiple of 10. Records go through the same Google Form as feedback, tagged
 // "session" or "event", with the same player name and id the leaderboard uses. Nothing else about
-// the phone is sent. More > Settings > "Share play stats" turns it off.
+// the phone is sent.
 
 const TM_QUEUE_KEY = 'ddh-tm-queue';
 const TM_CHECKPOINT = 600; // seconds of active play between checkpoints in a long session
@@ -11,7 +11,7 @@ const TM_MIN_SESSION = 15; // shorter visits aren't worth a row
 const TM_QUEUE_MAX = 60;
 const TM = { sess: null, flushing: false };
 
-function tmOn() { return S.settings.stats !== false; }
+function tmOn() { return true; }
 
 // The numbers a session is measured against: counters only grow, so a session is end minus start.
 function tmSnapshot() {

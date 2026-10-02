@@ -18,7 +18,10 @@ const TREASURE_TIME = 10;
 const COMBO_FADE_STEP = 0.8; // seconds per lost stack once the combo starts fading
 const PRESTIGE_LUCK = 0.1; // each of your first 10 prestiges makes every case a little luckier, forever
 const PRESTIGE_LUCK_MAX = 10;
-const BALANCE_VERSION = 2; // difficulty curve version: bumping it moves players to a floor they can fight (settleFloor)
+// Difficulty curves. Saves from before the tougher mine keep the old curve until their next
+// prestige; every run after that (and every new player) uses TUNE.
+const CURVE_LATEST = 2;
+const CURVE_OLD = { hpBase: 6, hpGrowth: 1.25, hpLinear: 0.015, coinGrowth: 1.15, coinScale: 1 };
 
 // ---------- formulas ----------
 // Balance knobs. Enemy health grows a little faster than coins, so every run
@@ -27,12 +30,21 @@ const TUNE = {
   // v1.11 pace: about 10 minutes to the first prestige and an hour to B100 for an active player.
   hpBase: 25, hpGrowth: 1.35, hpLinear: 0.015,
   coinGrowth: 1.15, coinScale: 0.3,
+  // Floors of strength from power: powerScale * power^powerExp. Below 1, each extra power counts a
+  // little less, which keeps the gain per run steady instead of snowballing over hundreds of prestiges.
+  powerScale: 1.5, powerExp: 0.5,
   xpGrowth: 1.10, xpNeedBase: 12, xpNeedGrowth: 1.25,
   sharpenPeriod: 25,
   coreScale: 1, coreExp: 1.5, coreBonus: 0.1,
 };
-function hpFor(f) { return TUNE.hpBase * Math.pow(TUNE.hpGrowth, f - 1) * (1 + TUNE.hpLinear * (f - 1)); }
-function coinUnit(f) { return TUNE.coinScale * Math.pow(TUNE.coinGrowth, f - 1) * (1 + TUNE.hpLinear * (f - 1)); }
+function curve() { return S && S.curve === 1 ? CURVE_OLD : TUNE; }
+// Prestige power. On the tougher mine it counts in floors of strength (1.5 x the square root of
+// power): the miner hits as if that many floors stronger, so each prestige keeps pushing you a few
+// floors deeper, even after hundreds of them. The old mine kept +10% damage per power.
+function powerFloors() { return TUNE.powerScale * Math.pow(S.power || 0, TUNE.powerExp); }
+function powerMult() { return S.curve === 1 ? 1 + TUNE.coreBonus * S.power : Math.pow(TUNE.hpGrowth, powerFloors()); }
+function hpFor(f) { const c = curve(); return c.hpBase * Math.pow(c.hpGrowth, f - 1) * (1 + c.hpLinear * (f - 1)); }
+function coinUnit(f) { const c = curve(); return c.coinScale * Math.pow(c.coinGrowth, f - 1) * (1 + c.hpLinear * (f - 1)); }
 function xpUnit(f) { return Math.pow(TUNE.xpGrowth, f - 1); }
 function xpNeed(level) { return Math.floor(TUNE.xpNeedBase * Math.pow(TUNE.xpNeedGrowth, level - 1)); }
 function sharpenDamage(L) {
@@ -79,7 +91,7 @@ function freshState() {
     coins: 0, keys: 0, scrap: 0, cores: 0, trophies: 0, prestiges: 0, nextId: 1,
     power: 0, // permanent damage from the levels reached in past runs (+10% per point)
     treeV: TREE_VERSION, // skill web layout version (see migrateTree)
-    balanceV: BALANCE_VERSION, // difficulty curve version (see settleFloor)
+    curve: CURVE_LATEST, // difficulty curve for this run (see CURVE_OLD)
     ptree: {}, // prestige tree levels, bought with cores
     locks: {}, // skill ranks kept through prestige (node id -> ranks)
     caseKind: 'tool', // which cases you open: 'tool' (gear) or 'pet'
@@ -110,7 +122,7 @@ function freshState() {
       prestiges: 0, bestFloor: 1, maxHit: 0, dailyDone: 0, bestLogin: 0, days: {},
     },
     settings: {
-      sound: true, vibe: true, stats: true,
+      sound: true, vibe: true,
       autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA, bagSort: 'new',
     },
   };
@@ -152,7 +164,7 @@ const nonNegInt = (v, d = 0) => (Number.isInteger(v) && v >= 0 ? v : d);
 // their power in the 21-material list, where they sit at 1, 5, 9, 13 and 17.
 function migrateSave(obj) {
   if (!obj || typeof obj !== 'object') return obj;
-  if (obj.balanceV == null) obj.balanceV = 1; // saved before difficulty versions existed
+  if (obj.curve == null) obj.curve = 1; // saved before the tougher mine: keeps the old curve until it prestiges
   if ((obj.v || 1) >= 3) return migrateTree(obj);
   if ((obj.v || 1) >= 2) return migrateTree(migrateV3(obj));
   const remap = it => { if (it && Number.isInteger(it.t) && it.t >= 1 && it.t <= 5) it.t = 1 + MATERIALS_PER_CASE * (it.t - 1); };
@@ -233,6 +245,7 @@ function hydrate(obj) {
   s.run.rush.mult = s.run.rush.mult === 3 ? 3 : 2;
   s.run.bestCombo = nonNegInt(s.run.bestCombo);
   s.run.giftSp = nonNegInt(s.run.giftSp);
+  if (s.curve !== 1) s.curve = CURVE_LATEST;
   s.nextId = nonNegInt(s.nextId, 1);
   // Run and combo numbers.
   const run = s.run;
@@ -411,7 +424,7 @@ function computeStats() {
   st.deepDiver = sk('deepdiver') > 0;
   st.baseDmg = sharpenDamage(up('sharpen'));
   st.dmgMult = (1 + add.dmg) * (1 + 0.02 * branchPoints('brawler')) * (1 + (fx.dmg || 0))
-    * (1 + TUNE.coreBonus * S.power) * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1);
+    * powerMult() * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1);
   st.hit = st.baseDmg * st.dmgMult;
   st.aps = 1.25 * (1 + 0.04 * up('fury')) * (1 + add.aps + 0.1 * sk('autodrill'))
     * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner')) * (1 + 0.08 * sk('overclock')) * (sk('m-speed') ? 1.3 : 1);
@@ -1628,22 +1641,6 @@ function claimableCounts() {
   return { daily: S.daily.claimed ? 0 : 1, quests, bonus: questBonusReady() ? 1 : 0, ach };
 }
 
-// ---------- difficulty updates ----------
-// When the difficulty curve changes, monsters at a player's current depth can become far tougher.
-// Move them up to the deepest floor where a regular monster falls in about 4 seconds, so the game
-// keeps moving; best floors, records and the leaderboard are untouched.
-function settleFloor() {
-  const dps = Math.max(1e-9, ST.dps);
-  let f = S.run.floor;
-  while (f > 1 && (hpFor(f) * ST.hpMult) / dps > 4) f--;
-  if (f >= S.run.floor) return null;
-  const from = S.run.floor;
-  S.run.floor = f;
-  S.run.kills = 0;
-  S.run.auto = true;
-  return { from, to: f };
-}
-
 // ---------- coming back ----------
 // Fresh Hands: back after more than an hour away, the combo builds twice as fast and coins are
 // doubled for 3 minutes (1 hour away) up to 15 minutes (8+ hours), plus a key after 4+ hours.
@@ -1725,6 +1722,8 @@ function doPrestige() {
   const tierBefore = bestCaseTier();
   S.cores += gain;
   S.power += power;
+  const newCurve = S.curve !== CURVE_LATEST;
+  S.curve = CURVE_LATEST;
   S.prestiges++;
   S.stats.prestiges = S.prestiges;
   S.coins = 0;
@@ -1746,6 +1745,7 @@ function doPrestige() {
     gain,
     power,
     total: S.cores,
+    newCurve,
     newSlot: petSlots() > slotsBefore,
     newCase: tierAfter > tierBefore ? CASES[tierAfter - 1].name : null,
   };
@@ -1913,7 +1913,6 @@ function loadState(obj) {
       delete S.migratedSkills;
       recalc();
     }
-    if ((S.balanceV || 1) < BALANCE_VERSION) { S.settled = settleFloor(); S.balanceV = BALANCE_VERSION; }
     ensureDay();
     R.dayKey = dateKey();
   } catch (e) {

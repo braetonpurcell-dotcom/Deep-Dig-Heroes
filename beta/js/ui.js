@@ -537,7 +537,7 @@ function buildPrestigeTree() {
   $('#tab-skills').classList.remove('web');
   let h = skillTabsHtml();
   h += `<div class="card prestige-card"><div class="row"><div class="grow"><b style="color:var(--gambler)">${fmt(S.cores)}</b> cores to spend</div>
-    <span class="small muted">Power ${fmt(S.power)} · +${fmt(S.power * TUNE.coreBonus * 100)}% damage</span></div>
+    <span class="small muted">Power ${fmt(S.power)} · ${powerText(S.power)}</span></div>
     <p class="small muted">Prestiging gives cores (for this tree) and power (permanent damage that grows with the level you reached). Everything here is kept forever.</p>
     <p class="small">Locks used: <b>${locksUsed()}/${lockSlots()}</b>. Lock skill ranks from a node's card in the Skill web; they stay through every prestige.</p></div>`;
   for (const n of PRESTIGE_TREE) {
@@ -1215,15 +1215,23 @@ function segBtns(key, options) {
     `<button data-act="setting" data-k="${key}" data-v="${v}" class="${String(S.settings[key]) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</div>`;
 }
 
+// What an amount of power is worth. After prestiging, every run is on the tougher mine, where power
+// counts in floors of strength; before that, the old mine's +10% damage per power applies.
+function powerText(p, afterPrestige = false) {
+  if (S.curve === 1 && !afterPrestige) return `+${fmt(p * TUNE.coreBonus * 100)}% damage`;
+  const fl = TUNE.powerScale * Math.pow(p, TUNE.powerExp);
+  return `${fl < 10 ? fl.toFixed(1) : fmt(Math.round(fl))} floors of strength`;
+}
+
 function buildMore() {
   const gain = prestigeGain();
   const can = canPrestige();
   const nextCase = CASES.find(c => c.prestige === S.prestiges + 1);
   const pg = powerGain();
   let h = `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
-    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. Power is permanent damage (+10% each) and grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
+    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. Power is permanent strength, counted in floors: the more you have, the deeper your miner hits like. It grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
     <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
-    <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (+${fmt(S.power * 10)}% → +${fmt((S.power + pg) * 10)}% damage)</div></div>
+    <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (${powerText(S.power)} → ${powerText(S.power + pg, true)})</div></div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
     ${S.prestiges < 3 ? `<div class="small">Prestige ${S.prestiges < 1 ? 1 : 3} adds a pet slot.</div>` : ''}
     ${S.prestiges < PRESTIGE_LUCK_MAX ? `<div class="small">Each of your first ${PRESTIGE_LUCK_MAX} prestiges also adds +${Math.round(PRESTIGE_LUCK * 100)}% luck (${S.prestiges}/${PRESTIGE_LUCK_MAX}).</div>` : ''}
@@ -1259,7 +1267,6 @@ function buildMore() {
     ${settingRow('Screen shake', toggleBtn('shake'))}
     ${settingRow('Auto-salvage', `<button class="btn small" data-act="autoScrap">${salvageLabel(S.settings.autoSalvage)}</button>`, 'Scrap new gear at or below this rarity. Tap to change. Upgrades over your equipped gear are always kept.')}
     ${settingRow('Keep screen awake', toggleBtn('wake'), 'Handy for idling. Uses more battery.')}
-    ${settingRow('Share play stats', toggleBtn('stats'), 'Sends how long you play and how far you get (no other phone data) so the developer can balance the game.')}
     ${settingRow('Break reminder', segBtns('breakMin', [[0, 'Off'], [30, '30m'], [60, '60m'], [90, '90m']]))}
   </div>`;
 
@@ -1522,8 +1529,12 @@ function handleAction(el) {
       if (res) {
         SFX.levelup();
         banner('MINE COLLAPSED', `+${fmt(res.power)} POWER`, '#b76dff', 2.6);
-        toast(`+${fmt(res.power)} power (damage now +${fmt(S.power * 10)}%) and +${res.gain} cores for the Prestige tree`, 'purple', 'core');
+        toast(`+${fmt(res.power)} power (now ${powerText(S.power)}) and +${res.gain} cores for the Prestige tree`, 'purple', 'core');
         if (res.newCase) toast(`Unlocked: ${res.newCase}`, 'gold', 'chest');
+        if (res.newCurve) queueModal(() => openModal(`<h2>A tougher mine</h2>
+          <p>From this run on, monsters get much stronger with every floor, so each new floor means more. Big combos count for far more too: fast, accurate tapping can push your multiplier past x20.</p>
+          <p>Your power, cores, gear and pets all came with you.</p>
+          <div class="mbtns"><button class="btn gold" data-act="close">Dig in</button></div>`, { dismissable: true }));
         if (res.newSlot) toast('New pet slot unlocked', 'good');
         showTab('fight');
       }
@@ -1572,7 +1583,7 @@ function askPrestige() {
   const nextCase = CASES.find(c => c.prestige === S.prestiges + 1);
   openModal(`<h2>Collapse the mine?</h2>
     <div class="big-gain" style="color:var(--gambler)">+${gain} cores</div>
-    <div class="kv"><span>Power</span><span>+${fmt(powerGain())} (damage +${fmt(S.power * 10)}% → +${fmt((S.power + powerGain()) * 10)}%)</span>
+    <div class="kv"><span>Power</span><span>+${fmt(powerGain())} (${powerText(S.power)} → ${powerText(S.power + powerGain(), true)})</span>
     <span>Cores</span><span>+${gain} to spend in the Prestige tree</span>
     <span>You keep</span><span>gear, pets, keys, scrap</span><span>Resets</span><span>coins, floor, Forge, level, skills</span></div>
     ${nextCase ? `<p class="small">Unlocks the ${nextCase.name}.</p>` : ''}
