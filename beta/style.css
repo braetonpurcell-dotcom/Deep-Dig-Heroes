@@ -676,3 +676,16 @@ input[type="text"] {
 .lbrow.top2 .lbrank { color: #d8d8e8; }
 .lbrow.top3 .lbrank { color: #d08a4a; }
 .lbval { text-align: right; font-size: 14px; }
+
+/* Skills takes the whole screen between the HUD and the tab bar */
+body.fulltab #stage, body.fulltab #floorbar { display: none; }
+#tab-skills.web { height: 100%; min-height: 0; gap: 6px; }
+#tab-skills.web .treebox { flex: 1 1 auto; height: auto; min-height: 180px; max-height: none; }
+#tab-skills.web .nodeinfo { flex: none; }
+#tab-skills.web > .small { flex: none; line-height: 1.25; }
+@media (max-height: 700px) {
+  #tab-skills.web { gap: 4px; }
+  #tab-skills.web .seg button { padding-top: 4px; padding-bottom: 4px; }
+  #tab-skills.web .nodeinfo { padding: 6px 8px; min-height: 52px; font-size: 13px; }
+  #tab-skills.web > .small:last-child { display: none; }
+}

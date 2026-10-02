@@ -115,6 +115,12 @@ function showTab(name) {
   UI.tab = name;
   for (const b of $$('#tabs button')) b.classList.toggle('on', b.dataset.tab === name);
   for (const s of $$('#panel > .tab')) s.hidden = s.id !== 'tab-' + name;
+  // Skills gets the whole screen: the mine view and floor bar step aside.
+  const full = name === 'skills';
+  if (document.body.classList.contains('fulltab') !== full) {
+    document.body.classList.toggle('fulltab', full);
+    if (!full) resizeCanvas();
+  }
   $('#panel').scrollTop = 0;
   if (name === 'forge') UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
   buildTab(name);
@@ -480,7 +486,7 @@ function buildSkills() {
   for (const k in S.run.skills) spent += S.run.skills[k];
   let h = skillTabsHtml();
   h += `<div class="row"><div class="grow"><b style="color:var(--gold)">${S.run.sp}</b> ${S.run.sp === 1 ? 'point' : 'points'}
-    <span class="muted small">· ${spent}/${TREE_TOTAL} spent · 1 per level</span></div>
+    <span class="muted small">· ${spent}/${TREE_TOTAL} spent</span></div>
     <button class="btn small" data-act="autoSkills" ${S.run.sp > 0 ? '' : 'disabled'} title="Spend points for you">Auto</button>
     <button class="btn small" data-act="respec">Respec</button></div>`;
   h += `<div class="card nodeinfo" id="nodeInfo">${skillInfoHtml(UI.skillInfo)}</div>`;
@@ -489,10 +495,12 @@ function buildSkills() {
   h += `<div class="small muted">Your build: ${buildSummary()}</div>`;
   h += `<div class="small muted">${BRANCHES.map(b => `<span style="color:${b.color}">${b.name}</span> ${branchPoints(b.id)} (${b.passive})`).join(' · ')}</div>`;
   $('#tab-skills').innerHTML = h;
+  $('#tab-skills').classList.add('web');
   applyTreeView();
 }
 
 function buildPrestigeTree() {
+  $('#tab-skills').classList.remove('web');
   let h = skillTabsHtml();
   h += `<div class="card prestige-card"><div class="row"><div class="grow"><b style="color:var(--gambler)">${fmt(S.cores)}</b> cores to spend</div>
     <span class="small muted">Power ${fmt(S.power)} · +${fmt(S.power * TUNE.coreBonus * 100)}% damage</span></div>
