@@ -521,22 +521,22 @@ function ptTotal(n, lv) {
   return `+${(n.id === 'favor' ? 10 : 25) * lv}%`;
 }
 
-// Aimless mode: spend every point for you, keeping the four directions roughly even and picking up
-// named skills when they're in reach. A planned build does better, which is the point.
+// Auto: spend every point for you. It heads for the skills that make tapping strong first (combo
+// size and value), then coins, luck and speed, then fills in whatever is nearest. A planned build
+// can still beat it, but Auto never leaves your combo weak.
+const AUTO_ORDER = [['momentum', 5], ['adrenaline', 3], ['quickwit', 5], ['ironmind', 3], ['greed', 5], ['autodrill', 5],
+  ['focus', 3], ['steady', 3], ['seismic', 5], ['lucky', 5], ['perfectionist', 3], ['executioner', 5], ['compound', 3],
+  ['haggler', 5], ['overdrive', 1], ['doubledown', 5], ['oresense', 3], ['prospector', 4], ['nightshift', 5], ['jackpot', 1]];
 function autoSpendSkills() {
-  let n = 0;
+  let n = learnTargets(AUTO_ORDER);
   while (S.run.sp > 0 && n < 500) {
-    const opts = Object.keys(SKILL_INDEX).filter(canLearn);
+    const opts = Object.keys(SKILL_INDEX).filter(id => canLearn(id) && SKILL_INDEX[id].kind !== 'key');
     if (!opts.length) break;
-    opts.sort((a, b) => autoScore(b) - autoScore(a));
+    opts.sort((a, b) => Math.hypot(SKILL_INDEX[a].x, SKILL_INDEX[a].y) - Math.hypot(SKILL_INDEX[b].x, SKILL_INDEX[b].y));
     if (!learnSkill(opts[0])) break;
     n++;
   }
   return n;
-}
-function autoScore(id) {
-  const n = SKILL_INDEX[id];
-  return (n.kind === 'big' ? 30 : n.kind === 'key' ? 5 : 10) - branchPoints(n.branch) - Math.hypot(n.x, n.y) * 0.5;
 }
 
 // Drag to pan, pinch to zoom, tap to select.

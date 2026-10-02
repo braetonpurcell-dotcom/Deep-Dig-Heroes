@@ -160,6 +160,7 @@ function migrateV3(obj) {
   if (obj.run && obj.run.skills && typeof obj.run.skills === 'object') {
     let refund = 0;
     for (const k of Object.keys(obj.run.skills)) refund += Math.max(0, Math.floor(Number(obj.run.skills[k]) || 0));
+    obj.oldSkills = { ...obj.run.skills }; // rebuilt in the web on load (rebuildOldSkills)
     obj.run.skills = {};
     obj.run.sp = (Number(obj.run.sp) || 0) + refund;
     obj.migratedSkills = refund;
@@ -995,6 +996,51 @@ function canLearn(id) {
   if (!n) return false;
   return S.run.sp > 0 && skillRank(id) < n.max && nodeReachable(id);
 }
+// Shortest route through the web from what you own to a node; learns the first step on it.
+function learnToward(target) {
+  if (!SKILL_INDEX[target] || skillRank(target) >= SKILL_INDEX[target].max) return false;
+  if (canLearn(target)) return learnSkill(target);
+  const own = id => id === 'core' || skillRank(id) > 0;
+  const prev = {};
+  const q = [...['core', ...Object.keys(S.run.skills).filter(own)]];
+  for (const a of q) prev[a] = null;
+  while (q.length) {
+    const a = q.shift();
+    if (a === target) break;
+    for (const o of TREE_ADJ[a] || []) if (!(o in prev)) { prev[o] = a; q.push(o); }
+  }
+  if (!(target in prev)) return false;
+  let n = target;
+  while (prev[n] && !own(prev[n])) n = prev[n];
+  return learnSkill(n);
+}
+
+// Spend points along routes to these skills, in order, until points run out.
+function learnTargets(targets) {
+  let n = 0, guard = 0;
+  for (const [id, ranks] of targets) {
+    while (S.run.sp > 0 && skillRank(id) < Math.min(ranks, SKILL_INDEX[id].max) && guard++ < 500) {
+      if (!learnToward(id)) break;
+      n++;
+    }
+  }
+  return n;
+}
+
+// Old saves: rebuild the skills you had in the new web (paths included) so your build carries over.
+// The small nodes on the way are free, so nobody comes out of the update weaker than before.
+function rebuildOldSkills(old) {
+  const order = Object.keys(old || {}).filter(id => SKILL_INDEX[id] && Number.isInteger(old[id]) && old[id] > 0)
+    .sort((a, b) => Math.hypot(SKILL_INDEX[a].x, SKILL_INDEX[a].y) - Math.hypot(SKILL_INDEX[b].x, SKILL_INDEX[b].y));
+  const sp = S.run.sp;
+  S.run.sp = sp + 1000;
+  learnTargets(order.map(id => [id, old[id]]));
+  let kept = 0;
+  for (const id of order) kept += Math.min(skillRank(id), old[id]);
+  S.run.sp = Math.max(0, sp - kept);
+  return kept;
+}
+
 // A node opens once a neighbour is owned (the centre counts as owned).
 function nodeReachable(id) {
   if (skillRank(id) > 0) return true;
