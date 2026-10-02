@@ -1230,8 +1230,8 @@ function buildMore() {
   const pg = powerGain();
   // Before their first prestige on the tougher mine, power still adds +10% damage per point.
   const powerNow = S.curve === 1
-    ? 'Power is permanent strength. Right now it adds +10% damage per point; from your next prestige on, every run is on the tougher mine, where it counts in floors of strength: the more you have, the deeper your miner hits like.'
-    : 'Power is permanent strength, counted in floors: the more you have, the deeper your miner hits like.';
+    ? 'Power is permanent strength. Right now it adds +10% damage per point; from your next prestige on, every run is on the tougher mine, where it counts in floors of strength: with 10 floors of strength your miner hits as hard as if the mine were 10 floors shallower.'
+    : 'Power is permanent strength, counted in floors: with 10 floors of strength your miner hits as hard as if the mine were 10 floors shallower.';
   let h = `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
     <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. ${powerNow} It grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
     <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
