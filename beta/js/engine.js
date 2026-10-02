@@ -386,7 +386,7 @@ let ST = null;
 
 // Runtime values that are not saved.
 const R = {
-  flow: 0, // 0..1: how hard you're overpowering this floor; speeds up the kill rhythm
+  flow: 0, // 0..1: built by tapping; speeds up swings, spawns and the kill sound
   sim: false, paused: false, hitstop: 0, time: 0, session: 0, secT: 0, dayKey: '', hiddenAt: 0,
   enemy: null, spawnT: 0.6, atkT: 0, swingT: 0, queued: [],
   lastAnswer: -99, decayAcc: 0,
@@ -523,25 +523,30 @@ function spawnEnemy(boss = false) {
   else type = weightedPick(NORMAL_ENEMIES.filter(t => ENEMIES[t].minFloor <= f), t => ENEMIES[t].weight);
   const hp = Math.min(BIG, hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult);
   const name = boss ? `${biome.adj} ${BOSS_NAMES[type]}` : ENEMIES[type].name(biome);
-  // In flow the next monster arrives sooner and the first swing comes almost at once.
+  // With flow from tapping, the next monster arrives sooner and the first swing comes almost at once.
   const fast = boss ? 0 : flowSpeed();
   const enter = ENTER_TIME * (1 - fast);
   R.enemy = {
-    type, boss, name, hp, max: hp, enter, enterMax: enter, flash: 0, hits: 0, lastD: 0,
+    type, boss, name, hp, max: hp, enter, enterMax: enter, flash: 0,
     timer: boss ? BOSS_TIME : 0, flee: type === 'goldie' ? TREASURE_TIME : 0, seed: Math.random() * 10,
   };
   R.atkT = (0.8 * fast) / ST.aps;
   emit('spawn', R.enemy);
 }
 
-// Flow: one-shotting monsters by a wide margin builds it up over a few kills, so the kills (and the
-// kill sound) speed up and climb in pitch; once monsters take a few hits it eases back down.
-function updateFlow(e) {
-  if (e.boss) return;
-  let target = 0;
-  if (e.hits <= 1) target = clamp(0.35 + Math.log10(Math.max(1, (e.lastD || 0) / e.max)) / 1.5, 0, 1);
-  else if (e.hits === 2) target = 0.15;
-  R.flow += (target - R.flow) * 0.4;
+// Flow comes from tapping: every tap strike on the pad builds it, and it drains once you stop.
+// The more of it you have, the faster your miner swings (up to +FLOW_APS), the sooner the next
+// monster arrives, and the higher the kill "ding" climbs, so a tapping streak speeds everything up.
+const FLOW_TAP = 0.2; // per successful tap
+const FLOW_DRAIN = 0.15; // per second while tapping
+const FLOW_IDLE_DRAIN = 0.6; // per second after FLOW_IDLE seconds without a tap
+const FLOW_IDLE = 1.5;
+let FLOW_APS = 0.6; // +60% attack speed at full flow
+function flowTap(ok) { R.flow = ok ? Math.min(1, (R.flow || 0) + FLOW_TAP) : (R.flow || 0) * 0.7; }
+function updateFlow(dt) {
+  if (!R.flow) return;
+  const idle = R.time - R.lastAnswer > FLOW_IDLE;
+  R.flow = Math.max(0, R.flow - dt * (idle ? FLOW_IDLE_DRAIN : FLOW_DRAIN));
 }
 function flowSpeed() { return 0.7 * clamp(R.flow || 0, 0, 1); }
 
@@ -562,8 +567,6 @@ function heroHit(e) {
 
 function dealDamage(e, d, kind) {
   e.hp -= d;
-  e.hits = (e.hits || 0) + 1;
-  e.lastD = d;
   e.flash = 0.07;
   if (d > S.stats.maxHit) S.stats.maxHit = d;
   emit('damage', { d, kind, enemy: e });
@@ -584,7 +587,6 @@ function killEnemy(e) {
   addCoins(coins);
   S.stats.kills++;
   track('kill');
-  updateFlow(e);
   R.enemy = null;
   R.spawnT = SPAWN_GAP * (1 - flowSpeed());
   R.atkT = 0;
@@ -823,6 +825,7 @@ const BONUS_TAPS = 20; // "Double it" round: this many taps in a row without an 
 
 function tapHit(quality) {
   const perfect = quality >= 0.5;
+  flowTap(true);
   paceStep(PACE_UP);
   R.cleanHits = (R.cleanHits || 0) + 1;
   if (!R.shield && !shieldActive() && R.cleanHits >= ST.shieldEvery) {
@@ -874,6 +877,7 @@ function comboFill() { return Math.min(1, S.math.streak / Math.max(1, ST.comboCa
 
 function tapMiss() {
   S.stats.escapes++;
+  flowTap(false);
   if (!shieldActive() && R.shield) {
     R.shield = 0;
     R.shieldUntil = R.time + SHIELD_TIME + 1.5 * comboFill();
@@ -1002,6 +1006,7 @@ function step(dt) {
     }
   }
 
+  updateFlow(dt);
   const e = R.enemy;
   if (!e) {
     R.spawnT -= dt;
@@ -1015,7 +1020,7 @@ function step(dt) {
     }
     if (R.enemy === e) {
       R.atkT += dt;
-      const iv = 1 / ST.aps;
+      const iv = 1 / (ST.aps * (1 + FLOW_APS * clamp(R.flow || 0, 0, 1)));
       let n = 0;
       while (R.atkT >= iv && R.enemy === e && n < 40) {
         R.atkT -= iv;

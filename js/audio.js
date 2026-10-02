@@ -91,7 +91,9 @@ const SFX = {
     const now = performance.now();
     if (now - AU.lastHit < 90) return;
     AU.lastHit = now;
-    noise(0.04, 0.18, 900 + Math.random() * 500);
+    // Swings get brighter as tapping builds flow, so a faster rhythm also sounds hotter.
+    const f = clamp((typeof R !== 'undefined' && R.flow) || 0, 0, 1);
+    noise(0.04, 0.18 + 0.06 * f, 900 + 900 * f + Math.random() * 500);
   },
   crit() {
     impact(2);
@@ -106,8 +108,8 @@ const SFX = {
     impact(kind === 'quick' ? 2 : 1.5);
     tone(330, 0.09, 'square', 0.22, 660);
   },
-  // The two-note "ding" climbs a pentatonic scale with flow: faster kills ring higher, and it
-  // slides back down when monsters start taking a few hits. Full flow adds a sparkle on top.
+  // The two-note "ding" climbs a pentatonic scale with flow (built by tapping), and slides back
+  // down once you stop. Full flow adds a sparkle on top.
   kill(flow = 0) {
     const step = Math.round(clamp(flow, 0, 1) * 7);
     const up = Math.pow(2, ([0, 2, 4, 7, 9, 12, 14, 16][step]) / 12);

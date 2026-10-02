@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.11.10
+- **Flow now comes from tapping:** every tap strike on the pad builds it. As it builds, your miner swings faster (up to +60% attack speed), monsters come in quicker, the swing sounds get brighter and the kill "ding" climbs higher. Stop tapping and it eases back down within a couple of seconds. Being strong on its own no longer speeds things up.
+
 ## v1.11.9
 - **Bag search:** type to find exactly what you want. Words all have to match (rarity, material, Pickaxe/Helmet/Charm, wear like FN, stat names, locked, new), and you can compare numbers: `luck>50`, `dmg>1000`, `crit>5`, `t>=20`, `lv>0`, `float<0.01`. Mix them, like `charm fn luck>100 t>=17`. Tap ? next to the box for the full list. Search works together with Sort and Show.
 
