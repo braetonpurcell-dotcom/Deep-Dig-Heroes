@@ -5,5 +5,19 @@
       "text": "Good catch, thanks! Fixed in v1.9.2: tapping anywhere inside the gold ring now counts (not just the monster), and a tap right as the ring closes still counts. Close and reopen the game to get the update.",
       "at": "2026-10-01T20:30:00Z"
     }
+  ],
+  "fb-mupz5cf1-igl2": [
+    {
+      "from": "Braeton (dev)",
+      "text": "Thanks for flagging it! Your progress has saved fine ever since, so it looks like a one-time thing. On iPhone, Safari and the Home Screen icon keep separate saves, so always open the game the same way (the Home Screen icon is best). If it ever happens again, send another note.",
+      "at": "2026-10-02T12:00:00Z"
+    }
+  ],
+  "fb-muq0j2tc-c42a": [
+    {
+      "from": "Braeton (dev)",
+      "text": "Fixed in the next update: skills become a web with 174 points to fill, so there's always something to level. Your current skills carry over. You can try it now in the beta.",
+      "at": "2026-10-02T12:00:00Z"
+    }
   ]
 }
