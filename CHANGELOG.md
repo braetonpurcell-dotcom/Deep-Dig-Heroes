@@ -3,6 +3,9 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v1.10.1
+- Leaderboard: Waerin's old glitched duplicate account (B12, 6 minutes) is hidden; his real account is unaffected.
+
 ## v1.10.0
 The big update.
 - **Skill web:** skills are now a web you grow from the middle. Four classes (Fighter, Tycoon, Gambler, Miner) each split into three branches (like Coins, XP and Speed) that fork toward named skills. Small nodes just say what they give. Own a whole branch to unlock its gold Mastery. 207 points to fill, plus keystones like Limit Break (your multiplier can pass x10.6). Your existing skills are rebuilt on the new paths, and the nodes on the way are free. Respec is free (it asks first). Auto spends points evenly from the middle out.

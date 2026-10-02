@@ -85,9 +85,15 @@ async function sendScore(force = false) {
 }
 
 // Does an entry add up? Checked against its own proof, so typed-in or edited numbers fall out.
+// Players kept off the board (by player ID), e.g. a broken duplicate account.
+const LB_HIDDEN = new Set([
+  'p-muq5jgxxmd2ymf', // Waerin's old glitched save (B12, 6 min), not his real account
+]);
+
 function lbValid(e) {
   const num = x => typeof x === 'number' && isFinite(x) && x >= 0;
   if (!e || typeof e.pid !== 'string' || typeof e.name !== 'string' || !e.name.trim()) return false;
+  if (LB_HIDDEN.has(e.pid)) return false;
   if (/delete me/i.test(e.name)) return false; // setup test entries
   if (![e.floor, e.mult, e.combo, e.prestiges, e.rare, e.play, e.taps, e.kills, e.cases].every(num)) return false;
   if (e.floor < 1 || e.floor > 5000 || e.mult < 1) return false;
