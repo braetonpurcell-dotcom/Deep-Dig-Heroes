@@ -731,9 +731,9 @@ body.on-island #panel { overflow: hidden; }
 .isle canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; border: 2px solid var(--line); }
 .bld { position: absolute; padding: 0; background: transparent; border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .bld .sign {
-  position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 4px; padding: 1px 6px; white-space: nowrap;
-  background: rgba(18, 12, 24, .85); border: 2px solid var(--line-hi); color: var(--fg); font-size: 13px; line-height: 1.2;
+  position: absolute; left: 50%; top: calc(100% - 3px); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px; padding: 1px 5px; white-space: nowrap;
+  background: rgba(18, 12, 24, .88); border: 2px solid var(--line-hi); color: var(--fg); font-size: 12px; line-height: 1.2;
 }
 .bld .sign small { color: var(--gold); font-size: 12px; }
 .bld .sign small:empty { display: none; }
