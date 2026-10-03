@@ -9,42 +9,42 @@ const ISLE_W = 360;
 const ISLE_H = 640;
 const ISLE = { cv: null, ctx: null, k: 1, baseK: 0, t: 0, raf: 0, h: ISLE_H, oy: 0, boats: [], nextBoat: 20, pops: [], birds: [], puffs: [], clouds: [], whale: null, nextWhale: 25, sprites: {} };
 
-// Where each building sits, in island pixels: the tap area (the drawn building) and its name
-// plaque's centre, placed on open ground beside the doorstep.
-// Each building is drawn at full size, then shrunk about its doorstep (ax, ay) by s, so the
-// paths still meet the doors and there is room for trees round the shore.
+// Where each building sits. Each one is drawn in its own original coordinates, then moved so its
+// anchor (ax, ay), the middle of the ground in front of its door, lands at (px, py), and shrunk by s.
+// o* is the drawn building's box in those original coordinates, lift is how far the bottom of the
+// door sits above the anchor there, and plaque is the name plaque's centre when it doesn't simply
+// hang above the building.
 const BUILDINGS = [
-  { tab: 'fight', name: 'Cave', x: 150, y: 128, w: 80, h: 58, ax: 190, ay: 182, s: 0.85, lx: 236, ly: 192 },
-  { tab: 'forge', name: 'Forge', x: 74, y: 190, w: 90, h: 98, ax: 133, ay: 286, s: 0.78, lx: 133, ly: 301 },
-  { tab: 'skills', name: 'Temple', x: 197, y: 226, w: 102, h: 108, ax: 248, ay: 330, s: 0.78, lx: 262, ly: 348 },
-  { tab: 'cases', name: 'Market', x: 60, y: 350, w: 106, h: 78, ax: 113, ay: 424, s: 0.78, lx: 100, ly: 444 },
-  { tab: 'bag', name: 'House', x: 216, y: 378, w: 92, h: 96, ax: 262, ay: 470, s: 0.78, lx: 276, ly: 490 },
-  { tab: 'quests', name: 'Quests', x: 182, y: 496, w: 84, h: 68, ax: 225, ay: 560, s: 0.85, lx: 240, ly: 580 },
-  { tab: 'more', name: 'Lighthouse', x: 78, y: 546, w: 36, h: 74, ax: 95, ay: 610, s: 1, lx: 95, ly: 629 },
-  { tab: 'dock', name: 'Dock', x: 6, y: 502, w: 70, h: 56, ax: 40, ay: 538, s: 1, lx: 38, ly: 568 },
+  { tab: 'fight', name: 'Cave', ox: 110, oy: 56, ow: 160, oh: 132, ax: 190, ay: 182, s: 0.85, px: 190, py: 182, lift: 3, plaque: [190, 126] },
+  { tab: 'forge', name: 'Forge', ox: 74, oy: 190, ow: 96, oh: 96, ax: 133, ay: 286, s: 0.74, px: 136, py: 281, lift: 4 },
+  { tab: 'skills', name: 'Temple', ox: 197, oy: 212, ow: 102, oh: 118, ax: 248, ay: 330, s: 0.74, px: 244, py: 305, lift: 3 },
+  { tab: 'cases', name: 'Market', ox: 58, oy: 352, ow: 110, oh: 72, ax: 113, ay: 424, s: 0.74, px: 122, py: 391, lift: 4 },
+  { tab: 'bag', name: 'House', ox: 216, oy: 378, ow: 92, oh: 92, ax: 262, ay: 470, s: 0.74, px: 248, py: 431, lift: 4 },
+  { tab: 'quests', name: 'Quests', ox: 181, oy: 496, ow: 88, oh: 64, ax: 225, ay: 560, s: 0.74, px: 239, py: 535, lift: 4 },
+  { tab: 'more', name: 'Lighthouse', ox: 66, oy: 546, ow: 60, oh: 64, ax: 95, ay: 606, s: 1, px: 100, py: 508, lift: 0 },
+  { tab: 'dock', name: 'Dock', ox: 6, oy: 500, ow: 70, oh: 60, ax: 72, ay: 531, s: 1, px: 74, py: 552, lift: 0, plaque: [42, 592] },
 ];
-// A building's tap box after its shrink, and a point drawn inside that shrink.
-function boxOf(b) { return { x: b.ax + (b.x - b.ax) * b.s, y: b.ay + (b.y - b.ay) * b.s, w: b.w * b.s, h: b.h * b.s }; }
-function at(tab, x, y) { const b = BUILDINGS.find(q => q.tab === tab); return [b.ax + (x - b.ax) * b.s, b.ay + (y - b.ay) * b.s]; }
-function scaled(tab, fn) { const b = BUILDINGS.find(q => q.tab === tab), d = c(); d.save(); d.translate(b.ax, b.ay); d.scale(b.s, b.s); d.translate(-b.ax, -b.ay); fn(); d.restore(); }
+function bOf(tab) { return BUILDINGS.find(q => q.tab === tab); }
+// A point drawn in a building's own coordinates, where it ends up on the island.
+function at(tab, x, y) { const b = bOf(tab); return [b.px + (x - b.ax) * b.s, b.py + (y - b.ay) * b.s]; }
+function boxOf(b) { const [x, y] = at(b.tab, b.ox, b.oy); return { x, y, w: b.ow * b.s, h: b.oh * b.s }; }
+function doorOf(b) { return [b.px, b.py - b.lift * b.s]; }
+function plaqueOf(b) { if (b.plaque) return b.plaque; const bx = boxOf(b); return [bx.x + bx.w / 2, bx.y - 12]; }
+function scaled(tab, fn) { const b = bOf(tab), d = c(); d.save(); d.translate(b.px, b.py); d.scale(b.s, b.s); d.translate(-b.ax, -b.ay); fn(); d.restore(); }
 
 // The coastline from the sketch, smoothed into a curve, with a few small bays.
 const COAST = [[170, 44], [232, 50], [280, 72], [300, 110], [290, 160], [296, 206], [326, 250], [318, 300], [338, 340], [330, 392],
   [352, 440], [344, 500], [322, 548], [292, 580], [236, 606], [162, 630], [92, 626], [58, 592], [44, 540], [52, 490], [60, 440],
   [36, 380], [30, 318], [52, 262], [68, 206], [72, 160], [82, 110], [118, 66]];
-// One path network: the main path from the cave to the dock, plus a spur to each doorstep. They
-// are all stroked together, pass by pass, so the joins are seamless.
-const PATH = [[190, 182], [188, 214], [181, 250], [177, 288], [178, 326], [186, 366], [196, 406], [198, 446], [190, 480],
-  [166, 506], [150, 528], [115, 536], [86, 540], [66, 538]];
-const SPURS = [
-  [[179, 270], [156, 284], [133, 286]], // forge door
-  [[177, 316], [212, 328], [248, 330]], // temple steps
-  [[185, 388], [146, 418], [113, 424]], // market counter
-  [[198, 442], [230, 466], [262, 470]], // house door
-  [[156, 524], [188, 560], [225, 560]], // round the quest board to its front
-  [[86, 544], [74, 578], [84, 604], [95, 610]], // down to the lighthouse rocks
-];
-const PADS = [[190, 182], [133, 286], [248, 330], [113, 424], [262, 470], [225, 560], [95, 610]];
+// The paths. The main path leaves the mine, runs down the middle of town and turns west to the
+// dock. Every door faces the viewer, so a building's path comes in from the front: a spur leaves
+// the main path, runs along the ground below the building, turns up and stops at the door. No path
+// passes under a building. Everything is stroked together, pass by pass, so the joins are seamless.
+const SPINE = [[190, 180], [189, 215], [186, 255], [184, 300], [184, 345], [185, 390], [185, 435], [185, 480], [185, 522],
+  [180, 546], [164, 556], [130, 557], [100, 556], [76, 553]];
+const PATH_W = 22; // a path's full width, edges included
+const SPUR_GAP = 24; // how far below its door a spur runs
+const SPUR_R = 10; // the radius of a spur's turn up to the door
 
 // ---------- drawing helpers (smooth, anti-aliased) ----------
 function c() { return ISLE.ctx; }
@@ -108,6 +108,51 @@ function pointInPoly(x, y, poly) {
 }
 const COAST_PATH = smoothPath(COAST, true);
 const COAST_LINE = samplePath(COAST, true);
+const SPINE_LINE = samplePath(SPINE, false);
+// Where the main path first crosses height y, coming down from the mine.
+function spineX(y) {
+  const l = SPINE_LINE;
+  for (let i = 1; i < l.length; i++) {
+    const [x0, y0] = l[i - 1], [x1, y1] = l[i];
+    if ((y0 - y) * (y1 - y) <= 0 && y0 !== y1) return x0 + ((y - y0) / (y1 - y0)) * (x1 - x0);
+  }
+  return l[l.length - 1][0];
+}
+// Where the main path's westward stretch passes x.
+function spineYAt(x) {
+  const l = SPINE_LINE;
+  for (let i = 1; i < l.length; i++) {
+    const [x0, y0] = l[i - 1], [x1, y1] = l[i];
+    if (y0 > 530 && (x0 - x) * (x1 - x) <= 0 && x0 !== x1) return y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
+  }
+  return l[l.length - 1][1];
+}
+// A building's spur: along the ground below it, then a rounded turn up to the door. The path's
+// rounded end just touches the bottom of the door. The lighthouse stands right above the westward
+// stretch, so its spur is a short straight walk up.
+function spurFor(b) {
+  const [dx, dy] = doorOf(b), end = dy + PATH_W / 2, p = new Path2D();
+  if (b.tab === 'more') {
+    const sy = spineYAt(dx);
+    p.moveTo(dx, sy); p.lineTo(dx, end);
+    return { path: p, pts: [[dx, sy], [dx, (sy + end) / 2], [dx, end]] };
+  }
+  const sy = dy + SPUR_GAP, sx = spineX(sy), dir = Math.sign(dx - sx) || 1;
+  p.moveTo(sx, sy); p.lineTo(dx - dir * SPUR_R, sy); p.quadraticCurveTo(dx, sy, dx, sy - SPUR_R); p.lineTo(dx, end);
+  const pts = [];
+  for (let t = 0; t <= 1; t += 0.1) pts.push([sx + (dx - dir * SPUR_R - sx) * t, sy]);
+  pts.push([dx - dir * SPUR_R * 0.3, sy - SPUR_R * 0.3], [dx, sy - SPUR_R], [dx, end]);
+  return { path: p, pts };
+}
+function pathNetwork() {
+  const paths = [smoothPath(SPINE, false)], lines = [SPINE_LINE];
+  for (const b of BUILDINGS) {
+    if (b.tab === 'fight' || b.tab === 'dock') continue;
+    const sp = spurFor(b);
+    paths.push(sp.path); lines.push(sp.pts);
+  }
+  return { paths, lines };
+}
 
 // ---------- the still layer: ground, paths, plants and buildings, painted once ----------
 function islandBase() {
@@ -158,23 +203,28 @@ function islandBase() {
     else flowers(p.x, p.y, p.r * 1.6);
   }
   scaled('fight', drawMountain);
-  drawPond(294, 520);
-  drawWell(150, 334);
+  drawPond(306, 505);
+  drawWell(152, 478);
   scaled('forge', drawForge); scaled('skills', drawTemple); scaled('cases', drawMarket); scaled('bag', drawHouse); scaled('quests', drawBoard);
-  drawLighthouse(); drawDock();
+  scaled('more', drawLighthouse); scaled('dock', drawDock);
   ISLE.ctx = prev;
   return cv;
 }
 
 function drawPaths() {
-  const d = c(), all = [PATH, ...SPURS].map(p => smoothPath(p, false));
-  for (const [col, w, a] of [['#8a6a3a', 22, 0.35], ['#a98650', 18, 1], ['#c9a467', 14, 1], ['#e3c884', 6, 0.55]]) {
+  const d = c(), all = pathNetwork().paths;
+  for (const [col, w, a] of [['#8a6a3a', PATH_W, 0.35], ['#a98650', PATH_W - 4, 1], ['#c9a467', PATH_W - 8, 1], ['#e3c884', 6, 0.55]]) {
     d.globalAlpha = a;
     for (const p of all) strokePath(p, col, w);
   }
   d.globalAlpha = 1;
-  for (const [x, y] of PADS) { fillEll(x, y, 12, 5.5, '#b8945a'); fillEll(x, y - 0.5, 10, 4.2, '#dcc083'); }
-  const r = irng(5), main = samplePath(PATH, false);
+  // A stone step in front of every door, where its path ends.
+  for (const b of BUILDINGS) {
+    if (b.tab === 'fight' || b.tab === 'dock') continue;
+    const [x, y] = doorOf(b);
+    fillRR(x - 9, y - 2, 18, 6, 2, '#8f7f68'); fillRR(x - 8, y - 2, 16, 4, 1.5, '#c9b99c'); rect(x - 7, y - 1.5, 14, 1, 'rgba(255,255,255,0.35)');
+  }
+  const r = irng(5), main = SPINE_LINE;
   for (let i = 0; i < 70; i++) {
     const p = main[Math.floor(r() * main.length)];
     fillEll(p[0] + (r() - 0.5) * 9, p[1] + (r() - 0.5) * 7, 1.4, 0.9, r() < 0.5 ? '#9c7748' : '#eed9a4');
@@ -184,11 +234,12 @@ function drawPaths() {
 // Trees and shrubs: a lush ring just inside the beach, then some inland, never on a path, a
 // doorstep, a building or a plaque.
 function plantIsland(r) {
-  const pathLines = [PATH, ...SPURS].map(p => samplePath(p, false));
+  const pathLines = pathNetwork().lines;
+  const plaqueW = b => 20 + 6.4 * (b.name.length + 6);
   const blocks = [
-    ...BUILDINGS.map(boxOf).map(b => [b.x - 6, b.y - 6, b.w + 12, b.h + 12]),
-    ...BUILDINGS.map(b => [b.lx - 38, b.ly - 11, 76, 22]),
-    [164, 76, 52, 44], [146, 118, 88, 36], [116, 150, 148, 42], [262, 500, 64, 42], [132, 304, 36, 40],
+    ...BUILDINGS.filter(b => b.tab !== 'fight').map(boxOf).map(b => [b.x - 6, b.y - 6, b.w + 12, b.h + 12]),
+    ...BUILDINGS.map(b => { const [x, y] = plaqueOf(b), w = plaqueW(b); return [x - w / 2, y - 12, w, 24]; }),
+    [164, 76, 52, 44], [146, 118, 88, 36], [116, 150, 148, 42], [276, 486, 60, 38], [136, 446, 34, 40],
   ];
   const plants = [];
   const free = (x, y, rad) => {
@@ -404,7 +455,8 @@ function drawBoard() {
 
 function drawLighthouse() {
   const d = c();
-  boulder(84, 612, 12); boulder(108, 614, 11); boulder(95, 616, 9);
+  shade(97, 606, 20, 4);
+  boulder(80, 597, 10); boulder(114, 599, 9); boulder(98, 588, 8);
   const tower = new Path2D(); tower.moveTo(84, 606); tower.lineTo(106, 606); tower.lineTo(102, 572); tower.lineTo(88, 572); tower.closePath();
   d.save(); d.clip(tower);
   fillPath(tower, '#f6f0ff');
@@ -563,19 +615,20 @@ function drawIsland(dt) {
   { const [x, y] = at('forge', 100, 280); glow(x, y, 18, '255,160,60', 0.25 + 0.15 * Math.sin(t * 5)); }
   for (const [tab, cx, cy, rate] of [['forge', 150, 190, 1.2], ['bag', 284, 378, 0.6]]) if (Math.random() < dt * rate) { const [x, y] = at(tab, cx, cy); ISLE.puffs.push({ x, y, r: 2.2, t: 2, drift: 2 }); }
   // The temple crystal floats and shines.
-  const cy = at('skills', 248, 222)[1] + Math.sin(t * 2) * 3;
-  glow(248, cy + 6, 16, '255,230,140', 0.35 + 0.2 * Math.sin(t * 3));
-  const cr = new Path2D(); cr.moveTo(248, cy - 7); cr.lineTo(253, cy + 4); cr.lineTo(248, cy + 13); cr.lineTo(243, cy + 4); cr.closePath();
-  fillPath(cr, lin(243, cy - 7, 253, cy + 13, [[0, '#e8fbff'], [0.5, '#7ad8ff'], [1, '#2f9ad8']]));
+  const [cx0, cy0] = at('skills', 248, 222), cy = cy0 + Math.sin(t * 2) * 3;
+  glow(cx0, cy + 5, 14, '255,230,140', 0.35 + 0.2 * Math.sin(t * 3));
+  const cr = new Path2D(); cr.moveTo(cx0, cy - 6); cr.lineTo(cx0 + 4.5, cy + 3.5); cr.lineTo(cx0, cy + 11.5); cr.lineTo(cx0 - 4.5, cy + 3.5); cr.closePath();
+  fillPath(cr, lin(cx0 - 4.5, cy - 6, cx0 + 4.5, cy + 11.5, [[0, '#e8fbff'], [0.5, '#7ad8ff'], [1, '#2f9ad8']]));
   // Lighthouse lamp and its sweeping beam over the sea.
   const b = (Math.sin(t * 0.9) + 1) / 2;
   d.globalAlpha = 0.16; d.fillStyle = '#fff2b0';
-  d.beginPath(); d.moveTo(95, 563); d.lineTo(-30 + b * 380, 720); d.lineTo(10 + b * 380, 720); d.closePath(); d.fill();
+  const [lhx, lhy] = at('more', 95, 563);
+  d.beginPath(); d.moveTo(lhx, lhy); d.lineTo(-40 + b * 400, 720); d.lineTo(0 + b * 400, 720); d.closePath(); d.fill();
   d.globalAlpha = 1;
-  glow(95, 563, 14, '255,240,180', 0.5 + 0.3 * Math.sin(t * 4));
+  glow(lhx, lhy, 14, '255,240,180', 0.5 + 0.3 * Math.sin(t * 4));
   // Fireflies over the town, a glint on the pond, gulls now and then.
   for (let i = 0; i < 6; i++) { const fx = 150 + Math.sin(t * 0.7 + i * 2) * 60, fy = 380 + Math.cos(t * 0.5 + i * 3) * 90; if (Math.sin(t * 4 + i) > 0.6) glow(fx, fy, 3, '255,246,168', 0.8); }
-  if (Math.floor(t * 2) % 2) fillCircle(300, 514, 1, '#ffffff');
+  if (Math.floor(t * 2) % 2) fillCircle(299, 500, 1, '#ffffff');
   if (Math.random() < dt * 0.05) ISLE.birds.push({ x: -10, y: 30 + Math.random() * 500, v: 22 + Math.random() * 10 });
   for (const bd of ISLE.birds) {
     bd.x += bd.v * dt;
@@ -653,7 +706,8 @@ function sizeIsland() {
   for (const b of BUILDINGS) {
     const el = $(`.bld[data-go="${b.tab}"]`), sg = $(`.sign[data-go="${b.tab}"]`), bx = boxOf(b);
     if (el) el.setAttribute('style', `left:${(bx.x / ISLE_W) * 100}%;top:${((bx.y + ISLE.oy) / ISLE.h) * 100}%;width:${(bx.w / ISLE_W) * 100}%;height:${(bx.h / ISLE.h) * 100}%`);
-    if (sg) sg.setAttribute('style', `left:${(b.lx / ISLE_W) * 100}%;top:${((b.ly + ISLE.oy) / ISLE.h) * 100}%`);
+    const [lx, ly] = plaqueOf(b);
+    if (sg) sg.setAttribute('style', `left:${(lx / ISLE_W) * 100}%;top:${((ly + ISLE.oy) / ISLE.h) * 100}%`);
   }
 }
 window.addEventListener('resize', sizeIsland);
