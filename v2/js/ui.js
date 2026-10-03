@@ -110,13 +110,17 @@ function pumpModalQueue() {
 }
 
 // ---------- tabs ----------
+// Version 2: the island is home; every other screen gets a back bar with its name.
+const SCREEN_TITLE = { fight: 'Cave', forge: 'Forge', skills: 'Shrine', cases: 'Market', bag: 'House', quests: 'Quest board', more: 'Lighthouse' };
 function showTab(name) {
   if (UI.tab === 'bag' && name !== 'bag') markItemsSeen();
   UI.tab = name;
-  for (const b of $$('#tabs button')) b.classList.toggle('on', b.dataset.tab === name);
   for (const s of $$('#panel > .tab')) s.hidden = s.id !== 'tab-' + name;
-  // Skills gets the whole screen: the mine view and floor bar step aside.
-  const full = name === 'skills';
+  $('#screenbar').hidden = name === 'island';
+  $('#screenTitle').textContent = SCREEN_TITLE[name] || '';
+  document.body.classList.toggle('on-island', name === 'island');
+  // The island and Skills get the whole screen: the mine view and floor bar step aside.
+  const full = name === 'skills' || name === 'island';
   if (document.body.classList.contains('fulltab') !== full) {
     document.body.classList.toggle('fulltab', full);
     if (!full) resizeCanvas();
@@ -130,7 +134,7 @@ function showTab(name) {
 // Off the Fight tab the mine view is cut down to its bottom half (the miner and the ground), so the
 // tab below gets more room. The canvas keeps its size; the stage just hides the top part.
 function cropStage(name = UI.tab) {
-  const crop = name !== 'fight' && name !== 'skills';
+  const crop = name !== 'fight' && name !== 'skills' && name !== 'island';
   document.body.classList.toggle('croptab', crop);
   SCN.top = crop ? 47 : 0; // canvas rows hidden above the crop (48% of 96)
   if (crop) {
@@ -141,7 +145,8 @@ function cropStage(name = UI.tab) {
 window.addEventListener('resize', () => cropStage());
 
 function buildTab(name = UI.tab) {
-  if (name === 'fight') updateFight();
+  if (name === 'island') buildIsland();
+  else if (name === 'fight') updateFight();
   else if (name === 'forge') buildForge();
   else if (name === 'skills') buildSkills();
   else if (name === 'cases') buildCases();
@@ -198,7 +203,7 @@ function updateFloorBar() {
 }
 
 function setDot(tab, on) {
-  const b = $(`#tabs button[data-tab="${tab}"] .dot`);
+  const b = $(`.bld[data-go="${tab}"] .dot`);
   if (b) b.classList.toggle('show', !!on);
 }
 
@@ -1789,7 +1794,7 @@ function doRestore(id) {
   makeBackup(JSON.parse(serialize()), 'Before restoring a backup');
   loadState(raw);
   saveNow();
-  showTab('fight');
+  showTab('island');
   toast('Backup restored', 'good');
 }
 
@@ -1813,7 +1818,7 @@ function doReset() {
   R.session = 0;
   saveNow();
   closeModal();
-  showTab('fight');
+  showTab('island');
   toast('Fresh start. Good luck down there.', 'good');
 }
 
@@ -1841,7 +1846,7 @@ function doImport() {
     loadState(obj);
     saveNow();
       toast('Save loaded', 'good');
-    showTab('fight');
+    showTab('island');
   } catch (e) {
     toast(e.message || 'That code did not work', 'bad');
   }
@@ -1853,12 +1858,6 @@ function bindInput() {
     if (el && !el.disabled) {
       audioUnlock();
       handleAction(el);
-      return;
-    }
-    const tab = e.target.closest('#tabs button');
-    if (tab) {
-      audioUnlock();
-      showTab(tab.dataset.tab);
       return;
     }
   });

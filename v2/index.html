@@ -13,7 +13,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Deep Dig Heroes V2</title>
-<link rel="stylesheet" href="style.css?v=2.0.0-dev.1">
+<link rel="stylesheet" href="style.css?v=2.0.0-dev.2">
 <script>
   // Safety net: if an update ever arrives half-loaded and the game can't start, offer a one-tap
   // repair instead of a black screen. It clears the offline copy only; the save is untouched.
@@ -57,6 +57,11 @@
     </div>
   </header>
 
+  <div id="screenbar" hidden>
+    <button id="homeBtn" class="btn small" aria-label="Back to the island">◂ Island</button>
+    <b id="screenTitle"></b>
+  </div>
+
   <div id="stage">
     <canvas id="cv" width="320" height="192" aria-label="Your miner fighting in the mine"></canvas>
   </div>
@@ -72,7 +77,8 @@
   </div>
 
   <main id="panel">
-    <section id="tab-fight" class="tab">
+    <section id="tab-island" class="tab" hidden></section>
+    <section id="tab-fight" class="tab" hidden>
       <div id="ticker" class="ticker" aria-live="polite"></div>
       <div id="combocard" class="card mathcard">
         <div class="mathmeta">
@@ -96,35 +102,27 @@
     <section id="tab-more" class="tab" hidden></section>
   </main>
 
-  <nav id="tabs" aria-label="Game sections">
-    <button data-tab="fight" class="on"><img data-icon="skull" alt=""><span>Fight</span><i class="dot"></i></button>
-    <button data-tab="forge"><img data-icon="anvil" alt=""><span>Forge</span><i class="dot"></i></button>
-    <button data-tab="skills"><img data-icon="star" alt=""><span>Skills</span><i class="dot"></i></button>
-    <button data-tab="cases"><img data-icon="chest" alt=""><span>Cases</span><i class="dot"></i></button>
-    <button data-tab="bag"><img data-icon="bag" alt=""><span>Bag</span><i class="dot"></i></button>
-    <button data-tab="quests"><img data-icon="scroll" alt=""><span>Quests</span><i class="dot"></i></button>
-    <button data-tab="more"><img data-icon="cog" alt=""><span>More</span><i class="dot"></i></button>
-  </nav>
 </div>
 
 <div id="toasts" aria-live="polite"></div>
 <div id="modal" hidden><div class="sheet" role="dialog" aria-modal="true"></div></div>
 
-<script src="js/version.js?v=2.0.0-dev.1"></script>
-<script src="js/v2.js?v=2.0.0-dev.1"></script>
-<script src="js/util.js?v=2.0.0-dev.1"></script>
-<script src="js/data.js?v=2.0.0-dev.1"></script>
-<script src="js/sprites.js?v=2.0.0-dev.1"></script>
-<script src="js/engine.js?v=2.0.0-dev.1"></script>
-<script src="js/backup.js?v=2.0.0-dev.1"></script>
-<script src="js/audio.js?v=2.0.0-dev.1"></script>
-<script src="js/render.js?v=2.0.0-dev.1"></script>
-<script src="js/ui.js?v=2.0.0-dev.1"></script>
-<script src="js/minigames.js?v=2.0.0-dev.1"></script>
-<script src="js/feedback.js?v=2.0.0-dev.1"></script>
-<script src="js/leaderboard.js?v=2.0.0-dev.1"></script>
-<script src="js/telemetry.js?v=2.0.0-dev.1"></script>
-<script src="js/tappad.js?v=2.0.0-dev.1"></script>
-<script src="js/main.js?v=2.0.0-dev.1"></script>
+<script src="js/version.js?v=2.0.0-dev.2"></script>
+<script src="js/v2.js?v=2.0.0-dev.2"></script>
+<script src="js/util.js?v=2.0.0-dev.2"></script>
+<script src="js/data.js?v=2.0.0-dev.2"></script>
+<script src="js/sprites.js?v=2.0.0-dev.2"></script>
+<script src="js/engine.js?v=2.0.0-dev.2"></script>
+<script src="js/backup.js?v=2.0.0-dev.2"></script>
+<script src="js/audio.js?v=2.0.0-dev.2"></script>
+<script src="js/render.js?v=2.0.0-dev.2"></script>
+<script src="js/ui.js?v=2.0.0-dev.2"></script>
+<script src="js/island.js?v=2.0.0-dev.2"></script>
+<script src="js/minigames.js?v=2.0.0-dev.2"></script>
+<script src="js/feedback.js?v=2.0.0-dev.2"></script>
+<script src="js/leaderboard.js?v=2.0.0-dev.2"></script>
+<script src="js/telemetry.js?v=2.0.0-dev.2"></script>
+<script src="js/tappad.js?v=2.0.0-dev.2"></script>
+<script src="js/main.js?v=2.0.0-dev.2"></script>
 </body>
 </html>

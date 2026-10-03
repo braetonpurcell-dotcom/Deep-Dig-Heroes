@@ -197,7 +197,7 @@ function boot(hotData) {
   bindInput();
   UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
   UI.nextBreak = S.settings.breakMin > 0 ? S.settings.breakMin * 60 : 0;
-  showTab('fight');
+  showTab('island');
   tapStart();
 
   const away = base ? (Date.now() - (S.lastSeen || Date.now())) / 1000 : 0;
