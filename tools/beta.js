@@ -1,41 +1,52 @@
-// The test copy of the game lives in beta/ and plays at .../Deep-Dig-Heroes/beta/.
-// It has its own save, its own offline copy and home-screen icon, and never posts to the
-// leaderboard, so trying things there can't touch the real game or anyone's progress.
+// Test copies of the game, each in its own folder with its own save, offline copy and home-screen
+// icon. None of them post to the leaderboard, so trying things there can't touch the real game.
+//   beta/  .../Deep-Dig-Heroes/beta/  short-term: the next v1 update, promoted to live when ready
+//   v2/    .../Deep-Dig-Heroes/v2/    long-term: the version 2 overhaul, built in the background
 //
-//   node tools/beta.js reset     replace beta/ with a fresh copy of the live game
-//   node tools/beta.js promote   copy the game files from beta/ over the live game (then do a normal release)
+//   node tools/beta.js reset [beta|v2]            replace the folder with a fresh copy of the live game
+//   node tools/beta.js promote [beta|v2]          copy that folder's game files over the live game (then release as usual)
+//   node tools/beta.js pull [beta|v2] <file>...   copy live files (e.g. js/engine.js) into the folder, to carry v1 fixes over
+// The channel defaults to beta.
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
 const root = path.join(__dirname, '..');
-const beta = path.join(root, 'beta');
 const FILES = ['index.html', 'style.css', 'manifest.json', 'sw.js'];
 const DIRS = ['js', 'fonts', 'icons'];
 
-// Each pair is [live text, beta text]. reset swaps left to right, promote swaps back.
+const CHANNELS = {
+  beta: { tag: 'BETA', name: 'Deep Dig Heroes BETA', short: 'Dig BETA', color: '#ff6b9d', version: v => v + '-beta' },
+  v2: { tag: 'V2', name: 'Deep Dig Heroes V2', short: 'Dig V2', color: '#62c9ff', version: () => '2.0.0-dev.1' },
+};
+const CH = process.argv[3] && CHANNELS[process.argv[3]] ? process.argv[3] : 'beta';
+const C = CHANNELS[CH];
+const dir = path.join(root, CH);
+const SHIM = `js/${CH}.js`;
+
+// Each pair is [live text, test-copy text]. reset swaps left to right, promote swaps back.
 const SWAPS = {
   'index.html': [
-    ['<meta name="apple-mobile-web-app-title" content="Deep Dig">', '<meta name="apple-mobile-web-app-title" content="Dig BETA">'],
-    ['<title>Deep Dig Heroes</title>', '<title>Deep Dig Heroes BETA</title>'],
+    ['<meta name="apple-mobile-web-app-title" content="Deep Dig">', `<meta name="apple-mobile-web-app-title" content="${C.short}">`],
+    ['<title>Deep Dig Heroes</title>', `<title>${C.name}</title>`],
   ],
   'manifest.json': [
-    ['"name": "Deep Dig Heroes"', '"name": "Deep Dig Heroes BETA"'],
-    ['"short_name": "Deep Dig"', '"short_name": "Dig BETA"'],
+    ['"name": "Deep Dig Heroes"', `"name": "${C.name}"`],
+    ['"short_name": "Deep Dig"', `"short_name": "${C.short}"`],
   ],
   'sw.js': [
-    ["const CACHE = 'ddh-' + GAME_VERSION;", "const CACHE = 'ddh-beta-' + GAME_VERSION;"],
-    ["  './js/util.js' + V,", "  './js/beta.js' + V,\n  './js/util.js' + V,"],
-    ['keys.filter(k => k !== CACHE)', "keys.filter(k => k.startsWith('ddh-beta-') && k !== CACHE)"],
+    ["const CACHE = 'ddh-' + GAME_VERSION;", `const CACHE = 'ddh-${CH}-' + GAME_VERSION;`],
+    ["  './js/util.js' + V,", `  './${SHIM}' + V,\n  './js/util.js' + V,`],
+    ['keys.filter(k => k !== CACHE)', `keys.filter(k => k.startsWith('ddh-${CH}-') && k !== CACHE)`],
   ],
   'js/feedback.js': [["fetch('feedback/replies.json", "fetch('../feedback/replies.json"]],
 };
-const BETA_TAG = '<script src="js/beta.js"></script>\n';
-const BETA_JS = `'use strict';
+const SHIM_TAG = `<script src="${SHIM}"></script>\n`;
+const SHIM_JS = `'use strict';
 // Test copy only (made by tools/beta.js, never promoted to the live game).
-// Every save key gets a "ddh-beta:" prefix, so this copy can't read or overwrite the real save.
+// Every save key gets a "ddh-${CH}:" prefix, so this copy can't read or overwrite the real save.
 (function () {
-  const P = 'ddh-beta:';
+  const P = 'ddh-${CH}:';
   const proto = Storage.prototype;
   const get = proto.getItem, set = proto.setItem, del = proto.removeItem;
   const mine = s => { try { return s === window.localStorage; } catch (e) { return false; } };
@@ -47,7 +58,7 @@ const BETA_JS = `'use strict';
       const real = get.call(ls, 'ddh-save-v1');
       if (real != null) set.call(ls, P + 'ddh-save-v1', real);
     }
-    window.DDH_BETA_RECOPY = () => {
+    window.DDH_TEST_RECOPY = () => {
       const real = get.call(ls, 'ddh-save-v1');
       if (real == null) return false;
       set.call(ls, P + 'ddh-save-v1', real);
@@ -62,14 +73,14 @@ const BETA_JS = `'use strict';
 window.addEventListener('DOMContentLoaded', () => {
   if (typeof sendScore === 'function') sendScore = async () => {};
   const tag = document.createElement('div');
-  tag.textContent = 'BETA';
-  tag.setAttribute('style', 'position:fixed;left:50%;top:0;transform:translateX(-50%);z-index:50;font:11px sans-serif;color:#ff6b9d;opacity:.85;padding:2px 6px');
-  tag.title = 'Tap to copy your real save into the beta again';
+  tag.textContent = '${C.tag}';
+  tag.setAttribute('style', 'position:fixed;left:50%;top:0;transform:translateX(-50%);z-index:50;font:11px sans-serif;color:${C.color};opacity:.85;padding:2px 6px');
+  tag.title = 'Tap to copy your real save into this test copy again';
   tag.addEventListener('click', () => {
-    if (!confirm('Replace your BETA progress with a fresh copy of your real save? (Your real save is not changed.)')) return;
+    if (!confirm('Replace your ${C.tag} progress with a fresh copy of your real save? (Your real save is not changed.)')) return;
     window.removeEventListener('pagehide', saveNow);
     document.removeEventListener('visibilitychange', onVisibility);
-    if (window.DDH_BETA_RECOPY && window.DDH_BETA_RECOPY()) location.reload();
+    if (window.DDH_TEST_RECOPY && window.DDH_TEST_RECOPY()) location.reload();
     else alert('No real save found on this phone.');
   });
   document.body.appendChild(tag);
@@ -93,30 +104,49 @@ function swap(dir, file, forward) {
 }
 
 function reset() {
-  fs.rmSync(beta, { recursive: true, force: true });
-  for (const f of [...FILES, ...DIRS]) copy(path.join(root, f), path.join(beta, f));
-  for (const f of Object.keys(SWAPS)) swap(beta, f, true);
-  const vp = path.join(beta, 'js/version.js');
-  fs.writeFileSync(vp, fs.readFileSync(vp, 'utf8').replace(/GAME_VERSION = '([^']+)'/, "GAME_VERSION = '$1-beta'"));
-  fs.writeFileSync(path.join(beta, 'js/beta.js'), BETA_JS);
-  const ip = path.join(beta, 'index.html');
+  fs.rmSync(dir, { recursive: true, force: true });
+  for (const f of [...FILES, ...DIRS]) copy(path.join(root, f), path.join(dir, f));
+  for (const f of Object.keys(SWAPS)) swap(dir, f, true);
+  const vp = path.join(dir, 'js/version.js');
+  fs.writeFileSync(vp, fs.readFileSync(vp, 'utf8').replace(/GAME_VERSION = '([^']+)'/, (m, v) => `GAME_VERSION = '${C.version(v)}'`));
+  fs.writeFileSync(path.join(dir, SHIM), SHIM_JS);
+  const ip = path.join(dir, 'index.html');
   const html = fs.readFileSync(ip, 'utf8');
   const at = html.indexOf('<script src="js/util.js');
   if (at < 0) throw new Error('index.html: util.js script tag not found');
-  fs.writeFileSync(ip, html.slice(0, at) + BETA_TAG + html.slice(at));
-  execFileSync('node', [path.join(__dirname, 'stamp-version.js'), 'beta'], { stdio: 'inherit' });
-  console.log('beta/ is a fresh copy of the live game');
+  fs.writeFileSync(ip, html.slice(0, at) + SHIM_TAG + html.slice(at));
+  execFileSync('node', [path.join(__dirname, 'stamp-version.js'), CH], { stdio: 'inherit' });
+  console.log(`${CH}/ is a fresh copy of the live game`);
+}
+
+// Carry live files (a v1 bug fix, say) into the test copy, with its swaps applied.
+function pull(files) {
+  if (!fs.existsSync(dir)) throw new Error(`no ${CH}/ folder`);
+  if (!files.length) throw new Error('name the files to copy, e.g. js/engine.js');
+  for (const f of files) {
+    if (f === 'js/version.js' || f === SHIM) throw new Error(`${f} belongs to ${CH}/, not copied`);
+    copy(path.join(root, f), path.join(dir, f));
+    if (SWAPS[f]) swap(dir, f, true);
+    if (f === 'index.html') {
+      const ip = path.join(dir, 'index.html');
+      const html = fs.readFileSync(ip, 'utf8');
+      const at = html.indexOf('<script src="js/util.js');
+      fs.writeFileSync(ip, html.slice(0, at) + SHIM_TAG + html.slice(at));
+      execFileSync('node', [path.join(__dirname, 'stamp-version.js'), CH], { stdio: 'inherit' });
+    }
+    console.log(`copied ${f} into ${CH}/`);
+  }
 }
 
 function promote() {
-  if (!fs.existsSync(beta)) throw new Error('no beta/ folder');
+  if (!fs.existsSync(dir)) throw new Error(`no ${CH}/ folder`);
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'ddh-promote-'));
-  for (const f of [...FILES, ...DIRS]) copy(path.join(beta, f), path.join(tmp, f));
+  for (const f of [...FILES, ...DIRS]) copy(path.join(dir, f), path.join(tmp, f));
   for (const f of Object.keys(SWAPS)) swap(tmp, f, false);
-  fs.rmSync(path.join(tmp, 'js/beta.js'));
+  fs.rmSync(path.join(tmp, SHIM));
   fs.copyFileSync(path.join(root, 'js/version.js'), path.join(tmp, 'js/version.js')); // the release step bumps this
   const ip = path.join(tmp, 'index.html');
-  const html = fs.readFileSync(ip, 'utf8').replace(/<script src="js\/beta\.js[^"]*"><\/script>\n/, '');
+  const html = fs.readFileSync(ip, 'utf8').replace(new RegExp(`<script src="js/${CH}\\.js[^"]*"></script>\\n`), '');
   fs.writeFileSync(ip, html);
   for (const f of [...FILES, ...DIRS]) {
     fs.rmSync(path.join(root, f), { recursive: true, force: true });
@@ -124,12 +154,13 @@ function promote() {
   }
   fs.rmSync(tmp, { recursive: true, force: true });
   execFileSync('node', [path.join(__dirname, 'stamp-version.js')], { stdio: 'inherit' });
-  const left = FILES.concat(['js/feedback.js']).filter(f => /beta/i.test(fs.readFileSync(path.join(root, f), 'utf8')));
-  if (left.length) throw new Error('still mentions beta: ' + left.join(', '));
-  console.log('Live game files now match beta/. Next: bump js/version.js, run tools/stamp-version.js, add a CHANGELOG section, test, push.');
+  const left = FILES.concat(['js/feedback.js']).filter(f => new RegExp(`${CH}[/:'-]|${C.tag}\\b`).test(fs.readFileSync(path.join(root, f), 'utf8')));
+  if (left.length) throw new Error(`still mentions ${CH}: ` + left.join(', '));
+  console.log(`Live game files now match ${CH}/. Next: bump js/version.js, run tools/stamp-version.js, add a CHANGELOG section, test, push.`);
 }
 
 const cmd = process.argv[2];
 if (cmd === 'reset') reset();
 else if (cmd === 'promote') promote();
-else console.log('usage: node tools/beta.js reset | promote');
+else if (cmd === 'pull') pull(process.argv.slice(process.argv[3] && CHANNELS[process.argv[3]] ? 4 : 3));
+else console.log('usage: node tools/beta.js reset [beta|v2] | promote [beta|v2] | pull [beta|v2] <file>...');

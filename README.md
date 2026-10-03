@@ -59,14 +59,26 @@ On the phone, the game backs up your progress before every update and once a day
 
 Jersey 10 font by the Soft Type Project Authors, under the SIL Open Font License 1.1 (`fonts/OFL.txt`).
 
-## Test copy (beta)
+## Test copies (beta and v2)
 
-`beta/` is a separate copy of the game for trying changes before they go live:
-https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/beta/
+There are three copies of the game:
 
-- It has its own save (stored under a `ddh-beta:` prefix), its own offline copy and its own home-screen icon ("Dig BETA"), so it can't touch the real save.
-- It never posts to the leaderboard. A small pink BETA tag sits in the bottom-left corner.
-- Pushing changes inside `beta/` does not create a release.
+| Copy | Folder | Link | What it's for |
+|---|---|---|---|
+| Live | root | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/ | What everyone plays |
+| Beta | `beta/` | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/beta/ | The next v1 update: bug fixes and features, promoted to live when ready |
+| V2 | `v2/` | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/v2/ | The version 2 overhaul (new UI), built in the background over time |
 
-`node tools/beta.js reset` replaces `beta/` with a fresh copy of the live game.
-`node tools/beta.js promote` copies the game files from `beta/` over the live game; then release as usual (bump `js/version.js`, run `node tools/stamp-version.js`, add a CHANGELOG section).
+Beta and V2 each:
+
+- have their own save (stored under a `ddh-beta:` or `ddh-v2:` prefix). On the first visit it starts as a copy of your real save; tap the BETA or V2 tag at the top to copy your real save in again. The real save is never changed.
+- have their own offline copy and home-screen icon ("Dig BETA", "Dig V2").
+- never post to the leaderboard.
+- never create a release when pushed (only the root `js/version.js` and `CHANGELOG.md` do that).
+
+Commands (the channel defaults to `beta`):
+
+- `node tools/beta.js reset beta` (or `v2`) replaces that folder with a fresh copy of the live game.
+- `node tools/beta.js pull v2 js/engine.js` copies live files into a test copy, to carry a v1 fix over into v2 (or beta). Pull only files v2 hasn't redesigned, or merge by hand.
+- `node tools/beta.js promote v2` (or `beta`) copies that folder's game files over the live game; then release as usual (bump `js/version.js`, run `node tools/stamp-version.js`, add a CHANGELOG section).
+- After changing a test copy's version, stamp it with `node tools/stamp-version.js beta` (or `v2`).
