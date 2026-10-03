@@ -111,7 +111,7 @@ function pumpModalQueue() {
 
 // ---------- tabs ----------
 // Version 2: the island is home; every other screen gets a back bar with its name.
-const SCREEN_TITLE = { fight: 'Cave', forge: 'Forge', skills: 'Shrine', cases: 'Market', bag: 'House', quests: 'Quest board', more: 'Lighthouse' };
+const SCREEN_TITLE = { fight: 'Cave', forge: 'Forge', skills: 'Temple', cases: 'Market', bag: 'House', quests: 'Quest board', more: 'Lighthouse' };
 function showTab(name) {
   if (UI.tab === 'bag' && name !== 'bag') markItemsSeen();
   UI.tab = name;
