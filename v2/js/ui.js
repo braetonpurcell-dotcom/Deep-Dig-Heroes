@@ -203,7 +203,7 @@ function updateFloorBar() {
 }
 
 function setDot(tab, on) {
-  const b = $(`.bld[data-go="${tab}"] .dot`);
+  const b = $(`.isle .sign[data-go="${tab}"] .dot`);
   if (b) b.classList.toggle('show', !!on);
 }
 

@@ -1,363 +1,448 @@
 'use strict';
-// Version 2 home screen: an island instead of a tab bar, laid out from the "island v1" sketch.
-// The mountain with the cave sits at the top; a path winds down through town past the forge,
-// the skill temple, the market, the house, the quest board and the lighthouse to the dock, with
-// a curved spur to every door. Detailed pixel art drawn at 360x640 island pixels and scaled up
-// crisp; everything that stands up gets a dark outline, like the game's sprites. The buildings
-// are plain buttons on top, so they work with screen readers and never miss a tap.
+// Version 2 home screen: an island instead of a tab bar, laid out from the "island v1" sketch and
+// painted in a smooth cartoon-map style (soft shading, lush trees along the shore, a volcano with
+// the mine at its foot, wide dirt paths, turquoise shallows, clouds and sea life). The still parts
+// are painted once at full screen resolution; the sea, smoke, lights, boats and clouds move.
+// Buildings are plain buttons on top, so they work with screen readers and never miss a tap.
 
 const ISLE_W = 360;
 const ISLE_H = 640;
-const ISLE = { cv: null, ctx: null, k: 0, t: 0, raf: 0, smoke: [], h: ISLE_H, oy: 0, boats: [], nextBoat: 20, pops: [], birds: [], outlines: true };
+const ISLE = { cv: null, ctx: null, k: 1, baseK: 0, t: 0, raf: 0, h: ISLE_H, oy: 0, boats: [], nextBoat: 20, pops: [], birds: [], puffs: [], clouds: [], whale: null, nextWhale: 25, sprites: {} };
 
-// Where each building sits, in island pixels: the tap area, exactly the drawn building. Its sign
-// hangs below it, so a building needs about 22 px of clear ground under it.
+// Where each building sits, in island pixels: the tap area (the drawn building) and its name
+// plaque's centre, placed on open ground beside the doorstep.
+// Each building is drawn at full size, then shrunk about its doorstep (ax, ay) by s, so the
+// paths still meet the doors and there is room for trees round the shore.
 const BUILDINGS = [
-  { tab: 'fight', name: 'Cave', x: 150, y: 128, w: 88, h: 62 },
-  { tab: 'forge', name: 'Forge', x: 80, y: 212, w: 96, h: 92 },
-  { tab: 'skills', name: 'Temple', x: 206, y: 248, w: 92, h: 112 },
-  { tab: 'cases', name: 'Market', x: 80, y: 376, w: 110, h: 66 },
-  { tab: 'bag', name: 'House', x: 217, y: 394, w: 104, h: 88 },
-  { tab: 'quests', name: 'Quests', x: 172, y: 506, w: 86, h: 70 },
-  { tab: 'more', name: 'Lighthouse', x: 96, y: 530, w: 60, h: 88 },
-  { tab: 'dock', name: 'Dock', x: 4, y: 504, w: 72, h: 56 },
+  { tab: 'fight', name: 'Cave', x: 150, y: 128, w: 80, h: 58, ax: 190, ay: 182, s: 0.85, lx: 236, ly: 192 },
+  { tab: 'forge', name: 'Forge', x: 74, y: 190, w: 90, h: 98, ax: 133, ay: 286, s: 0.78, lx: 133, ly: 301 },
+  { tab: 'skills', name: 'Temple', x: 197, y: 226, w: 102, h: 108, ax: 248, ay: 330, s: 0.78, lx: 262, ly: 348 },
+  { tab: 'cases', name: 'Market', x: 60, y: 350, w: 106, h: 78, ax: 113, ay: 424, s: 0.78, lx: 100, ly: 444 },
+  { tab: 'bag', name: 'House', x: 216, y: 378, w: 92, h: 96, ax: 262, ay: 470, s: 0.78, lx: 276, ly: 490 },
+  { tab: 'quests', name: 'Quests', x: 182, y: 496, w: 84, h: 68, ax: 225, ay: 560, s: 0.85, lx: 240, ly: 580 },
+  { tab: 'more', name: 'Lighthouse', x: 78, y: 546, w: 36, h: 74, ax: 95, ay: 610, s: 1, lx: 95, ly: 629 },
+  { tab: 'dock', name: 'Dock', x: 6, y: 502, w: 70, h: 56, ax: 40, ay: 538, s: 1, lx: 38, ly: 568 },
 ];
+// A building's tap box after its shrink, and a point drawn inside that shrink.
+function boxOf(b) { return { x: b.ax + (b.x - b.ax) * b.s, y: b.ay + (b.y - b.ay) * b.s, w: b.w * b.s, h: b.h * b.s }; }
+function at(tab, x, y) { const b = BUILDINGS.find(q => q.tab === tab); return [b.ax + (x - b.ax) * b.s, b.ay + (y - b.ay) * b.s]; }
+function scaled(tab, fn) { const b = BUILDINGS.find(q => q.tab === tab), d = c(); d.save(); d.translate(b.ax, b.ay); d.scale(b.s, b.s); d.translate(-b.ax, -b.ay); fn(); d.restore(); }
 
-// The coastline, traced from the sketch (island pixels), smoothed into curves.
-const COAST = [[165, 47], [215, 55], [260, 62], [285, 80], [300, 115], [292, 160], [285, 200], [300, 235], [322, 270],
-  [320, 320], [325, 380], [350, 450], [345, 505], [325, 550], [280, 580], [215, 600], [150, 630], [80, 628], [55, 580],
-  [50, 510], [62, 445], [55, 400], [35, 360], [30, 300], [55, 260], [70, 210], [70, 165], [80, 120], [110, 70]];
-// The main path from the cave to the dock, and a spur from it to each door.
-const PATH = [[194, 190], [192, 222], [188, 256], [184, 290], [176, 322], [174, 352], [184, 384], [200, 412], [206, 440],
-  [198, 466], [180, 488], [152, 506], [120, 520], [96, 530], [78, 534]];
+// The coastline from the sketch, smoothed into a curve, with a few small bays.
+const COAST = [[170, 44], [232, 50], [280, 72], [300, 110], [290, 160], [296, 206], [326, 250], [318, 300], [338, 340], [330, 392],
+  [352, 440], [344, 500], [322, 548], [292, 580], [236, 606], [162, 630], [92, 626], [58, 592], [44, 540], [52, 490], [60, 440],
+  [36, 380], [30, 318], [52, 262], [68, 206], [72, 160], [82, 110], [118, 66]];
+// One path network: the main path from the cave to the dock, plus a spur to each doorstep. They
+// are all stroked together, pass by pass, so the joins are seamless.
+const PATH = [[190, 182], [188, 214], [181, 250], [177, 288], [178, 326], [186, 366], [196, 406], [198, 446], [190, 480],
+  [166, 506], [150, 528], [115, 536], [86, 540], [66, 538]];
 const SPURS = [
-  [[187, 272], [168, 302], [146, 310]], // forge door
-  [[176, 348], [214, 368], [252, 366]], // temple steps
-  [[191, 398], [158, 438], [128, 446]], // market counter
-  [[205, 436], [238, 482], [270, 488]], // house door
-  [[164, 502], [160, 548], [190, 584], [216, 584]], // round the quest board to its front
-  [[110, 526], [100, 566], [110, 604]], // lighthouse
+  [[179, 270], [156, 284], [133, 286]], // forge door
+  [[177, 316], [212, 328], [248, 330]], // temple steps
+  [[185, 388], [146, 418], [113, 424]], // market counter
+  [[198, 442], [230, 466], [262, 470]], // house door
+  [[156, 524], [188, 560], [225, 560]], // round the quest board to its front
+  [[86, 544], [74, 578], [84, 604], [95, 610]], // down to the lighthouse rocks
 ];
-const PALMS = [[280, 126], [86, 176], [112, 118], [304, 262], [40, 318], [334, 428], [300, 540], [62, 478]];
-const BUSHES = [[268, 240, 1], [60, 250, 0.9], [306, 372, 1], [60, 420, 0.9], [156, 478, 0.8], [322, 496, 1], [272, 556, 0.9], [130, 205, 0.8]];
-const ROCKS = [[60, 590], [268, 200], [275, 520], [50, 476]];
-// Ground shadows under everything that stands up: [cx, cy, rx, ry].
-const SHADOWS = [[196, 188, 80, 12], [128, 306, 46, 8], [252, 362, 50, 9], [128, 442, 48, 8], [269, 486, 54, 9], [216, 578, 40, 6], [126, 620, 30, 8]];
+const PADS = [[190, 182], [133, 286], [248, 330], [113, 424], [262, 470], [225, 560], [95, 610]];
 
-// ---------- drawing helpers ----------
-function g() { return ISLE.ctx; }
-function ip(x, y, w, h, c) { const d = g(); d.fillStyle = c; d.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
-function iell(cx, cy, rx, ry, c) {
-  const d = g(); d.fillStyle = c;
-  for (let y = -ry; y <= ry; y++) {
-    const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y * y) / (ry * ry))));
-    d.fillRect(Math.round(cx - half), Math.round(cy + y), half * 2, 1);
-  }
+// ---------- drawing helpers (smooth, anti-aliased) ----------
+function c() { return ISLE.ctx; }
+function fillCircle(x, y, r, fill) { const d = c(); d.fillStyle = fill; d.beginPath(); d.arc(x, y, r, 0, Math.PI * 2); d.fill(); }
+function fillEll(x, y, rx, ry, fill, rot = 0) { const d = c(); d.fillStyle = fill; d.beginPath(); d.ellipse(x, y, Math.max(0.1, rx), Math.max(0.1, ry), rot, 0, Math.PI * 2); d.fill(); }
+function rect(x, y, w, h, fill) { const d = c(); d.fillStyle = fill; d.fillRect(x, y, w, h); }
+function rrPath(x, y, w, h, r) {
+  const p = new Path2D(); r = Math.min(r, w / 2, h / 2);
+  p.moveTo(x + r, y); p.lineTo(x + w - r, y); p.quadraticCurveTo(x + w, y, x + w, y + r); p.lineTo(x + w, y + h - r);
+  p.quadraticCurveTo(x + w, y + h, x + w - r, y + h); p.lineTo(x + r, y + h); p.quadraticCurveTo(x, y + h, x, y + h - r);
+  p.lineTo(x, y + r); p.quadraticCurveTo(x, y, x + r, y); p.closePath();
+  return p;
 }
+function fillRR(x, y, w, h, r, fill) { const d = c(); d.fillStyle = fill; d.fill(rrPath(x, y, w, h, r)); }
+function archPath(x, y, w, h) { const p = new Path2D(); p.moveTo(x, y + h); p.lineTo(x, y + w / 2); p.arc(x + w / 2, y + w / 2, w / 2, Math.PI, 0); p.lineTo(x + w, y + h); p.closePath(); return p; }
+function lin(x0, y0, x1, y1, stops) { const gr = c().createLinearGradient(x0, y0, x1, y1); for (const [o, col] of stops) gr.addColorStop(o, col); return gr; }
+function rad(x, y, r0, r1, stops, x1 = x, y1 = y) { const gr = c().createRadialGradient(x, y, r0, x1, y1, r1); for (const [o, col] of stops) gr.addColorStop(o, col); return gr; }
+function fillPath(p, fill) { const d = c(); d.fillStyle = fill; d.fill(p); }
+function strokePath(p, col, w, cap = 'round') { const d = c(); d.strokeStyle = col; d.lineWidth = w; d.lineCap = cap; d.lineJoin = 'round'; d.stroke(p); }
+function line(x0, y0, x1, y1) { const p = new Path2D(); p.moveTo(x0, y0); p.lineTo(x1, y1); return p; }
+function glow(x, y, r, rgb, a) { const d = c(); d.globalAlpha = a; fillCircle(x, y, r, rad(x, y, 0, r, [[0, `rgba(${rgb},1)`], [1, `rgba(${rgb},0)`]])); d.globalAlpha = 1; }
 function irng(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
-// Catmull-Rom through the points, as one closed (or open) path.
+// Catmull-Rom through the points, as one closed (or open) path, and the same curve as a polyline.
+function splineSeg(pts, i, closed) {
+  const n = pts.length, at = j => pts[closed ? (j + n) % n : Math.max(0, Math.min(n - 1, j))];
+  const a = at(i - 1), b = at(i), cc = at(i + 1), d = at(i + 2);
+  return [b, [b[0] + (cc[0] - a[0]) / 6, b[1] + (cc[1] - a[1]) / 6], [cc[0] - (d[0] - b[0]) / 6, cc[1] - (d[1] - b[1]) / 6], cc];
+}
 function smoothPath(pts, closed) {
-  const p = new Path2D(), n = pts.length, at = i => pts[closed ? (i + n) % n : Math.max(0, Math.min(n - 1, i))];
+  const p = new Path2D(), n = closed ? pts.length : pts.length - 1;
   p.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 0; i < (closed ? n : n - 1); i++) {
-    const a = at(i - 1), b = at(i), c = at(i + 1), d = at(i + 2);
-    p.bezierCurveTo(b[0] + (c[0] - a[0]) / 6, b[1] + (c[1] - a[1]) / 6, c[0] - (d[0] - b[0]) / 6, c[1] - (d[1] - b[1]) / 6, c[0], c[1]);
-  }
+  for (let i = 0; i < n; i++) { const [, b, cc, d] = splineSeg(pts, i, closed); p.bezierCurveTo(b[0], b[1], cc[0], cc[1], d[0], d[1]); }
   if (closed) p.closePath();
   return p;
 }
-const COAST_PATH = smoothPath(COAST, true);
-function shadow(cx, cy, rx, ry) { iell(cx, cy, rx, ry, 'rgba(20, 40, 20, 0.28)'); }
-
-// Draw something on its own layer, snap its edges to whole pixels and trace a dark outline round
-// it (the look of the game's sprites), then lay it on the base.
-function outlined(draw) {
-  if (!ISLE.outlines) { draw(); return; }
-  const c = makeCanvas(ISLE_W, ISLE_H), prev = ISLE.ctx;
-  ISLE.ctx = c.getContext('2d');
-  draw();
-  const d = ISLE.ctx, img = d.getImageData(0, 0, ISLE_W, ISLE_H), a = img.data, W = ISLE_W, n = W * ISLE_H;
-  const solid = new Uint8Array(n);
-  for (let p = 0; p < n; p++) { const i = p * 4 + 3; a[i] = a[i] >= 110 ? 255 : 0; solid[p] = a[i] ? 1 : 0; }
-  for (let p = 0; p < n; p++) {
-    if (solid[p]) continue;
-    const x = p % W;
-    if ((x > 0 && solid[p - 1]) || (x < W - 1 && solid[p + 1]) || (p >= W && solid[p - W]) || (p + W < n && solid[p + W])) {
-      const i = p * 4; a[i] = 0x1a; a[i + 1] = 0x12; a[i + 2] = 0x20; a[i + 3] = 255;
+function samplePath(pts, closed) {
+  const out = [], n = closed ? pts.length : pts.length - 1;
+  for (let i = 0; i < n; i++) {
+    const [a, b, cc, d] = splineSeg(pts, i, closed);
+    for (let t = 0; t < 1; t += 0.1) {
+      const u = 1 - t;
+      out.push([u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * cc[0] + t * t * t * d[0], u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * cc[1] + t * t * t * d[1]]);
     }
   }
-  d.putImageData(img, 0, 0);
-  ISLE.ctx = prev;
-  g().drawImage(c, 0, 0);
+  if (closed) out.push(out[0]); else out.push(pts[pts.length - 1]);
+  return out;
 }
+function distSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+function distPolyline(px, py, l) { let m = 1e9; for (let i = 1; i < l.length; i++) m = Math.min(m, distSeg(px, py, l[i - 1][0], l[i - 1][1], l[i][0], l[i][1])); return m; }
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+const COAST_PATH = smoothPath(COAST, true);
+const COAST_LINE = samplePath(COAST, true);
 
-// ---------- the still layer: ground, path, trees and buildings, drawn once ----------
+// ---------- the still layer: ground, paths, plants and buildings, painted once ----------
 function islandBase() {
-  const c = makeCanvas(ISLE_W, ISLE_H);
+  const k = ISLE.k, cv = makeCanvas(Math.ceil(ISLE_W * k), Math.ceil(ISLE_H * k));
   const prev = ISLE.ctx;
-  ISLE.ctx = c.getContext('2d');
-  const d = g(), r = irng(11);
+  ISLE.ctx = cv.getContext('2d');
+  const d = c();
+  d.scale(k, k);
   d.lineJoin = 'round'; d.lineCap = 'round';
-  // Shallows round the island, then the beach, then grass.
-  d.strokeStyle = 'rgba(90, 220, 215, 0.42)'; d.lineWidth = 46; d.stroke(COAST_PATH);
-  d.strokeStyle = 'rgba(150, 240, 230, 0.5)'; d.lineWidth = 28; d.stroke(COAST_PATH);
-  d.fillStyle = '#58b04a'; d.fill(COAST_PATH);
-  d.strokeStyle = '#8f6f3c'; d.lineWidth = 21; d.stroke(COAST_PATH); // a dark wet line at the water
-  d.strokeStyle = '#c99d5d'; d.lineWidth = 19; d.stroke(COAST_PATH);
-  d.strokeStyle = '#ecd29a'; d.lineWidth = 15; d.stroke(COAST_PATH);
-  d.strokeStyle = '#f6e3b4'; d.lineWidth = 6; d.stroke(COAST_PATH);
+  // The island's own shadow in the water, then turquoise shallows and a thin foam fringe.
+  d.save(); d.translate(5, 8); fillPath(COAST_PATH, 'rgba(0,30,80,0.3)'); strokePath(COAST_PATH, 'rgba(0,30,80,0.3)', 14); d.restore();
+  strokePath(COAST_PATH, 'rgba(110, 225, 240, 0.5)', 78);
+  strokePath(COAST_PATH, 'rgba(150, 240, 248, 0.55)', 56);
+  strokePath(COAST_PATH, 'rgba(255,255,255,0.35)', 26);
+  strokePath(COAST_PATH, 'rgba(255,255,255,0.6)', 23);
+  strokePath(COAST_PATH, 'rgba(255,255,255,0.9)', 20);
+  // Grass, with darker and sunlit patches, and a lighter rim toward the beach.
+  fillPath(COAST_PATH, '#64c74f');
   d.save();
   d.clip(COAST_PATH);
-  const shade = d.createLinearGradient(0, 40, 0, 640);
-  shade.addColorStop(0, 'rgba(255,255,200,0.08)'); shade.addColorStop(1, 'rgba(0,40,20,0.18)');
-  d.fillStyle = shade; d.fillRect(0, 0, ISLE_W, ISLE_H);
-  d.strokeStyle = '#4c9a40'; d.lineWidth = 36; d.stroke(COAST_PATH); // grass darkens toward the dune
-  d.strokeStyle = '#8a6a3a'; d.lineWidth = 17; d.stroke(COAST_PATH); // a dark line where grass meets sand
-  d.strokeStyle = '#ecd29a'; d.lineWidth = 15; d.stroke(COAST_PATH);
-  d.strokeStyle = '#f6e3b4'; d.lineWidth = 6; d.stroke(COAST_PATH);
-  for (let i = 0; i < 900; i++) {
+  const r = irng(11);
+  for (let i = 0; i < 46; i++) fillEll(r() * ISLE_W, 40 + r() * 600, 12 + r() * 22, 7 + r() * 12, 'rgba(50,145,45,0.2)');
+  for (let i = 0; i < 30; i++) fillEll(r() * ISLE_W, 40 + r() * 600, 10 + r() * 18, 6 + r() * 10, 'rgba(210,250,150,0.2)');
+  for (let i = 0; i < 160; i++) { // grass tufts
     const x = r() * ISLE_W, y = 40 + r() * 600;
-    if (!d.isPointInPath(COAST_PATH, x, y)) continue;
-    const k = r();
-    ip(x, y, k < 0.5 ? 2 : 1, 1, k < 0.33 ? '#469238' : k < 0.66 ? '#6cc257' : '#7fd166');
+    for (let j = -1; j <= 1; j++) strokePath(line(x + j * 1.6, y, x + j * 2.6, y - 3 - r() * 2), j ? '#3f9a3a' : '#2f8a32', 0.9);
   }
-  for (let i = 0; i < 70; i++) { // tufts
-    const x = 50 + r() * 290, y = 60 + r() * 560;
-    ip(x, y, 1, 3, '#3d8a33'); ip(x + 2, y - 1, 1, 4, '#4a9c3c'); ip(x + 4, y, 1, 3, '#3d8a33');
-  }
-  for (let i = 0; i < 46; i++) { // flowers
-    const x = 50 + r() * 290, y = 80 + r() * 540;
-    const col = ['#fff6e0', '#ffd94d', '#ff8fb1', '#b9a2ff'][Math.floor(r() * 4)];
-    ip(x, y, 2, 2, col); ip(x + 0.5, y + 2, 1, 1, '#2f6e2a');
-  }
+  strokePath(COAST_PATH, '#94dd72', 30);
   d.restore();
+  // The beach: wet sand at the water, dry sand on the crest, soft into the grass.
+  strokePath(COAST_PATH, '#d9bb74', 18);
+  strokePath(COAST_PATH, '#f1d98e', 16);
+  d.save(); d.clip(COAST_PATH); strokePath(COAST_PATH, 'rgba(241,217,142,0.6)', 20); strokePath(COAST_PATH, '#f1d98e', 16); d.restore();
+  strokePath(COAST_PATH, '#f9e9b2', 6);
+  // Shells and starfish on the sand.
+  for (let i = 0; i < 16; i++) {
+    const p = COAST_LINE[Math.floor(r() * (COAST_LINE.length - 1))], x = p[0] + (r() - 0.5) * 8, y = p[1] + (r() - 0.5) * 8;
+    if (r() < 0.4) starfish(x, y, 2.6 + r());
+    else { fillEll(x, y, 2.2, 1.6, '#f3a8b8', r() * 3); fillEll(x - 0.5, y - 0.4, 1.2, 0.8, '#fde2e8', r() * 3); }
+  }
 
-  drawTownPath();
-  // Shadows under everything that stands up, then the things themselves, each with an outline.
-  for (const [x, y, rx, ry] of SHADOWS) shadow(x, y, rx, ry);
-  for (const [x, y] of PALMS) shadow(x + 6, y + 1, 9, 3);
-  for (const [x, y, s] of BUSHES) shadow(x + 3, y + 8 * s, 13 * s, 4 * s);
-  for (const [x, y] of ROCKS) shadow(x + 2, y + 4, 9, 3);
-  outlined(drawMountain);
-  outlined(() => {
-    const pr = irng(23);
-    for (const [x, y] of PALMS) palm(x, y, pr);
-    for (const [x, y, s] of BUSHES) bush(x, y, s);
-    for (const [x, y] of ROCKS) rock(x, y);
-  });
-  outlined(drawForge); outlined(drawTemple); outlined(drawMarket); outlined(drawHouse);
-  outlined(drawBoard); outlined(drawLighthouse); outlined(drawDock);
+  drawPaths();
+  const plants = plantIsland(irng(7));
+  for (const p of plants) {
+    if (p.kind === 'tree') tree(p.x, p.y, p.r);
+    else if (p.kind === 'palm') palm(p.x, p.y, p.r * 3, p.lean);
+    else if (p.kind === 'bush') bush(p.x, p.y, p.r);
+    else flowers(p.x, p.y, p.r * 1.6);
+  }
+  scaled('fight', drawMountain);
+  drawPond(294, 520);
+  drawWell(150, 334);
+  scaled('forge', drawForge); scaled('skills', drawTemple); scaled('cases', drawMarket); scaled('bag', drawHouse); scaled('quests', drawBoard);
+  drawLighthouse(); drawDock();
   ISLE.ctx = prev;
-  return c;
+  return cv;
 }
 
-function drawTownPath() {
-  const d = g();
-  const lay = (p, w) => {
-    d.strokeStyle = '#6e4e2a'; d.lineWidth = w + 4; d.stroke(p); // dark edge
-    d.strokeStyle = '#b8905a'; d.lineWidth = w; d.stroke(p);
-    d.strokeStyle = '#d9b878'; d.lineWidth = Math.max(2, w - 6); d.stroke(p);
-  };
-  for (const s of SPURS) lay(smoothPath(s, false), 9);
-  lay(smoothPath(PATH, false), 13);
-  const r = irng(5);
-  for (let i = 0; i < 90; i++) { // pebbles along the main path
-    const j = Math.floor(r() * (PATH.length - 1)), t = r(), a = PATH[j], b = PATH[j + 1];
-    ip(a[0] + (b[0] - a[0]) * t + (r() - 0.5) * 8, a[1] + (b[1] - a[1]) * t + (r() - 0.5) * 6, 2, 1, r() < 0.5 ? '#9c7748' : '#e8cc96');
+function drawPaths() {
+  const d = c(), all = [PATH, ...SPURS].map(p => smoothPath(p, false));
+  for (const [col, w, a] of [['#8a6a3a', 22, 0.35], ['#a98650', 18, 1], ['#c9a467', 14, 1], ['#e3c884', 6, 0.55]]) {
+    d.globalAlpha = a;
+    for (const p of all) strokePath(p, col, w);
   }
+  d.globalAlpha = 1;
+  for (const [x, y] of PADS) { fillEll(x, y, 12, 5.5, '#b8945a'); fillEll(x, y - 0.5, 10, 4.2, '#dcc083'); }
+  const r = irng(5), main = samplePath(PATH, false);
+  for (let i = 0; i < 70; i++) {
+    const p = main[Math.floor(r() * main.length)];
+    fillEll(p[0] + (r() - 0.5) * 9, p[1] + (r() - 0.5) * 7, 1.4, 0.9, r() < 0.5 ? '#9c7748' : '#eed9a4');
+  }
+}
+
+// Trees and shrubs: a lush ring just inside the beach, then some inland, never on a path, a
+// doorstep, a building or a plaque.
+function plantIsland(r) {
+  const pathLines = [PATH, ...SPURS].map(p => samplePath(p, false));
+  const blocks = [
+    ...BUILDINGS.map(boxOf).map(b => [b.x - 6, b.y - 6, b.w + 12, b.h + 12]),
+    ...BUILDINGS.map(b => [b.lx - 38, b.ly - 11, 76, 22]),
+    [164, 76, 52, 44], [146, 118, 88, 36], [116, 150, 148, 42], [262, 500, 64, 42], [132, 304, 36, 40],
+  ];
+  const plants = [];
+  const free = (x, y, rad) => {
+    if (!pointInPoly(x, y, COAST_LINE) || distPolyline(x, y, COAST_LINE) < 15 + rad * 0.6) return false;
+    for (const [bx, by, bw, bh] of blocks) if (x + rad > bx && x - rad < bx + bw && y + rad * 0.5 > by && y - rad * 1.6 < by + bh) return false;
+    for (const l of pathLines) if (distPolyline(x, y, l) < 11 + rad) return false;
+    for (const p of plants) if (Math.hypot(x - p.x, y - p.y) < (rad + p.r) * 0.8) return false;
+    return true;
+  };
+  const place = (x, y, roll) => {
+    const kind = roll < 0.5 ? 'tree' : roll < 0.72 ? 'palm' : roll < 0.9 ? 'bush' : 'flowers';
+    const rad = kind === 'tree' ? 6.5 + r() * 5 : kind === 'palm' ? 7 + r() * 2 : kind === 'bush' ? 4 + r() * 2 : 5;
+    if (!free(x, y, rad)) return;
+    plants.push({ x, y, r: rad, kind, lean: r() < 0.5 ? -1 : 1 });
+  };
+  let acc = 0;
+  for (let i = 1; i < COAST_LINE.length; i++) {
+    const [ax, ay] = COAST_LINE[i - 1], [bx, by] = COAST_LINE[i];
+    acc += Math.hypot(bx - ax, by - ay);
+    if (acc < 14) continue;
+    acc = 0;
+    const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L, off = 22 + r() * 10;
+    let x = bx + nx * off, y = by + ny * off;
+    if (!pointInPoly(x, y, COAST_LINE)) { x = bx - nx * off; y = by - ny * off; }
+    place(x + (r() - 0.5) * 6, y + (r() - 0.5) * 6, r() * 0.72);
+  }
+  for (let i = 0; i < 480; i++) place(40 + r() * 280, 60 + r() * 560, r());
+  plants.sort((a, b) => a.y - b.y);
+  return plants;
+}
+
+function starfish(x, y, s) {
+  const d = c(), p = new Path2D();
+  for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? s * 0.45 : s; p.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); }
+  p.closePath(); fillPath(p, '#ff8a3d'); d.globalAlpha = 0.5; fillCircle(x, y, s * 0.3, '#ffd09a'); d.globalAlpha = 1;
+}
+function shade(cx, cy, rx, ry = 4) { fillEll(cx, cy, rx, ry, 'rgba(10,35,20,0.28)'); }
+function leafBall(x, y, r) { fillCircle(x, y, r, rad(x - r * 0.35, y - r * 0.45, 0, r * 1.45, [[0, '#9ae675'], [0.4, '#4bb552'], [1, '#246c33']])); }
+function tree(x, y, r) {
+  shade(x + 3, y + 1, r * 0.95, r * 0.35);
+  fillRR(x - r * 0.17, y - r * 0.7, r * 0.34, r * 0.8, 1.5, lin(x - r * 0.17, 0, x + r * 0.17, 0, [[0, '#8a6038'], [1, '#4e3418']]));
+  const cy = y - r * 0.95;
+  for (const [dx, dy, s] of [[-0.55, 0.25, 0.68], [0.55, 0.25, 0.68], [-0.32, -0.42, 0.62], [0.36, -0.42, 0.62], [0, 0, 1]]) leafBall(x + dx * r, cy + dy * r, r * s);
+}
+function bush(x, y, r) {
+  shade(x + 2, y + 1, r * 1.1, r * 0.4);
+  for (const [dx, dy, s] of [[-0.6, 0.1, 0.7], [0.6, 0.1, 0.7], [0, -0.3, 0.9]]) leafBall(x + dx * r, y - r * 0.5 + dy * r, r * s);
+  fillCircle(x - r * 0.3, y - r * 0.9, 1.3, '#ff8fb1'); fillCircle(x + r * 0.5, y - r * 0.6, 1.3, '#ffd94d');
+}
+function palm(x, y, h, lean) {
+  shade(x + 4, y + 1, 8, 3);
+  const tx = x + lean * h * 0.3, ty = y - h, trunk = new Path2D();
+  trunk.moveTo(x, y); trunk.quadraticCurveTo(x + lean * h * 0.05, y - h * 0.6, tx, ty);
+  strokePath(trunk, '#4e3418', 5.5); strokePath(trunk, '#8a6038', 3.5); strokePath(trunk, 'rgba(255,220,160,0.35)', 1.2);
+  for (let i = 0; i < 8; i++) {
+    const a = -Math.PI * 0.98 + (i / 7) * Math.PI * 0.96 + lean * 0.1, L = h * 0.66;
+    const ex = tx + Math.cos(a) * L, ey = ty + Math.sin(a) * L * 0.5 + L * 0.32;
+    const leaf = new Path2D();
+    leaf.moveTo(tx, ty); leaf.quadraticCurveTo(tx + Math.cos(a) * L * 0.5, ty + Math.sin(a) * L * 0.1 - 9, ex, ey);
+    leaf.quadraticCurveTo(tx + Math.cos(a) * L * 0.55, ty + Math.sin(a) * L * 0.6 + 7, tx, ty); leaf.closePath();
+    fillPath(leaf, i % 2 ? '#2f8f3f' : '#45b352');
+    strokePath(line(tx, ty, (tx + ex) / 2, (ty + ey) / 2 - 1), 'rgba(170,240,130,0.6)', 1);
+  }
+  fillCircle(tx - 2, ty + 2, 2, '#6b3d1e'); fillCircle(tx + 2, ty + 3, 2, '#5a3218');
+}
+function flowers(x, y, r) {
+  const rr = irng(Math.round(x * 7 + y));
+  for (let i = 0; i < 9; i++) {
+    const a = rr() * Math.PI * 2, dd = rr() * r, fx = x + Math.cos(a) * dd, fy = y + Math.sin(a) * dd * 0.6;
+    rect(fx - 0.4, fy, 0.8, 2.5, '#2f7d3a');
+    fillCircle(fx, fy, 1.4, ['#fff6e0', '#ffd94d', '#ff8fb1', '#b9a2ff'][i % 4]);
+  }
+}
+function boulder(x, y, s) {
+  shade(x + 2, y + 3, s * 1.1, s * 0.5);
+  fillEll(x, y, s, s * 0.75, rad(x - s * 0.35, y - s * 0.4, 0, s * 1.5, [[0, '#aaa2b5'], [0.5, '#6f6678'], [1, '#433a4a']]));
 }
 
 function drawMountain() {
-  const d = g();
-  // Rock body: a lit west face and a shadowed east face, with moss and ledges.
-  const body = new Path2D();
-  body.moveTo(108, 188); body.lineTo(124, 140); body.lineTo(146, 118); body.lineTo(160, 86); body.lineTo(178, 74); body.lineTo(192, 58);
-  body.lineTo(206, 70); body.lineTo(222, 66); body.lineTo(240, 92); body.lineTo(256, 120); body.lineTo(270, 150); body.lineTo(282, 188); body.closePath();
-  d.fillStyle = '#5d5466'; d.fill(body);
-  const west = new Path2D();
-  west.moveTo(108, 188); west.lineTo(124, 140); west.lineTo(146, 118); west.lineTo(160, 86); west.lineTo(178, 74); west.lineTo(192, 58);
-  west.lineTo(196, 100); west.lineTo(184, 140); west.lineTo(176, 188); west.closePath();
-  d.fillStyle = '#847a8f'; d.fill(west);
-  const lit = new Path2D();
-  lit.moveTo(128, 150); lit.lineTo(148, 122); lit.lineTo(162, 92); lit.lineTo(180, 78); lit.lineTo(170, 112); lit.lineTo(152, 140); lit.closePath();
-  d.fillStyle = '#a39aad'; d.fill(lit);
-  const east = new Path2D();
-  east.moveTo(222, 66); east.lineTo(240, 92); east.lineTo(256, 120); east.lineTo(270, 150); east.lineTo(282, 188); east.lineTo(236, 188); east.lineTo(232, 130); east.closePath();
-  d.fillStyle = '#463e50'; d.fill(east);
-  // Peak glints, cracks and ledges.
-  ip(189, 60, 6, 3, '#d8d0e2'); ip(186, 63, 4, 2, '#c4bbd0'); ip(205, 71, 5, 2, '#c4bbd0'); ip(220, 68, 4, 2, '#b4abc0');
-  for (const [x, y, l] of [[150, 150, 10], [212, 110, 12], [246, 140, 9], [170, 120, 7], [230, 168, 8], [136, 170, 6]]) for (let i = 0; i < l; i++) ip(x + i * 0.6, y + i, 1, 1, '#3a3344');
-  for (const [x, y, w] of [[126, 158, 16], [142, 132, 10], [238, 124, 10], [258, 154, 12]]) { ip(x, y, w, 2, '#3a3344'); ip(x, y - 1, w, 1, '#a39aad'); }
-  const mr = irng(9);
-  for (const [x, y, n] of [[124, 176, 5], [150, 148, 3], [252, 168, 4], [230, 140, 2], [140, 184, 4], [250, 184, 4], [172, 104, 2], [214, 96, 2]]) {
-    for (let i = 0; i < n; i++) {
-      const mx = x + (mr() - 0.5) * 22, my = y + (mr() - 0.5) * 6;
-      iell(mx, my, 3 + mr() * 3, 1 + mr() * 1.5, mr() < 0.5 ? '#4f9a42' : '#3f8a36');
-      ip(mx - 1, my - 1, 2, 1, '#6cc257');
-    }
-  }
-  // Cave mouth with a timber frame, rails and a sign plank.
-  iell(194, 168, 20, 18, '#1a1220');
-  ip(174, 168, 40, 20, '#1a1220');
-  iell(194, 170, 15, 14, '#0c0810');
-  ip(179, 170, 30, 18, '#0c0810');
-  ip(170, 152, 5, 36, '#7a5230'); ip(213, 152, 5, 36, '#7a5230');
-  ip(171, 152, 2, 36, '#9a6c40'); ip(214, 152, 2, 36, '#9a6c40');
-  ip(166, 148, 56, 6, '#6b4526'); ip(166, 148, 56, 2, '#9a6c40');
-  ip(184, 140, 20, 9, '#8a5a2a'); ip(185, 141, 18, 7, '#b07a3a');
-  ip(188, 143, 3, 3, '#5a3a1a'); ip(193, 143, 3, 3, '#5a3a1a'); ip(198, 143, 3, 3, '#5a3a1a');
-  for (let y = 172; y < 196; y += 4) ip(184, y, 20, 2, '#5d4027');
-  ip(185, 170, 2, 28, '#9aa0a8'); ip(201, 170, 2, 28, '#9aa0a8');
+  const d = c();
+  fillEll(200, 180, 84, 10, 'rgba(10,35,20,0.3)');
+  // A volcano: the cone, lit from the left, with ridges, gullies and boulders at its foot.
+  const cone = new Path2D();
+  cone.moveTo(110, 178); cone.quadraticCurveTo(140, 150, 156, 110); cone.quadraticCurveTo(166, 84, 172, 70);
+  cone.lineTo(208, 70); cone.quadraticCurveTo(214, 86, 226, 112); cone.quadraticCurveTo(244, 150, 270, 178); cone.closePath();
+  fillPath(cone, lin(110, 0, 270, 0, [[0, '#9a8a9c'], [0.42, '#6f5f73'], [1, '#473c4c']]));
+  d.save(); d.clip(cone);
+  for (const [x0, x1, w] of [[150, 128, 5], [168, 150, 4], [182, 172, 3]]) strokePath(line(x0, 74, x1, 178), 'rgba(255,255,255,0.13)', w);
+  for (const [x0, x1, w] of [[204, 216, 4], [214, 240, 6], [222, 258, 4]]) strokePath(line(x0, 74, x1, 178), 'rgba(0,0,0,0.22)', w);
+  for (const [x, y, rx, ry] of [[132, 166, 14, 5], [150, 150, 9, 4], [246, 168, 14, 5], [236, 146, 8, 3], [160, 176, 12, 4], [228, 178, 12, 4]]) { fillEll(x, y, rx, ry, '#4f9a42'); fillEll(x - 2, y - 1.5, rx * 0.6, ry * 0.5, '#7ccf62'); }
+  d.restore();
+  for (const [x, y, s] of [[122, 170, 13], [258, 172, 13], [150, 178, 9], [238, 180, 8]]) boulder(x, y, s);
+  // Crater and lava (the glow pulses live).
+  fillEll(190, 70, 26, 9, '#3a3040');
+  fillEll(190, 71, 18, 6, rad(186, 70, 1, 18, [[0, '#ffe066'], [0.5, '#ff8a1a'], [1, '#c83c10']]));
+  // The mine entrance at the foot: an arch with a timber frame, rails and a sign.
+  fillEll(190, 162, 20, 18, '#1a1220'); rect(170, 162, 40, 17, '#1a1220');
+  fillEll(190, 164, 15, 14, '#07050a'); rect(175, 164, 30, 15, '#07050a');
+  fillRR(169, 148, 6, 31, 1.5, lin(169, 0, 175, 0, [[0, '#9a6c40'], [1, '#6b4526']]));
+  fillRR(205, 148, 6, 31, 1.5, lin(205, 0, 211, 0, [[0, '#9a6c40'], [1, '#6b4526']]));
+  fillRR(166, 144, 48, 7, 2, lin(0, 144, 0, 151, [[0, '#a87a48'], [1, '#6b4526']]));
+  fillRR(182, 134, 16, 10, 2, '#8a5a2a'); fillRR(183, 135, 14, 8, 1.5, '#c8904a');
+  for (const x of [186, 190, 194]) fillCircle(x, 139, 1.2, '#5a3a1a');
+  for (let y = 168; y < 180; y += 4) rect(182, y, 16, 2, '#5d4027');
+  rect(184, 166, 2, 14, '#9aa0a8'); rect(194, 166, 2, 14, '#9aa0a8');
 }
 
-function palm(x, y, r) {
-  const lean = r() < 0.5 ? -1 : 1;
-  for (let i = 0; i < 22; i++) {
-    const ox = Math.round(lean * (i * i) / 70);
-    ip(x + ox, y - i, 3, 1, i % 4 === 0 ? '#5e3d22' : '#8a6038');
-    ip(x + ox + 2, y - i, 1, 1, '#5e3d22');
-  }
-  const tx = x + Math.round(lean * 7) + 1, ty = y - 22;
-  const leaf = (dx, dy, len, col) => { for (let i = 0; i < len; i++) ip(tx + dx * i, ty + dy * i + (i * i) / 9, 3, 2, col); };
-  leaf(1, -0.6, 12, '#2f7d3a'); leaf(-1, -0.6, 12, '#2f7d3a');
-  leaf(1, 0.2, 11, '#3c9244'); leaf(-1, 0.2, 11, '#3c9244');
-  leaf(0.6, -1, 8, '#4fae4a'); leaf(-0.6, -1, 8, '#4fae4a');
-  ip(tx - 2, ty - 1, 6, 4, '#3c9244');
-  ip(tx - 1, ty + 2, 3, 3, '#6b3d1e'); ip(tx + 2, ty + 2, 3, 3, '#5a3218');
+// ---------- buildings, in a soft top-down cartoon style ----------
+function roofSlab(x, y, w, h, [light, mid, dark]) {
+  const p = new Path2D();
+  p.moveTo(x + 6, y); p.lineTo(x + w - 6, y); p.quadraticCurveTo(x + w, y, x + w, y + 4); p.lineTo(x + w, y + h - 3);
+  p.quadraticCurveTo(x + w, y + h, x + w - 3, y + h); p.lineTo(x + 3, y + h); p.quadraticCurveTo(x, y + h, x, y + h - 3);
+  p.lineTo(x, y + 4); p.quadraticCurveTo(x, y, x + 6, y); p.closePath();
+  fillPath(p, lin(0, y, 0, y + h, [[0, light], [0.5, mid], [1, dark]]));
+  for (let yy = y + 7; yy < y + h - 3; yy += 6) strokePath(line(x + 2, yy, x + w - 2, yy), 'rgba(0,0,0,0.12)', 1.5, 'butt');
+  fillRR(x + 4, y + 1, w - 8, 3, 1.5, 'rgba(255,255,255,0.25)');
+  rect(x, y + h - 3, w, 3, 'rgba(0,0,0,0.25)');
 }
-
-function bush(x, y, s = 1) {
-  iell(x, y, 12 * s, 9 * s, '#2f7d3a');
-  iell(x - 5 * s, y - 3 * s, 7 * s, 6 * s, '#3c9244');
-  iell(x + 5 * s, y - 4 * s, 7 * s, 6 * s, '#469e47');
-  iell(x - 2 * s, y - 6 * s, 5 * s, 4 * s, '#5cb853');
-  ip(x - 4 * s, y - 2 * s, 2, 2, '#ff6b7d'); ip(x + 4 * s, y - 5 * s, 2, 2, '#ff6b7d');
+function win(x, y) {
+  fillRR(x - 1, y - 1, 14, 12, 2, '#5a3a1e');
+  fillRR(x, y, 12, 10, 1.5, lin(0, y, 0, y + 10, [[0, '#fff2b8'], [1, '#ffcc4d']]));
+  rect(x + 5.5, y, 1, 10, '#5a3a1e'); rect(x, y + 4.5, 12, 1, '#5a3a1e');
 }
-
-function rock(x, y) {
-  iell(x, y, 8, 6, '#6b6273'); iell(x - 2, y - 2, 5, 3, '#8a8194'); ip(x - 3, y - 4, 3, 1, '#a39aad');
+function barrel(x, y) {
+  fillRR(x, y, 9, 14, 3, lin(x, 0, x + 9, 0, [[0, '#b07a3a'], [1, '#5a3218']]));
+  rect(x, y + 3, 9, 1.5, '#3e3846'); rect(x, y + 9, 9, 1.5, '#3e3846');
 }
-
-// A pixel wall: base color, lighter top edge, darker base, optional horizontal lines.
-function wall(x, y, w, h, base, light, dark, lines) {
-  ip(x, y, w, h, base); ip(x, y, w, 1, light); ip(x, y + h - 2, w, 2, dark);
-  if (lines) for (let yy = y + 4; yy < y + h - 2; yy += 4) ip(x, yy, w, 1, lines);
+function chestS(x, y, top, body) {
+  fillRR(x, y, 16, 12, 2, '#3a2416'); fillRR(x + 1, y + 1, 14, 10, 1.5, body); fillRR(x + 1, y + 1, 14, 4, 1.5, top);
+  fillRR(x + 7, y + 5, 2, 3, 0.5, '#ffe08a');
 }
-function window2(x, y, lit = true) {
-  ip(x - 1, y - 1, 10, 10, '#3a2416');
-  ip(x, y, 8, 8, lit ? '#ffe08a' : '#3a5a7a');
-  ip(x, y, 8, 3, lit ? '#fff2b8' : '#5a7a9a');
-  ip(x + 3, y, 2, 8, '#3a2416'); ip(x, y + 3, 8, 2, '#3a2416');
+function lantern(x, y) {
+  rect(x - 1, y + 8, 3, 22, '#5e3d22');
+  glow(x, y + 5, 11, '255,204,77', 0.4);
+  fillRR(x - 5, y, 10, 10, 2, '#3e3846'); fillRR(x - 3, y + 2, 6, 6, 1, '#ffcc4d');
+}
+function noteS(x, y, w, h, col) {
+  fillRR(x, y, w, h, 1, col);
+  rect(x + 2, y + 4, w - 4, 1, '#9a8a7a'); rect(x + 2, y + 7, w - 6, 1, '#9a8a7a'); rect(x + 2, y + 10, w - 5, 1, '#9a8a7a');
+  fillCircle(x + w / 2, y, 1.3, '#e0566b');
 }
 
 function drawForge() {
-  // Stone ground floor, timber upper floor, red tile roof, smoking chimney.
+  shade(121, 283, 48, 7);
   const r = irng(3);
-  wall(88, 264, 80, 40, '#837a8c', '#a39aad', '#5d5466', null);
-  for (let yy = 266; yy < 302; yy += 6) for (let xx = 88 + ((yy / 6) % 2) * 6; xx < 166; xx += 12) ip(xx, yy, 10, 5, r() < 0.5 ? '#8f8698' : '#776e80');
-  wall(92, 246, 72, 20, '#a36a3a', '#c4844a', '#7a4a24', null);
-  for (let xx = 94; xx < 164; xx += 12) ip(xx, 246, 3, 20, '#6e4520');
-  ip(92, 254, 72, 2, '#6e4520');
-  for (let i = 0; i < 18; i++) {
-    const w = 96 - i * 4.4;
-    ip(128 - w / 2, 246 - i, w, 1, i % 3 === 0 ? '#8a2f2a' : i % 3 === 1 ? '#b8443a' : '#a33a32');
-  }
-  ip(112, 228, 32, 2, '#7a2a24');
-  wall(146, 214, 12, 30, '#6b6273', '#8a8194', '#4d4655', '#5d5466');
-  ip(144, 212, 16, 4, '#4d4655');
-  // Glowing forge mouth, door and anvil.
-  ip(100, 278, 26, 24, '#2a1a12'); iell(113, 278, 13, 6, '#2a1a12');
-  ip(103, 282, 20, 20, '#ff7a2a'); ip(106, 286, 14, 16, '#ffb03d'); ip(109, 292, 8, 10, '#ffe08a');
-  ip(136, 280, 16, 22, '#4a2c16'); ip(138, 282, 12, 20, '#6b4526'); ip(147, 292, 2, 2, '#ffcc4d');
-  ip(158, 296, 14, 4, '#3e3846'); ip(161, 300, 8, 4, '#3e3846'); ip(158, 296, 14, 1, '#6b6273');
-  ip(108, 250, 9, 8, '#ffe08a'); ip(140, 250, 9, 8, '#ffe08a');
-  ip(111, 250, 2, 8, '#6e4520'); ip(143, 250, 2, 8, '#6e4520');
+  fillRR(78, 232, 80, 50, 4, lin(0, 232, 0, 282, [[0, '#a098ae'], [1, '#6a6176']]));
+  for (let yy = 238; yy < 276; yy += 10) for (let xx = 80 + ((yy / 10) % 2) * 8; xx < 154; xx += 16) { fillRR(xx, yy, 13, 7, 2, `rgba(255,255,255,${0.05 + r() * 0.08})`); rect(xx, yy + 7, 13, 1, 'rgba(0,0,0,0.12)'); }
+  fillPath(archPath(88, 254, 24, 28), '#2a1a12');
+  fillPath(archPath(91, 258, 18, 24), rad(100, 282, 2, 26, [[0, '#fff0a0'], [0.4, '#ffb03d'], [1, '#c84a10']]));
+  fillPath(archPath(126, 258, 14, 24), '#4a2c16');
+  fillPath(archPath(128, 260, 10, 22), lin(0, 260, 0, 282, [[0, '#8a5a2a'], [1, '#6b4120']]));
+  fillCircle(136, 272, 1.2, '#ffcc4d');
+  win(144, 240);
+  roofSlab(74, 206, 88, 28, ['#e8665a', '#b23c33', '#7f2922']);
+  fillRR(144, 192, 12, 20, 1.5, lin(144, 0, 156, 0, [[0, '#8a8194'], [1, '#5d5466']])); fillRR(142, 190, 16, 4, 1.5, '#4d4655');
+  barrel(161, 266);
 }
 
 function drawTemple() {
-  // A golden skill temple: stepped plinth, pale columns, gold roof (the crystal floats above it).
-  ip(206, 352, 92, 8, '#b8aa8a'); ip(206, 352, 92, 2, '#d8cca8'); ip(212, 344, 80, 8, '#c8baa0'); ip(212, 344, 80, 2, '#e4d8b8');
-  wall(218, 300, 68, 44, '#efe6d0', '#fffaf0', '#cfc2a4', null);
-  for (const xx of [220, 236, 262, 278]) { ip(xx, 300, 6, 44, '#fffaf0'); ip(xx + 4, 300, 2, 44, '#d8ccae'); ip(xx - 1, 300, 8, 3, '#e4d8b8'); ip(xx - 1, 341, 8, 3, '#e4d8b8'); }
-  ip(244, 312, 16, 32, '#3a2a10'); iell(252, 312, 8, 6, '#3a2a10'); ip(246, 314, 12, 30, '#6a4a1a');
-  for (let i = 0; i < 20; i++) {
-    const w = 84 - i * 4;
-    ip(252 - w / 2, 300 - i, w, 1, i % 4 === 0 ? '#c8901a' : i < 3 ? '#a87010' : '#ffcc4d');
+  shade(252, 327, 54, 7);
+  fillRR(197, 320, 102, 7, 2, lin(0, 320, 0, 327, [[0, '#e2d6bc'], [1, '#b8aa8a']]));
+  fillRR(201, 315, 94, 6, 2, lin(0, 315, 0, 321, [[0, '#f2e9d8'], [1, '#c8baa0']]));
+  fillRR(205, 272, 86, 46, 3, lin(0, 272, 0, 318, [[0, '#f6efdc'], [1, '#d6c9ad']]));
+  for (const xx of [208, 226, 270, 288]) {
+    fillRR(xx, 274, 6, 42, 2, lin(xx, 0, xx + 6, 0, [[0, '#fffaf0'], [0.6, '#efe6d0'], [1, '#c4b69a']]));
+    fillRR(xx - 1, 273, 8, 3, 1, '#e4d8b8'); fillRR(xx - 1, 312, 8, 3, 1, '#e4d8b8');
   }
-  ip(210, 298, 84, 3, '#a87010');
+  fillPath(archPath(238, 288, 20, 30), '#c8901a');
+  fillPath(archPath(240, 290, 16, 28), lin(0, 290, 0, 318, [[0, '#3a2a10'], [1, '#1a1208']]));
+  roofSlab(199, 254, 98, 20, ['#ffe690', '#f0b92c', '#b57d10']);
+  roofSlab(214, 240, 68, 16, ['#ffe690', '#f0b92c', '#b57d10']);
+  fillRR(243, 232, 10, 9, 2, '#c8901a');
 }
 
 function drawMarket() {
-  // A blue market with a striped awning and stacked chests (cases).
-  wall(86, 392, 84, 46, '#3f7fb8', '#5a9ad0', '#2c5f8c', '#3a74a8');
-  for (let i = 0; i < 14; i++) {
-    const w = 96 - i * 3;
-    ip(128 - w / 2, 392 - i, w, 1, i % 2 ? '#2c5f8c' : '#356ea0');
-  }
+  shade(117, 423, 50, 7);
+  fillRR(68, 380, 90, 40, 3, lin(0, 380, 0, 420, [[0, '#243f5e'], [1, '#162a40']]));
+  fillRR(68, 404, 90, 16, 2, lin(0, 404, 0, 420, [[0, '#b07a3a'], [1, '#6b4120']])); rect(68, 404, 90, 2, 'rgba(255,255,255,0.2)');
+  chestS(74, 392, '#b07a3a', '#8a5a2a'); chestS(96, 390, '#5aa0e0', '#3a74a8'); chestS(118, 392, '#e0566b', '#b03a4e'); chestS(140, 390, '#ffcc4d', '#c8901a');
+  barrel(58, 406); barrel(159, 406);
+  roofSlab(64, 352, 98, 22, ['#6aa9e8', '#3f7fb8', '#285a8c']);
   for (let s = 0; s < 8; s++) {
-    ip(82 + s * 11.5, 396, 11.5, 14, s % 2 ? '#f2f6ff' : '#4a9ae0');
-    iell(88 + s * 11.5, 410, 5, 3, s % 2 ? '#f2f6ff' : '#4a9ae0');
+    const x = 60 + s * 13.25, p = new Path2D();
+    p.moveTo(x, 372); p.lineTo(x + 13.25, 372); p.lineTo(x + 13.25, 382); p.quadraticCurveTo(x + 6.6, 390, x, 382); p.closePath();
+    fillPath(p, s % 2 ? '#f6f8ff' : '#4a9ae0');
   }
-  ip(82, 396, 92, 2, '#2c5f8c');
-  ip(94, 414, 68, 24, '#1f3550');
-  const chest = (x, y, top, body) => { ip(x, y, 16, 12, '#3a2416'); ip(x + 1, y + 1, 14, 10, body); ip(x + 1, y + 1, 14, 4, top); ip(x + 7, y + 5, 2, 3, '#ffe08a'); };
-  chest(100, 422, '#b07a3a', '#8a5a2a'); chest(120, 420, '#5aa0e0', '#3a74a8'); chest(140, 422, '#e0566b', '#b03a4e');
-  chest(172, 428, '#ffcc4d', '#c8901a');
+  rect(60, 372, 106, 2, '#285a8c');
 }
 
 function drawHouse() {
-  // A red-roofed cottage with lit windows (your bag lives here).
-  wall(226, 430, 86, 52, '#e8dcc6', '#fffaf0', '#c4b6a0', null);
-  for (let xx = 226; xx < 312; xx += 14) ip(xx, 430, 2, 52, '#d6c8b0');
-  ip(226, 456, 86, 3, '#a36a3a');
-  for (let i = 0; i < 26; i++) {
-    const w = 104 - i * 4;
-    ip(269 - w / 2, 430 - i, w, 1, i % 3 === 0 ? '#a8303a' : i % 3 === 1 ? '#e0566b' : '#c83f4c');
-  }
-  ip(252, 408, 34, 2, '#8a2430');
-  wall(290, 396, 10, 20, '#a36a3a', '#c4844a', '#7a4a24', null); ip(288, 394, 14, 3, '#7a4a24');
-  window2(238, 436); window2(292, 436);
-  ip(262, 460, 16, 22, '#5a3218'); ip(264, 462, 12, 20, '#7a4a24'); ip(274, 472, 2, 2, '#ffcc4d');
-  ip(260, 458, 20, 3, '#a8303a');
-  ip(238, 466, 12, 6, '#5e3d22'); ip(239, 464, 10, 3, '#4fae4a'); ip(241, 463, 2, 2, '#ff8fb1'); ip(245, 463, 2, 2, '#ffd94d');
+  shade(266, 469, 46, 7);
+  fillRR(220, 420, 84, 46, 3, lin(0, 420, 0, 466, [[0, '#f3e9d3'], [1, '#d9ccb0']]));
+  rect(220, 442, 84, 2, '#a36a3a'); rect(233, 420, 2, 46, '#a36a3a'); rect(290, 420, 2, 46, '#a36a3a');
+  win(228, 430); win(284, 430);
+  fillPath(archPath(253, 442, 18, 24), '#5a3a1e');
+  fillPath(archPath(255, 444, 14, 22), lin(0, 444, 0, 466, [[0, '#9a6a3a'], [1, '#6b4120']]));
+  fillCircle(266, 456, 1.2, '#ffcc4d');
+  fillRR(227, 441, 14, 5, 1, '#5e3d22');
+  for (let i = 0; i < 5; i++) fillCircle(229 + i * 2.6, 440, 1.3, ['#ff8fb1', '#ffd94d', '#ff6b7d', '#fff6e0', '#ff8fb1'][i]);
+  roofSlab(216, 394, 92, 28, ['#f07a84', '#c83f4c', '#8a2430']);
+  fillRR(278, 380, 12, 20, 1.5, lin(278, 0, 290, 0, [[0, '#c4844a'], [1, '#7a4a24']])); fillRR(276, 378, 16, 4, 1.5, '#5a3218');
 }
 
 function drawBoard() {
-  // A quest board on posts, with lanterns and pinned notes.
-  ip(184, 544, 4, 32, '#5e3d22'); ip(244, 544, 4, 32, '#5e3d22');
-  ip(178, 514, 76, 36, '#8a5a2a'); ip(180, 516, 72, 32, '#c88a4a'); ip(180, 516, 72, 2, '#e0a868');
-  ip(174, 510, 84, 5, '#ff9a3d'); ip(174, 510, 84, 2, '#ffbe6a'); ip(178, 506, 76, 4, '#d0702a');
-  const note = (x, y, w, h, c) => { ip(x, y, w, h, c); ip(x + 2, y + 3, w - 4, 1, '#8a7a6a'); ip(x + 2, y + 6, w - 6, 1, '#8a7a6a'); ip(x + w / 2 - 1, y - 1, 2, 2, '#e0566b'); };
-  note(184, 520, 16, 20, '#fff8e8'); note(204, 522, 14, 16, '#ffe8a8'); note(222, 519, 18, 22, '#fff8e8'); note(243, 523, 8, 12, '#d8f0ff');
-  for (const x of [172, 256]) { ip(x, 530, 4, 18, '#5e3d22'); ip(x - 2, 522, 8, 9, '#3e3846'); ip(x - 1, 523, 6, 7, '#ffcc4d'); }
+  shade(229, 557, 38, 5);
+  rect(199, 540, 5, 16, '#5e3d22'); rect(246, 540, 5, 16, '#5e3d22');
+  fillRR(192, 504, 66, 40, 3, '#7a4a24');
+  fillRR(195, 507, 60, 34, 2, lin(0, 507, 0, 541, [[0, '#d79a56'], [1, '#b67a3e']]));
+  fillRR(186, 496, 78, 9, 2, lin(0, 496, 0, 505, [[0, '#ffb060'], [1, '#e07a2a']])); rect(186, 503, 78, 2, 'rgba(0,0,0,0.25)');
+  noteS(200, 512, 14, 18, '#fff8e8'); noteS(218, 514, 12, 14, '#ffe8a8'); noteS(234, 511, 16, 20, '#fff8e8');
+  lantern(186, 506); lantern(264, 506);
 }
 
 function drawLighthouse() {
-  // A purple-and-white lighthouse on rocks at the south tip.
-  iell(126, 612, 28, 7, '#5d5466'); iell(118, 609, 14, 5, '#7d7486'); iell(138, 615, 10, 4, '#4d4655');
-  for (let i = 0; i < 44; i++) {
-    const w = 26 - Math.floor(i / 6);
-    const col = Math.floor(i / 10) % 2 ? '#b76dff' : '#f6f0ff';
-    ip(126 - w / 2, 602 - i, w, 1, col);
-    ip(126 + w / 2 - 3, 602 - i, 3, 1, Math.floor(i / 10) % 2 ? '#8a4fc8' : '#d6cce8');
-  }
-  ip(112, 555, 28, 4, '#3e3846');
-  ip(116, 545, 20, 10, '#3e3846'); ip(118, 547, 16, 8, '#ffe08a'); ip(118, 547, 16, 3, '#fff6c8');
-  ip(121, 547, 2, 8, '#3e3846'); ip(129, 547, 2, 8, '#3e3846');
-  for (let i = 0; i < 8; i++) ip(118 + i, 544 - i, 16 - i * 2, 1, '#8a4fc8');
-  ip(125, 533, 2, 4, '#3e3846');
-  ip(121, 590, 10, 12, '#3a2a4a'); ip(123, 592, 6, 10, '#5a3a8a');
+  const d = c();
+  boulder(84, 612, 12); boulder(108, 614, 11); boulder(95, 616, 9);
+  const tower = new Path2D(); tower.moveTo(84, 606); tower.lineTo(106, 606); tower.lineTo(102, 572); tower.lineTo(88, 572); tower.closePath();
+  d.save(); d.clip(tower);
+  fillPath(tower, '#f6f0ff');
+  rect(80, 580, 30, 8, '#b76dff'); rect(80, 597, 30, 9, '#b76dff');
+  rect(99, 572, 8, 34, 'rgba(0,0,0,0.18)'); rect(86, 572, 4, 34, 'rgba(255,255,255,0.3)');
+  d.restore();
+  fillPath(archPath(91, 596, 8, 10), '#3a2a4a');
+  fillRR(85, 568, 20, 5, 1.5, '#3e3846');
+  fillRR(88, 558, 14, 11, 1.5, lin(0, 558, 0, 569, [[0, '#fff6c8'], [1, '#ffcc4d']])); rect(94.5, 558, 1, 11, '#3e3846'); rect(88, 563, 14, 1, '#3e3846');
+  const roof = new Path2D(); roof.moveTo(86, 558); roof.lineTo(95, 548); roof.lineTo(104, 558); roof.closePath(); fillPath(roof, '#8a4fc8');
+  fillCircle(95, 547, 1.5, '#3e3846');
 }
 
 function drawDock() {
-  // A wooden pier into the sea with a moored boat. New islands: coming soon.
-  for (let x = 8; x < 76; x += 12) ip(x, 536, 3, 22, '#4a2c16');
-  ip(4, 526, 74, 14, '#8a5a2a');
-  for (let x = 4; x < 78; x += 6) { ip(x, 526, 5, 14, '#a36a3a'); ip(x, 526, 5, 1, '#c4844a'); }
-  ip(4, 538, 74, 2, '#5e3d22');
-  ip(10, 512, 2, 14, '#5e3d22'); ip(6, 506, 22, 8, '#e8dcc6'); ip(7, 507, 20, 6, '#f6f0e4');
-  ip(9, 509, 16, 1, '#8a7a6a'); ip(9, 511, 12, 1, '#8a7a6a');
-  ip(16, 548, 30, 6, '#6b4526'); ip(18, 554, 26, 3, '#4a2c16'); ip(16, 548, 30, 2, '#a36a3a'); ip(22, 550, 18, 2, '#3a2416');
+  for (const x of [14, 26, 38, 50, 62]) fillRR(x, 534, 4, 20, 1, lin(x, 0, x + 4, 0, [[0, '#6b4526'], [1, '#3e2816']]));
+  fillRR(8, 524, 64, 14, 2, lin(0, 524, 0, 538, [[0, '#a87a48'], [1, '#7a5230']]));
+  for (let x = 12; x < 72; x += 8) rect(x, 524, 1, 14, 'rgba(0,0,0,0.25)');
+  rect(8, 537, 64, 2, 'rgba(0,0,0,0.3)');
+  rect(16, 508, 2, 16, '#5e3d22'); fillRR(10, 503, 22, 9, 1.5, '#f2e9d8'); rect(13, 506, 14, 1, '#8a7a6a'); rect(13, 508.5, 10, 1, '#8a7a6a');
+  const hull = new Path2D(); hull.moveTo(20, 546); hull.quadraticCurveTo(36, 560, 54, 546); hull.lineTo(52, 544); hull.lineTo(22, 544); hull.closePath();
+  fillPath(hull, lin(0, 544, 0, 558, [[0, '#a36a3a'], [1, '#5a3218']])); rect(22, 544, 30, 2, '#c4844a');
+}
+
+function drawPond(cx, cy) {
+  fillEll(cx, cy, 26, 15, '#c9a467');
+  fillEll(cx, cy, 23, 12.5, rad(cx - 6, cy - 4, 2, 26, [[0, '#8fe6f0'], [0.5, '#4cb6d8'], [1, '#2a86b8']]));
+  fillEll(cx - 7, cy - 5, 8, 2.5, 'rgba(255,255,255,0.45)');
+  for (const [dx, dy] of [[8, 4], [-10, 5], [12, -3]]) { fillEll(cx + dx, cy + dy, 4, 2.4, '#3c9244'); fillEll(cx + dx - 1, cy + dy - 0.5, 2.2, 1.3, '#5cb853'); }
+  fillCircle(cx + 7, cy + 2, 1.3, '#ff8fb1');
+  for (let i = 0; i < 4; i++) strokePath(line(cx - 22 + i * 3, cy + 2, cx - 24 + i * 3, cy - 10 - i), '#2f8f3f', 1.2);
+}
+function drawWell(x, y) {
+  shade(x + 2, y + 4, 12, 3);
+  fillEll(x, y, 11, 6, '#6f6678'); fillEll(x, y - 3, 11, 6, lin(0, y - 9, 0, y + 3, [[0, '#a39aad'], [1, '#6f6678']])); fillEll(x, y - 4, 7, 3.5, '#1a1220');
+  rect(x - 10, y - 20, 2.5, 18, '#5e3d22'); rect(x + 7.5, y - 20, 2.5, 18, '#5e3d22');
+  const roof = new Path2D(); roof.moveTo(x - 13, y - 20); roof.lineTo(x + 13, y - 20); roof.lineTo(x + 9, y - 27); roof.lineTo(x - 9, y - 27); roof.closePath();
+  fillPath(roof, lin(0, y - 27, 0, y - 20, [[0, '#e0566b'], [1, '#a8303a']]));
+  rect(x - 0.5, y - 20, 1, 8, '#3e3846'); fillRR(x - 2.5, y - 12, 5, 4, 1, '#a36a3a');
 }
 
 // ---------- boats: tap one as it sails by for coins (or now and then a key) ----------
@@ -366,20 +451,29 @@ function boatReward() {
   if (Math.random() < 0.12) return { keys: 1 };
   return { coins: rate * 45 * (0.8 + Math.random() * 0.5) };
 }
+function seaLanes() {
+  const lanes = [22];
+  if (ISLE.oy > 34) lanes.push(-ISLE.oy / 2, ISLE_H + ISLE.oy / 2 - 10);
+  return lanes;
+}
 function spawnBoat() {
-  const lanes = [24];
-  if (ISLE.oy > 30) lanes.push(-ISLE.oy / 2, ISLE_H + ISLE.oy / 2 - 10);
-  const dir = Math.random() < 0.5 ? 1 : -1;
+  const lanes = seaLanes(), dir = Math.random() < 0.5 ? 1 : -1;
   ISLE.boats.push({ x: dir > 0 ? -40 : ISLE_W + 40, y: lanes[Math.floor(Math.random() * lanes.length)], dir, speed: 14 + Math.random() * 6, got: false, bob: Math.random() * 6 });
 }
 function drawBoat(b, t) {
-  const x = Math.round(b.x), y = Math.round(b.y + Math.sin(t * 2 + b.bob) * 1.2), f = b.dir;
-  for (let i = 1; i < 6; i++) ip(x - f * (12 + i * 5), y + 9 + (i % 2), 4, 1, `rgba(220,245,255,${0.5 - i * 0.08})`);
-  ip(x - 14, y + 5, 28, 7, '#1a1220');
-  ip(x - 13, y + 6, 26, 5, '#6b4526'); ip(x - 11, y + 11, 22, 2, '#4a2c16'); ip(x - 13, y + 6, 26, 1, '#a36a3a');
-  ip(x - 1, y - 16, 2, 22, '#5e3d22');
-  for (let i = 0; i < 16; i++) ip(f > 0 ? x + 1 : x - 1 - (12 - Math.floor(i * 0.7)), y - 15 + i, 12 - Math.floor(i * 0.7), 1, b.got ? '#d8d0c0' : i < 3 ? '#ffffff' : '#f2ece0');
-  if (!b.got) { ip(x + f * 3, y - 19, f * 6, 3, '#e0566b'); if (Math.floor(t * 3) % 2) ip(x - 2, y - 24, 4, 4, '#ffcc4d'); }
+  const d = c(), x = b.x, y = b.y + Math.sin(t * 2 + b.bob) * 1.2, f = b.dir;
+  d.globalAlpha = 0.45; strokePath(line(x - f * 14, y + 10, x - f * 42, y + 12), '#dff6ff', 2); d.globalAlpha = 1;
+  const hull = new Path2D(); hull.moveTo(x - 15, y + 4); hull.quadraticCurveTo(x, y + 14, x + 15, y + 4); hull.lineTo(x + 13, y + 2); hull.lineTo(x - 13, y + 2); hull.closePath();
+  fillPath(hull, lin(0, y + 2, 0, y + 14, [[0, '#b07a3a'], [1, '#5a3218']])); rect(x - 13, y + 2, 26, 2, '#d9a060');
+  rect(x - 1, y - 18, 2, 21, '#5e3d22');
+  const sail = new Path2D(); sail.moveTo(x + f * 1.5, y - 17); sail.quadraticCurveTo(x + f * 16, y - 8, x + f * 13, y + 1); sail.lineTo(x + f * 1.5, y + 1); sail.closePath();
+  fillPath(sail, b.got ? '#cfc8bc' : '#fbfbf5');
+  if (!b.got) {
+    d.save(); d.clip(sail); rect(x - 20, y - 9, 40, 3, '#e0566b'); d.restore();
+    rect(x - 1, y - 21, f * 7, 3, '#e0566b');
+    if (Math.floor(t * 3) % 2) glow(x, y - 24, 6, '255,204,77', 0.9);
+    fillCircle(x, y - 24, 2, '#ffcc4d');
+  }
 }
 function tapBoat(lx, ly) {
   for (const b of ISLE.boats) {
@@ -396,77 +490,113 @@ function tapBoat(lx, ly) {
   return false;
 }
 
-// ---------- the moving layer: sea, foam, smoke, lights, boats, birds ----------
+// Soft cloud sprites, painted once.
+function cloudSprite(seed) {
+  const r = irng(seed), cv = makeCanvas(140, 70), prev = ISLE.ctx;
+  ISLE.ctx = cv.getContext('2d');
+  for (let i = 0; i < 7; i++) {
+    const x = 25 + r() * 90, y = 30 + r() * 18, rr = 14 + r() * 14;
+    fillCircle(x, y, rr, rad(x, y, 0, rr, [[0, 'rgba(255,255,255,0.95)'], [0.6, 'rgba(255,255,255,0.7)'], [1, 'rgba(255,255,255,0)']]));
+  }
+  ISLE.ctx = prev;
+  return cv;
+}
+function drawWhale(w, t) {
+  const d = c(), ph = w.t < 0.8 ? w.t / 0.8 : w.t > 3.6 ? Math.max(0, 1 - (w.t - 3.6) / 0.8) : 1;
+  const y = w.y + 14 - 14 * ph;
+  d.save(); d.beginPath(); d.rect(w.x - 40, w.y - 40, 80, 40 + 4); d.clip();
+  fillEll(w.x + 4, y + 2, 24, 10, 'rgba(0,30,60,0.25)');
+  fillEll(w.x, y, 22, 9, rad(w.x - 8, y - 6, 0, 30, [[0, '#8fb6d8'], [0.5, '#4f7aa6'], [1, '#2f4f78']]));
+  fillEll(w.x - 20, y - 6, 7, 3.5, '#4f7aa6', -0.5);
+  fillCircle(w.x + 12, y - 2, 1.5, '#1a1220');
+  if (ph > 0.9 && w.t > 1 && w.t < 3.2) {
+    const s = Math.min(1, (w.t - 1) / 0.5);
+    d.globalAlpha = 0.8;
+    strokePath(line(w.x + 6, y - 9, w.x + 6, y - 9 - 14 * s), '#ffffff', 2.5);
+    strokePath(line(w.x + 6, y - 9 - 12 * s, w.x - 2, y - 20 * s - 8), '#ffffff', 2); strokePath(line(w.x + 6, y - 9 - 12 * s, w.x + 14, y - 20 * s - 8), '#ffffff', 2);
+    d.globalAlpha = 1;
+  }
+  d.restore();
+  strokePath(line(w.x - 24, w.y + 4, w.x + 26, w.y + 4), 'rgba(255,255,255,0.5)', 1.5);
+}
+
+// ---------- the moving layer: sea, foam, smoke, lights, boats, clouds ----------
 function drawIsland(dt) {
-  if (!ISLE.ctx) return;
+  if (!ISLE.ctx || !ISLE.base) return;
   ISLE.t += dt;
   const t = ISLE.t, d = ISLE.ctx, H = ISLE.h, oy = ISLE.oy;
   d.setTransform(ISLE.k, 0, 0, ISLE.k, 0, 0);
-  d.imageSmoothingEnabled = false;
-  const sea = d.createLinearGradient(0, 0, 0, H);
-  sea.addColorStop(0, '#1a7fb0'); sea.addColorStop(0.5, '#1670a3'); sea.addColorStop(1, '#0f5a88');
-  d.fillStyle = sea;
+  d.imageSmoothingEnabled = true;
+  d.fillStyle = lin(0, 0, 0, H, [[0, '#2f8fd8'], [0.5, '#2278c4'], [1, '#1a5fa8']]);
   d.fillRect(0, 0, ISLE_W, H);
-  // Rolling swell: soft bands drifting down, then wave crests and sun glints.
-  for (let y = -40; y < H + 40; y += 40) {
-    const yy = y + ((t * 6) % 40);
-    d.fillStyle = 'rgba(40,150,200,0.25)'; d.fillRect(0, Math.round(yy), ISLE_W, 14);
+  // Waves: short arcs drifting across, and the odd sun glint.
+  for (let i = 0; i < 90 * H / ISLE_H; i++) {
+    const y = (i * 53.7) % H, sp = 7 + (i % 5) * 3, x = ((i * 97 + t * sp) % (ISLE_W + 60)) - 30;
+    d.strokeStyle = `rgba(190,230,255,${0.2 + 0.2 * Math.sin(t * 1.5 + i)})`; d.lineWidth = 1.5; d.lineCap = 'round';
+    d.beginPath(); d.moveTo(x, y); d.quadraticCurveTo(x + 8, y - 4, x + 16, y); d.stroke();
   }
-  for (let i = 0; i < 160 * H / ISLE_H; i++) {
-    const y = (i * 29.3) % H, sp = 5 + (i % 4) * 2;
-    const x = ((i * 71.7 + t * sp) % (ISLE_W + 30)) - 15;
-    const a = 0.25 + 0.25 * Math.sin(t * 1.6 + i);
-    d.fillStyle = `rgba(190,235,255,${a})`;
-    d.fillRect(Math.round(x), Math.round(y + Math.sin(t + i) * 1.5), 4 + (i % 3) * 2, 1);
-  }
-  for (let i = 0; i < 24; i++) if (Math.sin(t * 3 + i * 7.3) > 0.92) ip((i * 97) % ISLE_W, (i * 53 + 20) % H, 2, 2, '#ffffff');
-  // The island and its foam ring.
+  for (let i = 0; i < 20; i++) if (Math.sin(t * 3 + i * 7.3) > 0.9) fillCircle((i * 97) % ISLE_W, (i * 53 + 20) % H, 1.2, '#ffffff');
   d.setTransform(ISLE.k, 0, 0, ISLE.k, 0, oy * ISLE.k);
+  // Whale, out in open water now and then.
+  ISLE.nextWhale -= dt;
+  if (ISLE.nextWhale <= 0 && !ISLE.whale) { const spots = [[336, 618], [44, 22]]; if (oy > 40) spots.push([ISLE_W / 2, ISLE_H + oy / 2]); const s = spots[Math.floor(Math.random() * spots.length)]; ISLE.whale = { x: s[0], y: s[1], t: 0 }; ISLE.nextWhale = 50 + Math.random() * 60; }
+  if (ISLE.whale) { ISLE.whale.t += dt; drawWhale(ISLE.whale, t); if (ISLE.whale.t > 4.4) ISLE.whale = null; }
+  // Ripples breathing round the shore, then the island itself.
   d.lineJoin = 'round';
-  d.strokeStyle = `rgba(255,255,255,${0.32 + 0.12 * Math.sin(t * 1.4)})`;
-  d.lineWidth = 52 + 5 * Math.sin(t * 1.1);
-  d.stroke(COAST_PATH);
-  d.strokeStyle = 'rgba(26,127,176,0.9)'; d.lineWidth = 46; d.stroke(COAST_PATH);
-  d.drawImage(ISLE.base, 0, 0);
-  // Lanterns at the cave flicker.
-  for (const [x, y] of [[166, 158], [222, 158]]) { const on = Math.sin(t * 11 + x) > -0.2; ip(x - 2, y, 4, 5, on ? '#ffcc4d' : '#ff9a3d'); ip(x - 1, y - 2, 2, 2, '#3e3846'); }
-  // Boss waiting: the cave mouth glows red.
-  if (typeof bossWaiting === 'function' && bossWaiting()) { d.globalAlpha = 0.5 + 0.4 * Math.sin(t * 6); iell(194, 176, 13, 10, '#c0283c'); d.globalAlpha = 1; }
-  // Forge glow pulses; smoke from the forge and the house chimney.
-  d.globalAlpha = 0.25 + 0.15 * Math.sin(t * 5); iell(113, 300, 18, 6, '#ffb03d'); d.globalAlpha = 1;
-  for (const [cx, cy, rate] of [[152, 210, 4], [295, 392, 1.5]]) if (Math.random() < dt * rate) ISLE.smoke.push({ x: cx + Math.random() * 3, y: cy, t: 0 });
-  for (const s of ISLE.smoke) {
-    s.t += dt; s.y -= dt * 9; s.x += dt * 4 + Math.sin(s.t * 2) * 0.2;
-    const a = Math.max(0, 0.6 - s.t * 0.14), z = 3 + s.t * 1.6;
-    d.fillStyle = `rgba(225,222,232,${a})`; d.fillRect(Math.round(s.x - z / 2), Math.round(s.y - z / 2), Math.round(z), Math.round(z));
+  strokePath(COAST_PATH, 'rgba(255,255,255,0.1)', 104 + 8 * Math.sin(t * 0.8));
+  strokePath(COAST_PATH, 'rgba(255,255,255,0.12)', 82 + 6 * Math.sin(t * 1.3 + 1));
+  d.drawImage(ISLE.base, 0, 0, ISLE_W, ISLE_H);
+  // Lava glow and smoke from the crater.
+  const [crx, cry] = at('fight', 190, 71);
+  glow(crx, cry, 26, '255,150,50', 0.25 + 0.15 * Math.sin(t * 2.2));
+  if (Math.random() < dt * 1.4) ISLE.puffs.push({ x: crx - 4 + Math.random() * 8, y: cry - 6, r: 4, t: 0, drift: (Math.random() - 0.5) * 6 });
+  for (const p of ISLE.puffs) {
+    p.t += dt; p.y -= dt * 9; p.r += dt * 4; p.x += dt * (3 + p.drift);
+    const a = Math.max(0, 0.7 - p.t * 0.12);
+    fillCircle(p.x, p.y, p.r, rad(p.x - p.r * 0.3, p.y - p.r * 0.3, 0, p.r, [[0, `rgba(245,240,250,${a})`], [0.7, `rgba(190,185,205,${a * 0.8})`], [1, 'rgba(160,155,175,0)']]));
   }
-  ISLE.smoke = ISLE.smoke.filter(s => s.t < 4.5);
+  ISLE.puffs = ISLE.puffs.filter(p => p.t < 6);
+  // Lanterns at the mine flicker; a boss waiting glows red in the entrance.
+  for (const lx of [164, 216]) { const [x, y] = at('fight', lx, 160), on = Math.sin(t * 11 + lx) > -0.2; glow(x, y, 8, '255,204,77', on ? 0.5 : 0.35); fillRR(x - 2, y - 4, 4, 6, 1.5, '#3e3846'); fillRR(x - 1.2, y - 2.5, 2.4, 3.5, 1, on ? '#ffe08a' : '#ff9a3d'); }
+  if (typeof bossWaiting === 'function' && bossWaiting()) { const [x, y] = at('fight', 190, 170); glow(x, y, 14, '220,40,60', 0.5 + 0.35 * Math.sin(t * 6)); }
+  // Forge furnace glow; smoke from the forge and house chimneys.
+  { const [x, y] = at('forge', 100, 280); glow(x, y, 18, '255,160,60', 0.25 + 0.15 * Math.sin(t * 5)); }
+  for (const [tab, cx, cy, rate] of [['forge', 150, 190, 1.2], ['bag', 284, 378, 0.6]]) if (Math.random() < dt * rate) { const [x, y] = at(tab, cx, cy); ISLE.puffs.push({ x, y, r: 2.2, t: 2, drift: 2 }); }
   // The temple crystal floats and shines.
-  const cy = 262 + Math.sin(t * 2) * 3;
-  d.globalAlpha = 0.35 + 0.2 * Math.sin(t * 3); iell(252, cy + 6, 12, 10, '#ffe08a'); d.globalAlpha = 1;
-  ip(248, cy - 1, 8, 14, '#1a1220');
-  ip(249, cy, 6, 12, '#7ad8ff'); ip(250, cy - 2, 4, 2, '#bfefff'); ip(250, cy + 12, 4, 2, '#3aa0d8'); ip(250, cy + 1, 2, 6, '#e8fbff');
+  const cy = at('skills', 248, 222)[1] + Math.sin(t * 2) * 3;
+  glow(248, cy + 6, 16, '255,230,140', 0.35 + 0.2 * Math.sin(t * 3));
+  const cr = new Path2D(); cr.moveTo(248, cy - 7); cr.lineTo(253, cy + 4); cr.lineTo(248, cy + 13); cr.lineTo(243, cy + 4); cr.closePath();
+  fillPath(cr, lin(243, cy - 7, 253, cy + 13, [[0, '#e8fbff'], [0.5, '#7ad8ff'], [1, '#2f9ad8']]));
   // Lighthouse lamp and its sweeping beam over the sea.
   const b = (Math.sin(t * 0.9) + 1) / 2;
-  d.globalAlpha = 0.16;
-  d.fillStyle = '#fff2b0';
-  d.beginPath(); d.moveTo(126, 551); d.lineTo(-20 + b * 360, 700); d.lineTo(20 + b * 360, 700); d.closePath(); d.fill();
-  d.globalAlpha = 0.5 + 0.3 * Math.sin(t * 4); iell(126, 551, 9, 7, '#fff6c8'); d.globalAlpha = 1;
-  // Fireflies drift over the town.
-  for (let i = 0; i < 6; i++) { const fx = 150 + Math.sin(t * 0.7 + i * 2) * 60, fy = 380 + Math.cos(t * 0.5 + i * 3) * 90; if (Math.sin(t * 4 + i) > 0.6) ip(fx, fy, 1, 1, '#fff6a8'); }
-  // Gulls glide across now and then.
+  d.globalAlpha = 0.16; d.fillStyle = '#fff2b0';
+  d.beginPath(); d.moveTo(95, 563); d.lineTo(-30 + b * 380, 720); d.lineTo(10 + b * 380, 720); d.closePath(); d.fill();
+  d.globalAlpha = 1;
+  glow(95, 563, 14, '255,240,180', 0.5 + 0.3 * Math.sin(t * 4));
+  // Fireflies over the town, a glint on the pond, gulls now and then.
+  for (let i = 0; i < 6; i++) { const fx = 150 + Math.sin(t * 0.7 + i * 2) * 60, fy = 380 + Math.cos(t * 0.5 + i * 3) * 90; if (Math.sin(t * 4 + i) > 0.6) glow(fx, fy, 3, '255,246,168', 0.8); }
+  if (Math.floor(t * 2) % 2) fillCircle(300, 514, 1, '#ffffff');
   if (Math.random() < dt * 0.05) ISLE.birds.push({ x: -10, y: 30 + Math.random() * 500, v: 22 + Math.random() * 10 });
-  for (const bd of ISLE.birds) { bd.x += bd.v * dt; const w = Math.sin(t * 9 + bd.y) > 0; ip(bd.x, bd.y, 2, 1, '#ffffff'); ip(bd.x - 3, bd.y - (w ? 1 : 0), 3, 1, '#ffffff'); ip(bd.x + 2, bd.y - (w ? 1 : 0), 3, 1, '#ffffff'); }
+  for (const bd of ISLE.birds) {
+    bd.x += bd.v * dt;
+    const w = Math.sin(t * 9 + bd.y) > 0 ? 2 : 0;
+    d.strokeStyle = '#ffffff'; d.lineWidth = 1.2; d.beginPath(); d.moveTo(bd.x - 4, bd.y); d.quadraticCurveTo(bd.x - 2, bd.y - w, bd.x, bd.y); d.quadraticCurveTo(bd.x + 2, bd.y - w, bd.x + 4, bd.y); d.stroke();
+  }
   ISLE.birds = ISLE.birds.filter(bd => bd.x < ISLE_W + 10);
   // Boats.
   ISLE.nextBoat -= dt;
   if (ISLE.nextBoat <= 0) { spawnBoat(); ISLE.nextBoat = 50 + Math.random() * 60; }
   for (const bt of ISLE.boats) { bt.x += bt.dir * bt.speed * dt; drawBoat(bt, t); }
   ISLE.boats = ISLE.boats.filter(bt => bt.x > -60 && bt.x < ISLE_W + 60);
+  // Clouds drift over the open sea at the top and bottom.
+  if (!ISLE.clouds.length) ISLE.clouds = [{ x: 20, y: -22, s: 1.1, v: 3, sp: 0 }, { x: 240, y: -30, s: 0.8, v: 2.2, sp: 1 }, { x: 120, y: ISLE_H + 2 + oy / 2, s: 1, v: 2.6, sp: 2 }, { x: 300, y: -8 - oy / 2, s: 0.7, v: 3.4, sp: 1 }];
+  d.globalAlpha = 0.6;
+  for (const cl of ISLE.clouds) { cl.x += cl.v * dt; if (cl.x > ISLE_W + 60) cl.x = -160; d.drawImage(ISLE.sprites.clouds[cl.sp], cl.x, cl.y, 140 * cl.s, 70 * cl.s); }
+  d.globalAlpha = 1;
   for (const p of ISLE.pops) {
     p.t += dt;
     d.globalAlpha = Math.max(0, 1 - p.t / 1.6);
-    d.font = '10px "Jersey 10", monospace'; d.textAlign = 'center';
+    d.font = '11px "Jersey 10", monospace'; d.textAlign = 'center';
     d.fillStyle = '#1a1220'; d.fillText(p.text, p.x + 1, p.y - p.t * 14 + 1);
     d.fillStyle = p.col; d.fillText(p.text, p.x, p.y - p.t * 14);
     d.globalAlpha = 1;
@@ -478,7 +608,8 @@ function drawIsland(dt) {
 function islandHtml() {
   let h = '<div class="isle-wrap"><div class="isle" id="isle"><canvas id="islandCv" aria-hidden="true"></canvas>';
   for (const b of BUILDINGS) {
-    h += `<button class="bld" data-go="${b.tab}" aria-label="${b.name}"><span class="sign">${b.name}<small id="isl-${b.tab}"></small></span><i class="dot"></i></button>`;
+    h += `<button class="bld" data-go="${b.tab}" aria-label="${b.name}"></button>`;
+    h += `<button class="sign" data-go="${b.tab}" aria-label="${b.name}">${b.name}<small id="isl-${b.tab}"></small><i class="dot"></i></button>`;
   }
   return h + '</div></div>';
 }
@@ -489,10 +620,10 @@ function buildIsland() {
     sec.innerHTML = islandHtml();
     ISLE.cv = $('#islandCv');
     ISLE.ctx = ISLE.cv.getContext('2d');
-    ISLE.base = islandBase();
+    ISLE.sprites.clouds = [cloudSprite(31), cloudSprite(47), cloudSprite(59)];
     // Taps on open water: maybe a boat.
     $('#isle').addEventListener('pointerdown', e => {
-      if (e.target.closest('.bld')) return;
+      if (e.target.closest('.bld, .sign')) return;
       const r = ISLE.cv.getBoundingClientRect();
       tapBoat(((e.clientX - r.left) / r.width) * ISLE_W, ((e.clientY - r.top) / r.height) * ISLE.h - ISLE.oy);
     });
@@ -502,7 +633,8 @@ function buildIsland() {
   updateBadges();
 }
 
-// Fit the island's width (or its height on a wide screen), then let the sea fill what's left.
+// Fit the island's width (or its height on a wide screen), let the sea fill what's left, and paint
+// at the screen's real resolution.
 function sizeIsland() {
   const wrap = $('#tab-island .isle-wrap'), isle = $('#isle');
   if (!wrap || !isle || UI.tab !== 'island') return;
@@ -513,13 +645,15 @@ function sizeIsland() {
   ISLE.oy = Math.floor((ISLE.h - ISLE_H) / 2);
   isle.style.width = w + 'px';
   isle.style.height = (w * ISLE.h) / ISLE_W + 'px';
-  const dpr = window.devicePixelRatio || 1;
-  ISLE.k = Math.max(1, Math.round((w * dpr) / ISLE_W));
-  ISLE.cv.width = ISLE_W * ISLE.k;
-  ISLE.cv.height = ISLE.h * ISLE.k;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  ISLE.k = (w * dpr) / ISLE_W;
+  ISLE.cv.width = Math.ceil(ISLE_W * ISLE.k);
+  ISLE.cv.height = Math.ceil(ISLE.h * ISLE.k);
+  if (Math.abs(ISLE.k - ISLE.baseK) > 0.01) { ISLE.baseK = ISLE.k; ISLE.base = islandBase(); }
   for (const b of BUILDINGS) {
-    const el = $(`.bld[data-go="${b.tab}"]`);
-    if (el) el.setAttribute('style', `left:${(b.x / ISLE_W) * 100}%;top:${((b.y + ISLE.oy) / ISLE.h) * 100}%;width:${(b.w / ISLE_W) * 100}%;height:${(b.h / ISLE.h) * 100}%`);
+    const el = $(`.bld[data-go="${b.tab}"]`), sg = $(`.sign[data-go="${b.tab}"]`), bx = boxOf(b);
+    if (el) el.setAttribute('style', `left:${(bx.x / ISLE_W) * 100}%;top:${((bx.y + ISLE.oy) / ISLE.h) * 100}%;width:${(bx.w / ISLE_W) * 100}%;height:${(bx.h / ISLE.h) * 100}%`);
+    if (sg) sg.setAttribute('style', `left:${(b.lx / ISLE_W) * 100}%;top:${((b.ly + ISLE.oy) / ISLE.h) * 100}%`);
   }
 }
 window.addEventListener('resize', sizeIsland);

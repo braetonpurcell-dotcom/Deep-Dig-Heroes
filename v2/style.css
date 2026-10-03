@@ -729,14 +729,17 @@ body.on-island #panel { overflow: hidden; }
 .isle-wrap { flex: 1; min-height: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
 .isle { position: relative; }
 .isle canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; border: 2px solid var(--line); }
+/* The island: transparent tap boxes over each building, and a wooden name plaque beside its door. */
 .bld { position: absolute; padding: 0; background: transparent; border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.bld .sign {
-  position: absolute; left: 50%; top: calc(100% - 3px); transform: translateX(-50%);
-  display: flex; align-items: center; gap: 4px; padding: 1px 5px; white-space: nowrap;
-  background: rgba(18, 12, 24, .88); border: 2px solid var(--line-hi); color: var(--fg); font-size: 12px; line-height: 1.2;
+.isle .sign {
+  position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 4px;
+  padding: 1px 7px 2px; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  background: linear-gradient(#9a6434, #6b4120); border: 2px solid #2a1a12; border-radius: 5px;
+  box-shadow: inset 0 2px 0 rgba(255, 220, 160, .35), 0 2px 0 #1a1220, 0 3px 6px rgba(0, 0, 0, .45);
+  color: #fff3d6; font-size: 12px; line-height: 1.1; text-shadow: 0 1px 0 #2a1a12;
 }
-.bld .sign small { color: var(--gold); font-size: 12px; }
-.bld .sign small:empty { display: none; }
-.bld:active .sign { border-color: var(--gold); }
-.bld .dot { position: absolute; top: 2px; right: 6px; width: 10px; height: 10px; background: var(--bad); border: 2px solid var(--ink); display: none; }
-.bld .dot.show { display: block; animation: pulse 1s steps(2) infinite; }
+.isle .sign small { color: var(--gold); font-size: 12px; }
+.isle .sign small:empty { display: none; }
+.isle .sign:active { filter: brightness(1.15); }
+.isle .dot { position: absolute; top: -6px; right: -6px; width: 11px; height: 11px; border-radius: 50%; background: var(--bad); border: 2px solid var(--ink); display: none; }
+.isle .dot.show { display: block; animation: pulse 1s steps(2) infinite; }
