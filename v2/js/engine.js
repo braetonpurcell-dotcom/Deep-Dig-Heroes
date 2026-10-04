@@ -58,13 +58,17 @@ function sharpenDamage(L) {
 function upgradeCost(u, level) { return Math.ceil(u.base * Math.pow(u.growth, level)); }
 function coresFor(f) { return f < 25 ? 0 : Math.floor(TUNE.coreScale * Math.pow((f - 15) / 5, TUNE.coreExp)); }
 function isBossFloor(f) { return f % 10 === 0; }
-function biomeIndex(f) { return Math.floor((f - 1) / FLOORS_PER_BIOME); }
-function biomeFor(f) { return BIOMES[biomeIndex(f) % BIOMES.length]; }
+// Version 2: the cave's look comes from the island it belongs to (ISLANDS[].cave).
+function biomeIndex(f) {
+  const i = islandForFloor(f), k = Math.floor((f - ISLANDS[i].from) / FLOORS_PER_BIOME);
+  return k < 2 ? ISLANDS[i].cave[k] : ABYSS_BIOME;
+}
+function biomeFor(f) { return BIOMES[biomeIndex(f)]; }
 function biomeName(f) {
-  const i = biomeIndex(f);
-  const cycle = Math.floor(i / BIOMES.length);
+  const last = ISLANDS[ISLANDS.length - 1], deep = f - last.from - ISLE_FLOORS;
+  if (deep < 0) return BIOMES[biomeIndex(f)].name;
   const roman = ['', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X'];
-  return BIOMES[i % BIOMES.length].name + roman[Math.min(cycle, roman.length - 1)];
+  return BIOMES[ABYSS_BIOME].name + roman[Math.min(Math.floor(deep / ISLE_FLOORS), roman.length - 1)];
 }
 
 // ---------- events ----------
@@ -80,6 +84,7 @@ function emit(type, data) {
 function freshRun() {
   return {
     floor: 1, maxFloor: 1, kills: 0, auto: true,
+    open: 0, // Version 2: the deepest island you may sail to this run
     level: 1, xp: 0, sp: 0, skills: {}, upg: {}, bossDone: {}, cases: 0,
     started: Date.now(), recordAnnounced: false,
     rush: { left: 0, mult: 1 }, // Gold Rush: kills left at the boosted coin rate
@@ -110,7 +115,8 @@ function freshState() {
     classes: [], // Version 2: saved builds (skills, gear, pets and look), up to CLASS_SLOTS
     drill: { lv: 0, xp: 0, show: true }, // Version 2: the drill, levelled with parts from Drill Crates
     pityDrill: { epic: 0, leg: 0 },
-    isle: { view: -1, claimed: 0 }, // Version 2: island shown in the world (-1 follows your depth) and arrival rewards given
+    isle: { view: -1, claimed: 0 }, // Version 2: arrival rewards given (view is no longer used: the world shows the island you dig)
+    decor: { stand: null, pet: null }, // Version 2: what stands outside your house: an outfit on the armor stand, a pet at the doghouse
     v2Seen: false, // Version 2: the welcome guide was shown
     activeClass: -1,
     pity: { epic: 0, leg: 0 },
@@ -272,6 +278,7 @@ function hydrate(obj) {
   run.maxFloor = Math.max(run.floor, nonNegInt(Math.floor(run.maxFloor), 1));
   run.cases = nonNegInt(run.cases);
   run.auto = run.auto !== false;
+  run.open = Math.min(ISLANDS.length - 1, Math.max(islandForFloor(run.maxFloor), nonNegInt(run.open)));
   if (!run.skills || typeof run.skills !== 'object') run.skills = {};
   for (const id of Object.keys(run.skills)) {
     const n = SKILL_INDEX[id];
@@ -381,6 +388,11 @@ function hydrate(obj) {
   st.music = st.music !== false;
   // The miner's look: any bad value goes back to the default.
   s.look = cleanLook(s.look);
+  const dc = s.decor && typeof s.decor === 'object' ? s.decor : {};
+  s.decor = {
+    stand: OUTFITS[dc.stand] ? dc.stand : null,
+    pet: dc.pet && PETS[dc.pet.sp] && Number.isInteger(dc.pet.r) && dc.pet.r >= 0 && dc.pet.r < RARITY.length ? { sp: dc.pet.sp, r: dc.pet.r } : null,
+  };
   s.v2Seen = s.v2Seen === true;
   // Islands.
   if (!s.isle || typeof s.isle !== 'object') s.isle = { view: -1, claimed: 0 };
@@ -670,9 +682,14 @@ function floorCleared(bossBeaten = false) {
   S.run.kills = 0;
   track('floor');
   if (!(S.run.auto || bossBeaten)) return;
-  const f = S.run.floor;
-  // Tunneler: sometimes drop two floors, but never past a boss.
-  const skip = ST.skip > 0 && !isBossFloor(f + 1) && Math.random() < ST.skip;
+  const f = S.run.floor, isle = islandForFloor(f);
+  // The island's cave ends here: the next island opens, and you sail there from the Harbor.
+  if (f >= isleEnd(isle)) {
+    if (S.run.open <= isle) { S.run.open = isle + 1; emit('isleCleared', { i: isle + 1 }); }
+    return;
+  }
+  // Tunneler: sometimes drop two floors, but never past a boss or the island's last floor.
+  const skip = ST.skip > 0 && !isBossFloor(f + 1) && f + 2 <= isleEnd(isle) && Math.random() < ST.skip;
   changeFloor(f + (skip ? 2 : 1));
   if (skip) emit('tunnel', { floor: f + 2 });
 }
@@ -788,8 +805,8 @@ function treasureEscaped() {
 // Player moving between floors. Going up turns auto-advance off so you can farm;
 // stepping back down onto the deepest floor turns it on again, so the dig resumes.
 function moveFloor(delta) {
-  const f = S.run.floor + delta;
-  if (f < 1 || f > S.run.maxFloor) return false;
+  const f = S.run.floor + delta, isle = islandForFloor(S.run.floor);
+  if (f < 1 || f > S.run.maxFloor || f < isleStart(isle) || f > isleEnd(isle)) return false; // other islands are by boat
   if (delta < 0) S.run.auto = false;
   else if (f === S.run.maxFloor) S.run.auto = true;
   changeFloor(f);
@@ -1290,8 +1307,20 @@ function checkIslands() {
   if (out.length) { recalc(); emit('isles', out); }
   return out;
 }
-// The island the world shows: the one you picked at the harbor, or the one for your depth this run.
-function worldIsle() { const v = S.isle.view; return v >= 0 && v <= islesReached() ? v : islandForFloor(S.run.maxFloor); }
+// The island you are on: the one whose cave you are digging.
+function worldIsle() { return islandForFloor(S.run.floor); }
+// Sail to an island opened this run. You land in its cave on your deepest floor there (or its first
+// floor if you have never been), and it digs on from there if that is the deepest you have been.
+function sailToIsle(i) {
+  if (!(i >= 0 && i <= S.run.open)) return false;
+  const lo = isleStart(i), hi = isleEnd(i);
+  const f = lo > S.run.maxFloor ? lo : Math.min(Math.max(lo, S.run.maxFloor), hi);
+  S.run.auto = f >= S.run.maxFloor;
+  if (f !== S.run.floor) changeFloor(f);
+  emit('sail', { i });
+  return true;
+}
+function canSailOn() { const i = islandForFloor(S.run.floor); return S.run.open > i && S.run.floor >= isleEnd(i); }
 
 // ---------- Version 2: the drill ----------
 function addDrillXp(x) {

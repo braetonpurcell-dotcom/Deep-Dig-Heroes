@@ -140,6 +140,8 @@ const REACT = Number(process.argv[4] || 0.5); // mean reaction time in seconds f
     const total = MINUTES * 60;
     let tick = 0;
     for (let t = 0; t < total; t += dt) {
+      // Version 2: an island's cave ends at its last floor; sail on to the next island like a player would.
+      if (typeof canSailOn === 'function' && canSailOn()) sailToIsle(islandForFloor(S.run.floor) + 1);
       step(dt);
       if (PERSONA) { for (let k = 0; k < 5; k++) agentTick(agent, dt / 5); } else if (ANSWER_EVERY !== 0) {
         nextAnswer -= dt;

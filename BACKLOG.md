@@ -11,11 +11,18 @@ at higher prestige counts should come around sooner.
   Brachell pushes until hitting the power wall before prestiging.
 - Look at both with the sim (`tools/playtest/sim.js`: `stallSec` for the wall-pusher, an early
   `prestigeAt` for the spammer) and the players' telemetry.
+- Since V2 dev.26 each island is 100 floors (its own cave) and you sail between them, so island
+  pacing is now one island per 100 floors.
 - Questions to answer: how long each island takes to reach for each style, how the prestige
   requirement grows with prestige count, and whether spamming beats pushing or the other way round.
 - Brachell's rule for the fix: the deeper you push before prestiging, the bigger the reward should be.
   Working hard on a run should pay more than quick resets (for example, prestige rewards that grow
   faster than linearly with the depth reached past the prestige requirement).
+
+## Island customization (2026-10-04)
+
+Started in V2 dev.26: an armor stand (shows an outfit) and a doghouse (a pet sits outside) by your house.
+The goal is letting players decorate their whole island: more pieces, and placing them where they like.
 
 ## Next art pass: the rest of the game at the 24px look (2026-10-04)
 

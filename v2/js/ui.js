@@ -189,8 +189,12 @@ function updateFloorBar() {
   $('#fName').textContent = 'B' + f + (isBossFloor(f) ? ' · Boss' : '');
   const vein = nextVein();
   $('#fBiome').textContent = biomeName(f) + (vein ? ` · ⛏ vein B${vein}` : '') + (S.run.maxFloor > f ? ` · best B${S.run.maxFloor}` : '');
-  $('#fUp').disabled = f <= 1;
-  $('#fDown').disabled = f >= S.run.maxFloor;
+  const isle = islandForFloor(f);
+  $('#fUp').disabled = f <= isleStart(isle);
+  $('#fDown').disabled = f >= Math.min(S.run.maxFloor, isleEnd(isle));
+  const sail = canSailOn();
+  $('#fSail').hidden = !sail;
+  if (sail) $('#fSailTo').textContent = ISLANDS[isle + 1].name;
   const auto = $('#fAuto');
   auto.classList.toggle('on', S.run.auto);
   auto.setAttribute('aria-pressed', S.run.auto ? 'true' : 'false');
@@ -1659,6 +1663,12 @@ on('bestFloor', ({ floor }) => {
   if (u) toast('New Forge upgrade: ' + u.name, 'good', 'anvil');
   if (floor === 25 && S.prestiges === 0) toast('Prestige unlocked! Open Settings (⚙ top right).', 'purple', 'core');
 });
+// Version 2: an island's last floor is beaten, so the next island opens.
+on('isleCleared', ({ i }) => {
+  SFX.levelup();
+  toast(`${ISLANDS[i - 1].name}'s cave is cleared! Sail on to ${ISLANDS[i].name} (tap ⛵ or go to the Harbor)`, 'gold');
+  updateFloorBar();
+});
 on('bossFail', () => setTicker('The boss escaped. Farm here, then tap Retry boss.', 'bad', 4000));
 // Version 2: a short guide to everything new, shown once to players coming from the live game.
 function showV2Welcome() {
@@ -1670,7 +1680,7 @@ function showV2Welcome() {
     ${row(im(spriteUrl(heroSprite(0, S.look, { helm: { slot: 'helm', st: 'storm', t: 9, r: 3 }, charm: { slot: 'charm', st: 'mail', t: 9, r: 3 } }), 3)), 'Outfits', 'Gear comes in seven outfits: Warrior, Knight, Assassin, Scout, Merchant, Gambler and Wizard. Your miner wears them, and two or three pieces of one outfit give a set bonus for its job.')}
     ${row(im(petUrl('drake', false, 3)), 'Classes', 'At the Temple, save your skills, gear, pets and look as a class and switch in one tap.')}
     ${row(im(drillUrl(1, 3), 52), 'The drill', "The Market's Drill tab sells Drill Crates. Every part levels your drill, which replaces your pickaxe and evolves every 10 levels.")}
-    ${row(`<span class="isleswatch" style="background:${ISLE_STYLE.frost.swatch}"></span>`, 'Islands', 'Every 50 floors is a new island with its own look. Sail between them from the Harbor by the bridge.')}
+    ${row(`<span class="isleswatch" style="background:${ISLE_STYLE.frost.swatch}"></span>`, 'Islands', 'Every island has its own cave of 100 floors: earth, ice, desert, lava and crystal. Beat the last floor, then sail on from the Harbor.')}
     ${row(im(iconUrl('cog'), 32), 'Settings and feedback', 'Top right: ⚙ for settings and prestige, F to send feedback.')}
     <div class="mbtns"><button class="btn gold" data-act="close">Let's go</button></div>`, { dismissable: true });
 }
@@ -1762,6 +1772,10 @@ function handleAction(el) {
     case 'goDrillCrates': if (UI.auto) stopAutoRoll(); S.caseKind = 'drill'; SFX.click(); showTab('cases'); break;
     case 'drillShow': S.drill.show = !S.drill.show; SFX.click(); buildForge(); break;
     case 'sail': sailTo(Number(d.i)); break;
+    case 'openStand': SFX.click(); openStand(); break;
+    case 'openDoghouse': SFX.click(); openDoghouse(); break;
+    case 'setStand': S.decor.stand = OUTFITS[d.o] ? d.o : null; SFX.click(); closeModal(); break;
+    case 'setDogPet': S.decor.pet = PETS[d.sp] ? { sp: d.sp, r: Number(d.r) } : null; SFX.click(); closeModal(); break;
     case 'worldBoss': if (UI.tab === 'island') history.pushState({ ddh: 'fight' }, ''); fightBoss(); break;
     case 'v2Welcome': showV2Welcome(); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
@@ -2179,6 +2193,7 @@ function bindInput() {
   $('#fDown').addEventListener('click', () => { moveFloor(1); updateFloorBar(); });
   $('#fAuto').addEventListener('click', () => { setAuto(!S.run.auto); updateFloorBar(); });
   $('#fBoss').addEventListener('click', () => { retryBoss(); updateFloorBar(); });
+  $('#fSail').addEventListener('click', () => { const i = islandForFloor(S.run.floor) + 1; if (sailToIsle(i)) { SFX.claim(); toast(`Sailed to ${ISLANDS[i].name}: ${ISLANDS[i].caveLook.toLowerCase()}`, 'gold'); } updateFloorBar(); });
   $('#fFight').addEventListener('click', fightBoss);
   $('#arena').addEventListener('pointerdown', mgPointer);
   $('#fPrestige').addEventListener('click', () => { audioUnlock(); askPrestige(); });

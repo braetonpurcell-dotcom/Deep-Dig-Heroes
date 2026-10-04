@@ -160,6 +160,7 @@ img.ic { image-rendering: pixelated; image-rendering: crisp-edges; width: 18px; 
 }
 .chip.on { background: #1f4a2e; border-color: var(--good); color: #d9ffe5; }
 .chip.hot { background: #4a1720; border-color: var(--bad); color: #ffe0e3; animation: pulse 1.2s steps(2) infinite; }
+.chip.sail { background: #173a5c; border-color: #6ab8ff; color: #e3f2ff; animation: pulse 1.2s steps(2) infinite; }
 .chip.glow { background: #3b1d5c; border-color: var(--gambler); color: #f3e3ff; animation: pulse 1.2s steps(2) infinite; }
 @keyframes pulse { 50% { filter: brightness(1.35); } }
 

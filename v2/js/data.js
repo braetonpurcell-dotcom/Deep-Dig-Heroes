@@ -100,8 +100,39 @@ const BIOMES = [
     ground: ['#56461c', '#382e12', '#fff0a0'], oreColor: '#ffffff',
     enemy: ['#fff1a8', '#cfae45', '#ffffff'],
   },
+  // Version 2: caves for the cold, desert and lava islands.
+  {
+    name: 'Frozen Tunnels', adj: 'Frost', ore: 'Ice',
+    bg: ['#0e1620', '#1a2a3a'], rock: ['#5a7a96', '#3c5670', '#8fb4d0'],
+    ground: ['#7a98b2', '#4e6a84', '#e6f4ff'], oreColor: '#9ff0ff',
+    enemy: ['#bfe8ff', '#6aa8d8', '#ffffff'],
+  },
+  {
+    name: 'Glacier Halls', adj: 'Glacier', ore: 'Frostsilver',
+    bg: ['#0a1630', '#16305a'], rock: ['#2f5c8c', '#1e3e62', '#5a9ad0'],
+    ground: ['#3a6ea0', '#22466e', '#c8ecff'], oreColor: '#ffffff',
+    enemy: ['#7fd0ff', '#3a7ab8', '#e0f6ff'],
+  },
+  {
+    name: 'Sandstone Tombs', adj: 'Sand', ore: 'Gold',
+    bg: ['#21160a', '#3a2812'], rock: ['#9a7440', '#6e5028', '#c49a5a'],
+    ground: ['#a8804a', '#76562e', '#f2d48a'], oreColor: '#ffd23f',
+    enemy: ['#e8c070', '#a8803a', '#fff0c0'],
+  },
+  {
+    name: 'Sunken Ruins', adj: 'Ruin', ore: 'Jade',
+    bg: ['#0c1a1a', '#163030'], rock: ['#4a7a6a', '#30544a', '#78aa94'],
+    ground: ['#5a8a74', '#3a5e50', '#a8f0d0'], oreColor: '#4affd0',
+    enemy: ['#6ae0b0', '#2e9a78', '#d0fff0'],
+  },
+  {
+    name: 'Cinder Core', adj: 'Cinder', ore: 'Fireopal',
+    bg: ['#140808', '#2a0e0e'], rock: ['#3a2a2a', '#241818', '#5a4040'],
+    ground: ['#4a1e14', '#2a100a', '#ff5a1a'], oreColor: '#ff9a2a',
+    enemy: ['#ff5a4a', '#a82a20', '#ffc0a0'],
+  },
 ];
-const FLOORS_PER_BIOME = 25;
+const FLOORS_PER_BIOME = 50; // two cave biomes per island
 
 const ENEMIES = {
   rock: { hp: 0.8, coin: 2.0, xp: 0.5, weight: 35, minFloor: 1, name: b => `${b.ore} Node` },
@@ -405,12 +436,12 @@ const QUEST_REWARD = { keys: 2, scrap: 25 };
 const statAtLeast = (key, n) => () => (S.stats[key] || 0) >= n;
 const ACHIEVEMENTS = [
   { id: 'f10', name: 'Going Down', desc: 'Reach B10', test: statAtLeast('bestFloor', 10), keys: 1 },
-  { id: 'f25', name: 'Stone Cold', desc: 'Reach B25', test: statAtLeast('bestFloor', 25), keys: 2 },
-  { id: 'f50', name: 'Crystal Clear', desc: 'Reach B50', test: statAtLeast('bestFloor', 50), keys: 3 },
-  { id: 'f75', name: 'Feel the Heat', desc: 'Reach B75', test: statAtLeast('bestFloor', 75), keys: 4 },
-  { id: 'f100', name: 'Into the Abyss', desc: 'Reach B100', test: statAtLeast('bestFloor', 100), keys: 5 },
-  { id: 'f150', name: 'Starcore', desc: 'Reach B150', test: statAtLeast('bestFloor', 150), keys: 8 },
-  { id: 'f200', name: 'Bottomless', desc: 'Reach B200', test: statAtLeast('bestFloor', 200), keys: 10 },
+  { id: 'f25', name: 'Deep Roots', desc: 'Reach B25', test: statAtLeast('bestFloor', 25), keys: 2 },
+  { id: 'f50', name: 'Stone Cold', desc: 'Reach B50', test: statAtLeast('bestFloor', 50), keys: 3 },
+  { id: 'f75', name: 'Halfway Home', desc: 'Reach B75', test: statAtLeast('bestFloor', 75), keys: 4 },
+  { id: 'f100', name: 'Island Hopper', desc: 'Reach B100', test: statAtLeast('bestFloor', 100), keys: 5 },
+  { id: 'f150', name: 'Frostbitten', desc: 'Reach B150', test: statAtLeast('bestFloor', 150), keys: 8 },
+  { id: 'f200', name: 'Sun Seeker', desc: 'Reach B200', test: statAtLeast('bestFloor', 200), keys: 10 },
   { id: 't100', name: 'Warm Up', desc: 'Tap 100 monsters', test: statAtLeast('taps', 100), keys: 1 },
   { id: 't1000', name: 'Quick Hands', desc: 'Tap 1,000 monsters', test: statAtLeast('taps', 1000), keys: 2 },
   { id: 't5000', name: 'Whack-a-Mole', desc: 'Tap 5,000 monsters', test: statAtLeast('taps', 5000), keys: 4 },
@@ -460,15 +491,21 @@ const ACHIEVEMENTS = [
 const TROPHY_BONUS = 0.02;
 const COLLECTION_BONUS = 0.01;
 
-// Version 2: islands. Every 50 floors down the mine is a new island with its own look. Reaching one
-// for the first time (your best floor ever) gives a reward and unlocks a hat in the wardrobe.
+// Version 2: islands. Each island has its own cave of 100 floors, with two cave biomes of 50 floors
+// (cave: indexes into BIOMES). You sail between them from the Harbor; an island's cave ends at its
+// last floor, and beating that floor lets you sail on to the next island. Past Starfall's 100 floors
+// the cave goes on forever as The Abyss. Reaching an island for the first time gives a reward.
 const ISLANDS = [
-  { id: 'green', name: 'Greenhollow', from: 1, blurb: 'Meadows, a farm and a windmill' },
-  { id: 'frost', name: 'Frostpeak', from: 51, blurb: 'Snowfields and a frozen river' },
-  { id: 'sand', name: 'Sunscorch', from: 101, blurb: 'Dunes, palms and an oasis' },
-  { id: 'ember', name: 'Emberfall', from: 151, blurb: 'Ash plains and a river of lava' },
-  { id: 'star', name: 'Starfall', from: 201, blurb: 'A crystal island under the night sky' },
+  { id: 'green', name: 'Greenhollow', from: 1, blurb: 'Meadows, a farm and a windmill', cave: [0, 1], caveLook: 'Earth and stone' },
+  { id: 'frost', name: 'Frostpeak', from: 101, blurb: 'Snowfields and a frozen river', cave: [6, 7], caveLook: 'Ice caves' },
+  { id: 'sand', name: 'Sunscorch', from: 201, blurb: 'Dunes, palms and an oasis', cave: [8, 9], caveLook: 'Desert tombs' },
+  { id: 'ember', name: 'Emberfall', from: 301, blurb: 'Ash plains and a river of lava', cave: [3, 10], caveLook: 'Lava caves' },
+  { id: 'star', name: 'Starfall', from: 401, blurb: 'A crystal island under the night sky', cave: [2, 5], caveLook: 'Crystal and starlight' },
 ];
+const ISLE_FLOORS = 100;
+const ABYSS_BIOME = 4;
+function isleStart(i) { return ISLANDS[i].from; }
+function isleEnd(i) { return i + 1 < ISLANDS.length ? ISLANDS[i + 1].from - 1 : Infinity; }
 function islandForFloor(f) { let i = 0; ISLANDS.forEach((s, k) => { if (f >= s.from) i = k; }); return i; }
 
 // Version 2: the miner's look, picked in the House.

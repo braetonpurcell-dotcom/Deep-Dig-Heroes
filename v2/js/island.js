@@ -1,5 +1,5 @@
 'use strict';
-// Version 2 home screen: a side-scrolling route in the spirit of the old Pokemon games. Every 50
+// Version 2 home screen: a side-scrolling route in the spirit of the old Pokemon games. Every 100
 // floors of depth the world becomes a new island (ISLANDS in data.js, styles in ISLE_STYLE below). The world is
 // one long strip that fills the screen top to bottom; you swipe left and right only. You start at
 // the far left in town on the spawn plaza (quest board, trophy statue, your miner, your house), then
@@ -832,6 +832,7 @@ function drawLive(g, dt, t) {
   // The spawn pad glow, a boss waiting in the cave, and you.
   g.globalAlpha = 0.35 + 0.25 * Math.sin(t * 3); g.fillStyle = '#c8f8ff'; g.fillRect(SPAWN.x - 6, SPAWN.y + 1, 12, 4); g.globalAlpha = 1;
   if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { g.fillStyle = '#ff3040'; g.fillRect(1139, 160, 2, 1); g.fillRect(1149, 160, 2, 1); glow(g, 1145, 162, 14, 'rgba(255,40,60,0.25)'); }
+  drawDecor(g, t);
   drawMe(g, t);
   drawBubbles(g, dt);
   drawWeather(g, t);
@@ -887,6 +888,58 @@ function drawWorld(dt) {
   const H = WORLD.cv.height, vg = g.createLinearGradient(0, 0, 0, H);
   vg.addColorStop(0, 'rgba(10,20,30,0.28)'); vg.addColorStop(0.18, 'rgba(10,20,30,0)'); vg.addColorStop(0.85, 'rgba(10,20,30,0)'); vg.addColorStop(1, 'rgba(10,20,30,0.3)');
   g.fillStyle = vg; g.fillRect(0, 0, WORLD.cv.width, H);
+}
+
+// Version 2: in front of your house, an armor stand showing an outfit and a doghouse with a pet.
+// Tap either to pick what goes there (the first step toward decorating your island).
+const DECOR = {
+  stand: { name: 'Armor stand', x: 176, y: 148, w: 24, h: 24 },
+  dog: { name: 'Doghouse', x: 300, y: 152, w: 28, h: 20 },
+};
+function standPieces() {
+  const o = S.decor.stand;
+  if (!o) return {};
+  const best = typeof outfitBest === 'function' ? outfitBest(o) : {};
+  return { helm: best.helm || null, charm: best.charm || null };
+}
+function drawDecor(g, t) {
+  const st = DECOR.stand, dg = DECOR.dog, p = standPieces();
+  g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(st.x + 4, st.y + 23, 14, 2); g.fillRect(dg.x + 1, dg.y + 19, 28, 2);
+  g.drawImage(standSprite(p.helm, p.charm), st.x, st.y);
+  g.drawImage(doghouseSprite(), dg.x, dg.y);
+  const pet = S.decor.pet;
+  if (pet) {
+    const def = PETS[pet.sp], spr = petSprite(pet.sp, pet.r), pad = spr.fxPad || 0;
+    const px = dg.x + 6, py = def.fly ? dg.y - 14 + Math.round(Math.sin(t * 3) * 2) : dg.y + 6 - (Math.sin(t * 2.4) > 0.7 ? 1 : 0);
+    if (!def.fly) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(px + 3, dg.y + 21, 10, 2); }
+    g.drawImage(spr, px - pad, py - pad);
+  }
+}
+function openStand() {
+  let h = `<h2>Armor stand</h2><p class="small muted" style="text-align:center">Show off an outfit in front of your house. The stand wears your best helmet and armor of that outfit.</p><div class="islelist">`;
+  for (const o of OUTFIT_IDS) {
+    const best = outfitBest(o), n = (best.helm ? 1 : 0) + (best.charm ? 1 : 0);
+    h += `<button class="isleopt ${S.decor.stand === o ? 'on' : ''} ${n ? '' : 'locked'}" data-act="setStand" data-o="${o}" ${n ? '' : 'disabled'}>
+      <img src="${spriteUrl(standSprite(best.helm || null, best.charm || null), 2)}" alt="" style="width:40px;image-rendering:pixelated">
+      <span class="grow"><b style="color:${OUTFITS[o].color}">${OUTFITS[o].name}</b><small>${n ? (best.helm ? GEAR_STYLES.helm.find(x => x.set === o).name : '') + (best.helm && best.charm ? ' · ' : '') + (best.charm ? GEAR_STYLES.charm.find(x => x.set === o).name : '') : 'Get a helmet or armor of this outfit first'}</small></span>${S.decor.stand === o ? '<span class="isletag">On show</span>' : ''}</button>`;
+  }
+  h += `</div><div class="mbtns"><button class="btn" data-act="setStand" data-o="">Empty the stand</button><button class="btn" data-act="close">Close</button></div>`;
+  openModal(h, { dismissable: true });
+}
+function openDoghouse() {
+  let h = `<h2>Doghouse</h2><p class="small muted" style="text-align:center">Pick a pet to sit outside your house. It's just for show: your party in the Cave stays the same.</p><div class="islelist">`;
+  let any = false;
+  for (const sp of PET_IDS) for (let r = RARITY.length - 1; r >= 0; r--) {
+    if (!(S.pets.inv[sp][r] > 0 || S.pets.eq.some(p => p.sp === sp && p.r === r))) continue;
+    any = true;
+    const on = S.decor.pet && S.decor.pet.sp === sp && S.decor.pet.r === r;
+    h += `<button class="isleopt ${on ? 'on' : ''}" data-act="setDogPet" data-sp="${sp}" data-r="${r}">
+      <img src="${petUrl(sp, false, r)}" alt="" style="width:40px;image-rendering:pixelated">
+      <span class="grow"><b class="tc${r}">${RARITY[r].name} ${PETS[sp].name}</b></span>${on ? '<span class="isletag">Home</span>' : ''}</button>`;
+  }
+  if (!any) h += '<p class="small muted" style="text-align:center">You have no pets yet. Open pet cases in the Market.</p>';
+  h += `</div><div class="mbtns"><button class="btn" data-act="setDogPet" data-sp="">Nobody home</button><button class="btn" data-act="close">Close</button></div>`;
+  openModal(h, { dismissable: true });
 }
 
 // You and your first pet on the road. Walking swaps the leg frames; facing left mirrors the sprite.
@@ -965,6 +1018,7 @@ function islandHtml() {
     h += `<button class="sign" ${act} aria-label="${b.name}" style="left:${b.x + b.w / 2}px;top:${sy}px">${b.name}<small id="isl-${b.tab}"></small><i class="dot"></i></button>`;
   }
 
+  for (const [id, d] of Object.entries(DECOR)) h += `<button class="bld" data-act="${id === 'stand' ? 'openStand' : 'openDoghouse'}" aria-label="${d.name}" style="left:${d.x}px;top:${d.y}px;width:${d.w}px;height:${d.h}px"></button>`;
   h += '</div><button class="walk l" id="walkL" aria-label="Walk left">◀</button><button class="walk r" id="walkR" aria-label="Walk right">▶</button><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button><div class="islebanner" id="isleBanner"></div><button class="bossalert" id="bossAlert" data-act="worldBoss" hidden></button></div>';
   return h;
 }
@@ -1019,7 +1073,7 @@ function updateIslandSigns() {
   set('fight', bossWaiting() ? 'Boss!' : 'B' + S.run.floor);
   set('skills', S.run.sp > 0 ? S.run.sp + ' pts' : '');
   set('cases', freeCrateReady() ? 'Free!' : '');
-  set('dock', islesReached() > 0 ? 'Sail' : '');
+  set('dock', 'Caves');
 }
 
 function islandLoop(now) {
@@ -1029,7 +1083,7 @@ function islandLoop(now) {
   WORLD.last = now;
   if (!WORLD.drag && Math.abs(WORLD.vx) > 0.05) { WORLD.cam.x += WORLD.vx; WORLD.vx *= 0.9; clampCam(); placeLayer(); }
   walkStep(dt);
-  // Dug past the next 50 floors, or sailed somewhere: repaint the world as that island.
+  // Sailed to another island's cave: repaint the world as that island.
   const isle = worldIsle();
   if (isle !== WORLD.isle) { WORLD.isle = isle; WORLD.img = paintWorld(); updateIsleBanner(true); showIsleTravel(isle); }
   drawWorld(dt);
@@ -1067,26 +1121,29 @@ function updateIsleBanner(big) {
   el.innerHTML = `<b>${isl.name}</b><small>B${isl.from}${next ? '–' + (next.from - 1) : '+'}</small>`;
   if (big) { el.classList.remove('big'); void el.offsetWidth; el.classList.add('big'); }
 }
+// The Harbor is the way to the caves: pick an island and the boat takes you to its cave.
 function openHarbor() {
-  const top = islesReached(), cur = worldIsle(), follow = S.isle.view < 0;
-  let h = `<h2>Harbor</h2><p class="small muted" style="text-align:center">Every 50 floors down the mine is a new island. Sail to any island you have reached, or let the world follow your depth this run.</p><div class="islelist">`;
+  const here = worldIsle(), open = S.run.open, found = islesReached();
+  let h = `<h2>Harbor</h2><p class="small muted" style="text-align:center">Every island has its own cave of 100 floors. Pick one to sail to its cave. Beat an island's last floor to sail on to the next.</p><div class="islelist">`;
   ISLANDS.forEach((isl, i) => {
-    const ok = i <= top;
-    h += `<button class="isleopt ${cur === i ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="sail" data-i="${i}" ${ok ? '' : 'disabled'}>
-      <span class="isleswatch" style="background:${ok ? ISLE_STYLE[isl.id].swatch : 'var(--ink)'}"></span>
-      <span class="grow"><b>${isl.name}</b><small>${ok ? isl.blurb : 'Reach B' + isl.from + ' to sail here'}</small></span>${cur === i ? '<span class="isletag">Here</span>' : ''}</button>`;
+    const ok = i <= open, end = isleEnd(i), range = `B${isl.from}${end < Infinity ? '–' + end : '+'}`;
+    const sub = ok ? `${range} · ${isl.caveLook}` : `${range} · beat B${isl.from - 1}${i <= found ? ' this run' : ''} to sail here`;
+    h += `<button class="isleopt ${here === i ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="sail" data-i="${i}" ${ok ? '' : 'disabled'}>
+      <span class="isleswatch" style="background:${i <= Math.max(open, found) ? ISLE_STYLE[isl.id].swatch : 'var(--ink)'}"></span>
+      <span class="grow"><b>${isl.name}</b><small>${sub}</small></span>${here === i ? '<span class="isletag">Here</span>' : ''}</button>`;
   });
-  h += `</div><button class="btn ${follow ? 'gold' : ''}" data-act="sail" data-i="-1" style="width:100%;margin-top:6px">${follow ? '✓ ' : ''}Follow my depth</button>
-    <p class="small muted" style="text-align:center;margin:8px 0 0">Islands reached: ${top + 1}/${ISLANDS.length} · +${Math.round(ISLE_COINS * S.isle.claimed * 100)}% coins forever</p>
+  h += `</div><p class="small muted" style="text-align:center;margin:8px 0 0">Islands discovered: ${found + 1}/${ISLANDS.length} · +${Math.round(ISLE_COINS * S.isle.claimed * 100)}% coins forever</p>
     <div class="mbtns"><button class="btn" data-act="close">Close</button></div>`;
   openModal(h, { dismissable: true });
 }
+// Straight into the cave when it's this island's; after the boat trip when you sail somewhere new.
 function sailTo(i) {
   closeModal();
-  if (i >= 0 && i > islesReached()) return;
-  S.isle.view = i;
+  const from = worldIsle();
+  if (!sailToIsle(i)) return;
   SFX.claim();
-  toast(i < 0 ? 'The world follows your depth again' : `Sailing to ${ISLANDS[i].name}`, 'gold');
+  const go = () => { if (UI.tab === 'island') goBuilding('fight'); };
+  if (i === from) go(); else setTimeout(go, 2000);
 }
 // Arriving on a new island: a boat sails across and the island's name comes up.
 function showIsleTravel(i) {

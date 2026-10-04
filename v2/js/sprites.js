@@ -5,6 +5,7 @@
 const OUTLINE = '#120c18';
 
 const PX = {
+  get doghouse() { return DOGHOUSE_PX; },
   hero: [
     '................',
     '.....kkkkk......',
@@ -657,6 +658,73 @@ function heroSprite(step, look = null, gear = null) {
   spriteCache.set(key, c);
   return c;
 }
+
+// Version 2: decorations outside your house. The armor stand uses the miner's 24-pixel frame, so
+// the same helmet and armor layers fit it.
+const STAND_PX = [
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '.......kkkkk............',
+  '......kLwwwwk...........',
+  '......kwwwwWk...........',
+  '......kwwwwWk...........',
+  '.......kwwWk............',
+  '........kWk.............',
+  '..kkkkkkkWkkkkkkkk......',
+  '..kLwwwwwwwwwwwwWk......',
+  '..kkkkkwwwwwwkkkkk......',
+  '......kwwwwwWk..........',
+  '......kwwwwwWk..........',
+  '.......kwwwWk...........',
+  '........kwWk............',
+  '........kwWk............',
+  '........kwWk............',
+  '........kwWk............',
+  '....kkkkkwWkkkkk........',
+  '....kWWWWWWWWWWk........',
+];
+const DOGHOUSE_PX = [
+  '.............kk.............',
+  '...........kkrrkk...........',
+  '.........kkrrrrrrkk.........',
+  '.......kkrrrrRrrrrrkk.......',
+  '.....kkrrrrrRrrrrrrrrkk.....',
+  '...kkrrrrrrRrrrrrrrrrrrkk...',
+  '.kkrrrrrrrRrrrrrrrrrrrrrrkk.',
+  'kxxxxxxxxxxxxxxxxxxxxxxxxxxk',
+  '.kkkkkkkkkkkkkkkkkkkkkkkkkk.',
+  '..kwwwwwwwwwwwwwwwwwwwwwwk..',
+  '..kwWwwwwwwkkkkkkwwwwwwWwk..',
+  '..kwwwwwwkkdddddkkwwwwwwwk..',
+  '..kwWwwwkdddddddddkwwwwWwk..',
+  '..kwwwwwkdddddddddkwwwwwwk..',
+  '..kwWwwkdddddddddddkwwwWwk..',
+  '..kwwwwkdddddddddddkwwwwwk..',
+  '..kwWwwkdddddddddddkwwwWwk..',
+  '..kwwwwkdddddddddddkwwwwwk..',
+  '..kWWWWkdddddddddddkWWWWWk..',
+  '..kkkkkkkkkkkkkkkkkkkkkkkk..',
+];
+const DECOR_WOOD = { w: '#a0703c', W: '#6e4520', L: '#c8925a' };
+// The armor stand wearing the pieces you picked (helm and armor items, either may be missing).
+function standSprite(helm, armor) {
+  const tag = it => (it ? `${it.st}.${it.t}.${it.r}` : '-');
+  const key = `stand|${tag(helm)}|${tag(armor)}`;
+  let c = spriteCache.get(key);
+  if (c) return c;
+  c = document.createElement('canvas'); c.width = 24; c.height = 24;
+  const g = c.getContext('2d');
+  g.drawImage(buildSprite(STAND_PX, DECOR_WOOD), 0, 0);
+  if (armor) g.drawImage(wornSprite('charm', armor), 0, 0);
+  if (helm) g.drawImage(wornSprite('helm', helm), 0, 0);
+  spriteCache.set(key, c);
+  return c;
+}
+function doghouseSprite() { return sprite('doghouse', { r: '#c84a3a', R: '#e8705a', x: '#8a2a22', w: '#c8925a', W: '#9a6a3a', d: '#2a1a14' }, 'doghouse'); }
 
 function pickSprite(tier) {
   return sprite('pick', materialPalette(tier), 'mat' + tier);
