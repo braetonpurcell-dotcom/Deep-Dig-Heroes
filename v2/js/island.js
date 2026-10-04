@@ -386,7 +386,7 @@ function paintCaveIsle(i) {
   const behind = ([x, y]) => x > CAVE_MTN.x0 - 8 && x < CAVE_MTN.x1 + 8 && y < CAVE_MTN.base + 4;
   const ok = ([x, y]) => caveShore(x, y) < 0.8 && !behind([x, y]);
   trees.sort((a, b) => a[1] - b[1]).forEach(([x, y], k) => { if (ok([x, y]) && y < CAVE_MTN.base) forestTree(x + (r() - 0.5) * 6, y, k % 3 === 0); });
-  paintCaveMountain(ISLANDS[i].id, r);
+  if (ISLANDS[i].id === 'green') paintGreenHill(r); else paintCaveMountain(ISLANDS[i].id, r);
   trees.forEach(([x, y], k) => { if (ok([x, y]) && y >= CAVE_MTN.base) forestTree(x + (r() - 0.5) * 6, y, k % 3 === 0); });
   for (const [x, y] of [[262, 160], [372, 196], [150, 226], [270, 236]]) rock(x, y, r() < 0.5);
   if (STYLE.snow) snowman(206, 236);
@@ -397,7 +397,7 @@ function paintCaveIsle(i) {
 // Each cave island's cave is a mountain in the island's style with the mouth at its foot.
 const CAVE_MTN = { x0: 236, x1: 412, base: 184, mx: 322, mw: 46, mh: 42 }; // mx, mw, mh: the mouth's centre, width, height
 const MTN_LOOK = {
-  green: { rock: ['#b4aa98', '#958b7b', '#766d61', '#585149', '#3d3833'], cap: ['#7ccc52', '#58a83c', '#3e7e2a'], vines: true, torches: true },
+  green: { rock: ['#b4aa98', '#958b7b', '#766d61', '#585149', '#3d3833'], cap: ['#7ccc52', '#58a83c', '#3e7e2a'], vines: true }, // the hill draws itself: paintGreenHill
   frost: { rock: ['#a8bcd4', '#8298b4', '#667c98', '#4e607c', '#3a4860'], cap: ['#ffffff', '#e8f2fc', '#c4d8ee'], snow: true, icicles: true, torches: true },
   sand: { rock: ['#f2c88a', '#dca86a', '#c08850', '#9a6a3a', '#744c26'], mesa: true },
   ember: { rock: ['#6e5c58', '#544644', '#3e3433', '#2c2424', '#1c1616'], volcano: true },
@@ -529,6 +529,106 @@ function paintCaveMountain(id, r) {
   for (let k = 0; k < 10; k++) { const x = x0 + 6 + Math.round(r() * (x1 - x0 - 12)); if (Math.abs(x - mx) < mw / 2 + 6) continue; pell(x, base + 1, 3 + r() * 3, 2, OUT); pell(x, base, 2 + r() * 3, 1.5, R[1]); px(x - 1, base - 1, 2, 1, R[0]); }
 }
 
+// ---------- Greenhollow: a lush green hill ----------
+// A big rounded hill with a smaller mound behind it and a knoll in front, all grass, with flowers,
+// bushes, a tree on top and the cave dug into its face: a stone-and-earth arch with roots hanging
+// over it. Rabbits, butterflies and birds live round it (drawn live, see drawGreenLife).
+const GREEN_DOMES = [[384, 66, 48], [322, 100, 94], [256, 44, 40]]; // back to front: centre x, height, half width
+function domeTop(d, x) { const [cx, h, rx] = d, u = (x - cx) / rx; return Math.abs(u) >= 1 ? Infinity : CAVE_MTN.base - h * Math.sqrt(1 - u * u); }
+function greenTop(x) { return Math.min(...GREEN_DOMES.map(d => domeTop(d, x))) + Math.round(Math.sin(x / 4) * 0.8); }
+const GREEN = ['#a8e47a', '#88ce5a', '#6ab642', '#4f9a34', '#3a7c28', '#2a5e1e'];
+const EARTH = ['#a07c56', '#83643f', '#664c2e', '#4a3620'];
+function paintGreenHill(r) {
+  const { base, mx, mw, mh } = CAVE_MTN, x0 = 226, x1 = 434;
+  const inside = (x, y) => x > x0 && x < x1 && y <= base && y >= greenTop(x);
+  // Grass: lit from the upper left, darker toward the foot and the right; dithered between tones.
+  for (let x = x0; x < x1; x++) {
+    const top = greenTop(x);
+    if (top === Infinity) continue;
+    for (let y = Math.ceil(top); y <= base; y++) {
+      const t = (y - top) / Math.max(8, base - top), side = (x - 300) / 140;
+      const v = Math.max(0, Math.min(0.999, t * 0.75 + side * 0.35 + 0.12)), k = Math.floor(v * 5 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
+      px(x, y, 1, 1, GREEN[Math.max(0, Math.min(5, k))]);
+    }
+  }
+  // Where a front mound passes over one behind it, a soft dark seam shows the fold.
+  for (let x = x0; x < x1; x++) for (let k = 1; k < GREEN_DOMES.length; k++) {
+    const yk = domeTop(GREEN_DOMES[k], x), behind = Math.min(...GREEN_DOMES.slice(0, k).map(d => domeTop(d, x)));
+    if (yk !== Infinity && behind < yk - 2) { px(x, Math.round(yk), 1, 1, GREEN[4]); px(x, Math.round(yk) + 1, 1, 1, GREEN[3]); px(x, Math.round(yk) - 1, 1, 1, GREEN[1]); }
+  }
+  // Outline, with grass blades sticking up along the skyline.
+  for (let x = x0; x < x1; x++) for (let y = 30; y <= base; y++) if (!inside(x, y) && (inside(x - 1, y) || inside(x + 1, y) || inside(x, y + 1))) px(x, y, 1, 1, OUT);
+  for (let x = x0 + 4; x < x1 - 4; x += 3 + Math.round(hash2(x, 3) * 3)) { const top = Math.ceil(greenTop(x)); if (top === Infinity) continue; px(x, top - 3, 1, 1, OUT); px(x - 1, top - 2, 1, 1, OUT); px(x + 1, top - 2, 1, 1, OUT); px(x, top - 2, 1, 1, GREEN[1]); }
+  // Darker grass tufts and light blades over the slopes.
+  for (let k = 0; k < 140; k++) {
+    const x = x0 + 6 + r() * (x1 - x0 - 12), top = greenTop(x), y = top + 4 + r() * (base - top - 6);
+    if (top === Infinity || !inside(x, y) || inMouth(x, y + 4) || Math.abs(x - mx) < mw / 2 + 4 && y > base - mh - 8) continue;
+    if (r() < 0.6) { px(x, y, 1, 2, GREEN[4]); px(x + 2, y - 1, 1, 3, GREEN[4]); px(x + 1, y, 1, 2, GREEN[2]); } else { px(x, y, 2, 1, GREEN[0]); }
+  }
+  // The cave: an arch of stones and earth with a grassy lip, roots hanging over the mouth, rails in.
+  const top = base - mh;
+  for (let y = top - 7; y <= base; y++) for (let x = mx - mw / 2 - 7; x <= mx + mw / 2 + 7; x++) {
+    if (inMouth(x, y)) {
+      const edge = [[-1, 0], [1, 0], [0, -1]].some(([a, b]) => !inMouth(x + a, y + b));
+      const depth = Math.min(3, Math.floor((y - top) / 8) + (Math.abs(x - mx) < mw * 0.22 ? 1 : 0));
+      px(x, y, 1, 1, edge ? OUT : ['#3a2a1e', '#241a12', '#140e0a', '#080504'][depth]);
+    } else if ([[-4, 0], [4, 0], [0, -4], [-3, -3], [3, -3]].some(([a, b]) => inMouth(x + a, y + b))) {
+      const stone = hash2(Math.floor((x + 1) / 5), Math.floor((y + 2) / 4)), lip = !inMouth(x, y + 5) && y < top + 6;
+      px(x, y, 1, 1, stone < 0.12 ? OUT : stone < 0.45 ? ['#c4beb2', '#a49e94', '#868078'][Math.floor(stone * 6) % 3] : EARTH[Math.floor(stone * 7) % 3]);
+      if (lip && (y - top) < -1) px(x, y, 1, 1, GREEN[2 + (x & 1)]);
+    }
+  }
+  for (let k = 0; k < 9; k++) { // roots and vines hanging over the mouth
+    const x = mx - mw / 2 + 5 + k * 4.4 + Math.round(r() * 2), y0 = top + 2 + Math.round(Math.abs(x - mx) * 0.55), len = 3 + Math.round(r() * 6);
+    for (let j = 0; j < len; j++) px(x + (j > 3 && k % 2 ? 1 : 0), y0 + j, 1, 1, k % 3 === 0 ? GREEN[3] : j === len - 1 ? EARTH[3] : EARTH[1]);
+  }
+  for (let y = base - 10; y <= base; y += 3) px(mx - 7, y, 14, 1, '#4a2e1a');
+  px(mx - 5, base - 11, 1, 12, '#a0a0aa'); px(mx + 4, base - 11, 1, 12, '#a0a0aa');
+  // Flowers in drifts, a few bushes and stones, and trees on the crest and the back mound.
+  const fl = ['#ff7aa8', '#f8e04a', '#ffffff', '#8ab8ff', '#ff9a4a', '#d07aff'];
+  for (let k = 0; k < 26; k++) {
+    const cx = x0 + 14 + r() * (x1 - x0 - 28), ct = greenTop(cx);
+    if (ct === Infinity) continue;
+    const cy = ct + 10 + r() * (base - ct - 14), c = fl[Math.floor(r() * fl.length)];
+    for (let q = 0; q < 4; q++) { const x = cx + (r() - 0.5) * 10, y = cy + (r() - 0.5) * 5; if (inside(x, y - 2) && inside(x, y + 3) && !inMouth(x, y + 6) && !(Math.abs(x - mx) < mw / 2 + 6 && y > top - 6)) flower(x, y, c); }
+  }
+  for (const [bx, by] of [[250, 172], [404, 170], [282, 140], [366, 150]]) if (inside(bx, by)) bush(bx, by);
+  for (const [sx, sy] of [[240, 180], [420, 178], [300, 120]]) if (inside(sx, sy)) rock(sx, sy, false);
+  tree(300, Math.round(greenTop(300)) + 3); tree(392, Math.round(greenTop(392)) + 3);
+}
+// Wildlife round the green hill: rabbits that hop about and stop to nibble, butterflies over the
+// flowers, and two birds that sit in the crest tree and now and then fly a loop.
+function drawGreenLife(g, dt, t) {
+  const W = WORLD.green || (WORLD.green = { rabbits: [{ x: 262, y: 200, tx: 262, wait: 1, dir: 1, hop: 0 }, { x: 380, y: 206, tx: 380, wait: 3, dir: -1, hop: 0 }] });
+  for (const b of W.rabbits) {
+    if (b.wait > 0) { b.wait -= dt; if (b.wait <= 0) { b.tx = Math.max(236, Math.min(420, b.x + (Math.random() - 0.5) * 50)); b.dir = b.tx > b.x ? 1 : -1; } }
+    else { const step = 18 * dt; b.hop += dt * 7; if (Math.abs(b.tx - b.x) <= step) { b.x = b.tx; b.wait = 1.5 + Math.random() * 3; b.hop = 0; } else b.x += Math.sign(b.tx - b.x) * step; }
+    const lift = b.wait > 0 ? 0 : Math.round(Math.abs(Math.sin(b.hop)) * 3), x = Math.round(b.x), y = Math.round(b.y) - lift, d = b.dir, nib = b.wait > 0 && Math.sin(t * 9 + b.y) > 0.3;
+    const prev = WORLD.ctx; WORLD.ctx = g;
+    g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(x - 3, b.y + 1, 7, 1);
+    const fx = (ox, w) => d > 0 ? x + ox : x - ox - w + 1;
+    parts([[fx(-3, 6), y - 4, 6, 4, '#e8dccb'], [fx(2, 4), y - 7 + (nib ? 1 : 0), 4, 3, '#e8dccb'], [fx(3, 1), y - 10 + (nib ? 1 : 0), 1, 3, '#e8dccb'], [fx(5, 1), y - 10 + (nib ? 1 : 0), 1, 3, '#e8dccb']]);
+    px(fx(-4, 2), y - 4, 2, 2, '#ffffff'); px(fx(4, 1), y - 6 + (nib ? 1 : 0), 1, 1, OUT); px(fx(3, 1), y - 9 + (nib ? 1 : 0), 1, 1, '#f0a8b8');
+    WORLD.ctx = prev;
+  }
+  for (let i = 0; i < 4; i++) {
+    const [cx, cy] = [[262, 150], [300, 112], [360, 130], [404, 158]][i], x = cx + Math.sin(t * 0.8 + i * 2) * 16, y = cy + Math.sin(t * 1.5 + i) * 7;
+    const open = Math.floor(t * 9 + i) % 2, c = ['#ffffff', '#f8e04a', '#ff9ad0', '#6fb2ff'][i];
+    g.fillStyle = c; if (open) { g.fillRect(Math.round(x) - 2, Math.round(y), 2, 2); g.fillRect(Math.round(x) + 1, Math.round(y), 2, 2); } else g.fillRect(Math.round(x), Math.round(y) - 1, 1, 2);
+    g.fillStyle = OUT; g.fillRect(Math.round(x), Math.round(y), 1, 2);
+  }
+  const tx = 300, ty = Math.round(greenTop(300)) - 18;
+  for (let i = 0; i < 2; i++) {
+    const cyc = (t + i * 5) % 12, flying = cyc > 9;
+    let bx = tx - 5 + i * 9, by = ty + (i ? 2 : 0);
+    if (flying) { const a = (cyc - 9) / 3 * Math.PI * 2; bx += Math.sin(a) * 40; by -= Math.sin(a / 2) * 26; }
+    const fl = flying && Math.floor(t * 10) % 2;
+    g.fillStyle = OUT; g.fillRect(Math.round(bx), Math.round(by), 2, 2); g.fillStyle = i ? '#c84a3a' : '#5a7ad8'; g.fillRect(Math.round(bx), Math.round(by), 1, 1);
+    if (flying) { g.fillStyle = OUT; g.fillRect(Math.round(bx) - 2, Math.round(by) - (fl ? 1 : 0), 2, 1); g.fillRect(Math.round(bx) + 2, Math.round(by) - (fl ? 1 : 0), 2, 1); }
+    else { g.fillStyle = '#f8c040'; g.fillRect(Math.round(bx) + 2, Math.round(by) + 1, 1, 1); }
+  }
+}
+
 // What moves on the cave island: sparkles on the sea, the cave's lanterns, a boss's red eyes, the
 // boat at the dock, you, the weather and the clouds.
 function drawCaveLive(g, dt, t) {
@@ -549,6 +649,7 @@ function drawCaveLive(g, dt, t) {
   if (look.crystals) for (let k = 0; k < 5; k++) glow(g, M.mx + [-28, -22, 22, 28, 0][k], k === 4 ? M.base - M.mh - 14 : M.base - 8, 12 + Math.sin(t * 2 + k) * 2, 'rgba(160,220,255,0.18)');
   if (look.volcano) { for (const s of WORLD.smoke) { s.t += dt; s.y -= dt * 9; s.x += dt * (2 + s.t); g.fillStyle = `rgba(90,80,80,${Math.max(0, 0.6 - s.t * 0.12)})`; const rr = 3 + Math.round(s.t * 1.6); g.fillRect(Math.round(s.x - rr / 2), Math.round(s.y - rr / 2), rr, rr); } WORLD.smoke = WORLD.smoke.filter(s => s.t < 5); }
   if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { const cx = CAVE_MTN.mx, ey = CAVE_MTN.base - 16; g.fillStyle = '#ff3040'; g.fillRect(cx - 6, ey, 2, 1); g.fillRect(cx + 4, ey, 2, 1); glow(g, cx, ey + 2, 14, 'rgba(255,40,60,0.25)'); }
+  if (ISLANDS[WORLD.isle].id === 'green') drawGreenLife(g, dt, t);
   drawBoat(g, CAVE_PIER.x0 - 2, CAVE_PIER.y1 + 2, t);
   drawMe(g, t);
   drawBubbles(g, dt);
