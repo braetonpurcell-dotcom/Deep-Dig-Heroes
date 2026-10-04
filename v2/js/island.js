@@ -543,13 +543,18 @@ function paintCaveMountain(id, r) {
 // A big rounded hill with a smaller mound behind it and a knoll in front, all grass, with flowers,
 // bushes, a tree on top and the cave dug into its face: a stone-and-earth arch with roots hanging
 // over it. Rabbits, butterflies and birds live round it (drawn live, see drawGreenLife).
-const GREEN_DOMES = [[384, 66, 48], [322, 100, 94], [256, 44, 40]]; // back to front: centre x, height, half width
+const GREEN_DOMES = [[386, 66, 48], [322, 100, 94], [252, 44, 44]]; // back to front: centre x, height, half width
 function domeTop(d, x) { const [cx, h, rx] = d, u = (x - cx) / rx; return Math.abs(u) >= 1 ? Infinity : CAVE_MTN.base - h * Math.sqrt(1 - u * u); }
-function greenTop(x) { return Math.min(...GREEN_DOMES.map(d => domeTop(d, x))) + Math.round(Math.sin(x / 4) * 0.8); }
+// The mounds are round, but their outer feet flare into the grass instead of ending in a sheer side.
+const GREEN_L = 208, GREEN_R = 434;
+function greenTop(x) {
+  const y = Math.min(...GREEN_DOMES.map(d => domeTop(d, x)));
+  return y === Infinity ? y : Math.max(y, CAVE_MTN.base - Math.min(x - GREEN_L, GREEN_R - x) * 1.4) + Math.round(Math.sin(x / 4) * 0.8);
+}
 const GREEN = ['#a8e47a', '#88ce5a', '#6ab642', '#4f9a34', '#3a7c28', '#2a5e1e'];
 const EARTH = ['#a07c56', '#83643f', '#664c2e', '#4a3620'];
 function paintGreenHill(r) {
-  const { base, mx, mw, mh } = CAVE_MTN, x0 = 226, x1 = 434;
+  const { base, mx, mw, mh } = CAVE_MTN, x0 = 206, x1 = 436;
   const inside = (x, y) => x > x0 && x < x1 && y <= base && y >= greenTop(x);
   // Grass: lit from straight above, lighter on the crest and darker toward the foot; dithered between tones.
   for (let x = x0; x < x1; x++) {
@@ -624,45 +629,56 @@ function paintCaveRails(dark) {
   }
 }
 // ---------- Frostpeak: a glacier peak with an ice cave ----------
-// A tall snow mountain with dark cliffs showing through, bluer toward its foot. The cave
-// is cut into glacier ice at its foot: bands of glowing blue ice round the mouth, icicles, and a
-// deep blue inside instead of black. Snowdrifts pile round the base. Hares, an arctic fox and a
-// snowy owl live here (drawn live, see drawFrostLife).
-const FROST_PEAKS = [[318, 18, 1.3], [272, 72, 1.05], [370, 56, 1.2], [404, 112, 0.9]];
+// Frostpeak's cave is a great iceberg run aground: a jagged mass of glacier ice, all sharp spires and
+// flat-topped slabs, its faces split by clean creases into facets of pale and deep blue, with snow
+// lying only on the flat tops. The cave is cut into its foot: bands of glowing ice round the mouth,
+// icicles, and a deep blue inside instead of black. Hares, an arctic fox and a snowy owl live here
+// (drawn live, see drawFrostLife).
+// The berg's outline, left foot to right foot. The dip at x 346 is where the yeti peeks.
+const FROST_BERG = [[226, 185], [232, 160], [244, 152], [248, 128], [264, 122], [270, 92], [286, 86], [294, 54], [304, 48], [314, 22], [322, 32], [330, 26], [338, 56], [346, 62], [354, 58], [362, 38], [370, 46], [378, 82], [392, 88], [398, 116], [412, 122], [418, 150], [428, 156], [432, 185]];
 const SNOW = ['#ffffff', '#f0f6fc', '#dce8f4', '#bcd2ea', '#98b6d8'];
 const CLIFF = ['#6c7690', '#535c74', '#3c4458', '#2a3040'];
 const ICE = ['#e0faff', '#a8ecfc', '#6ad2f2', '#3aa6d8', '#2478b0'];
+const BERG = ['#ffffff', '#e8faff', '#c8f0fc', '#a2e0f6', '#78c8ec', '#4ea8dc', '#2f80bc', '#1e5c94'];
 function frostTop(x) {
-  const { base } = CAVE_MTN, x0 = 228, x1 = 424;
-  if (x < x0 || x > x1) return Infinity;
-  let y = Math.min(...FROST_PEAKS.map(([px_, py, k]) => py + Math.abs(x - px_) * k)) + Math.round(Math.sin(x / 2.7) * 1 + hash2(x, 8) * 2);
-  y = Math.max(y, base - Math.min(x - x0, x1 - x) * 2.3);
-  return Math.min(base + 1, Math.round(y));
+  const B = FROST_BERG;
+  if (x < B[0][0] || x > B[B.length - 1][0]) return Infinity;
+  for (let i = 0; i < B.length - 1; i++) {
+    const [ax, ay] = B[i], [bx, by] = B[i + 1];
+    if (x >= ax && x <= bx) return Math.min(CAVE_MTN.base + 1, Math.round(bx === ax ? Math.min(ay, by) : ay + (by - ay) * (x - ax) / (bx - ax)));
+  }
+  return Infinity;
 }
+// Creases run down from each corner of the outline, splitting the faces into facets.
+// They fan outward and down from the spires, so the facets are slanted wedges, not vertical strips.
+const FROST_CREASES = [[248, 128, -14], [270, 92, -30], [294, 54, -40], [314, 22, -22], [322, 32, 8], [338, 56, 34], [362, 38, 30], [378, 82, 40], [398, 116, 22]];
 function paintFrostPeak(r) {
-  const { base, mx, mw, mh } = CAVE_MTN, x0 = 228, x1 = 424, inside = (x, y) => y <= base && y >= frostTop(x);
+  const { base, mx, mw, mh } = CAVE_MTN, x0 = 226, x1 = 432, inside = (x, y) => y <= base && y >= frostTop(x);
+  // Which facet a point is on: count the creases to its left at that height (each facet edge runs the
+  // full height, so tones never change along a flat line; the dark crease only shows below its corner).
+  const facet = (x, y) => { let n = 0; for (const [cx, cy, lean] of FROST_CREASES) if (x > cx + lean * (y - cy) / (base - cy)) n++; return n; };
+  const onCrease = (x, y) => FROST_CREASES.some(([cx, cy, lean]) => y > cy + 1 && Math.round(cx + lean * (y - cy) / (base - cy)) === x);
   for (let x = x0; x <= x1; x++) {
     const top = frostTop(x);
     if (top === Infinity) continue;
+    // a flat stretch of outline is a slab top where snow settles; steep stretches stay bare ice
+    const flat = Math.abs(frostTop(x + 2) - frostTop(x - 2)) <= 3, snowDepth = flat ? 3 + Math.round(hash2(x >> 2, 5) * 2) : 1;
     for (let y = top; y <= base; y++) {
-      const depth = y - top;
-      const t = Math.min(1, depth / 120), k = Math.floor(0.2 + t * 1.8 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
-      let c = SNOW[Math.max(0, Math.min(4, k))];
-      if ((y + Math.round(Math.sin(x / 6) * 3)) % 17 === 0 && hash2(x >> 2, y) < 0.5) c = SNOW[2]; // wind-blown ridges
+      const d = y - top, f = facet(x, y), tone = [0, 2, 1, 3, 0, 2, 1, 3, 1, 2][f % 10];
+      let k = 2 + tone; // each facet one flat tone, like cut crystal
+      if (y > base - 10 + (BAYER[(y & 3) * 4 + (x & 3)] > 0.5 ? 2 : 0)) k++; // the foot, darker where it sits in the snow
+      let c = BERG[Math.max(0, Math.min(7, k))];
+      if (d < snowDepth) c = d === snowDepth - 1 && flat ? SNOW[2] : '#ffffff';
+      else if (onCrease(x, y)) c = BERG[Math.min(7, k + 2)];
+      else if (onCrease(x - 1, y)) c = BERG[1]; // the sharp lit edge just past a crease
       px(x, y, 1, 1, c);
     }
   }
   for (let x = x0 - 1; x <= x1 + 1; x++) for (let y = 0; y <= base; y++) if (!inside(x, y) && (inside(x - 1, y) || inside(x + 1, y) || inside(x, y + 1))) px(x, y, 1, 1, OUT);
-  // Rock outcrops where the slope is too steep for snow: jagged dark crags with snow on their tops.
-  for (const [cx, cy, w, h] of [[288, 100, 24, 30], [350, 86, 18, 24], [404, 136, 18, 22], [262, 146, 22, 20], [376, 120, 12, 14], [306, 60, 10, 12]]) {
-    // A lumpy, lopsided crag: wide at its foot, uneven on top, its edges stepping in and out.
-    const inCrag = (x, y) => { const v = (y - (cy - h / 2)) / h; if (v < 0 || v > 1) return false; const jag = (hash2(Math.floor(y / 3), cx) - 0.5) * 6 + Math.sin(x / 3 + cx) * 2; return Math.abs(x - cx) < w / 2 * (0.45 + 0.55 * Math.sqrt(v)) + jag * 0.5 && y >= cy - h / 2 + Math.abs(Math.sin((x - cx) / 3.5)) * 4 && inside(x, y); };
-    for (let y = cy - h / 2 - 1; y <= cy + h / 2 + 1; y++) for (let x = cx - w / 2 - 4; x <= cx + w / 2 + 4; x++) {
-      if (inCrag(x, y)) {
-        const sh = false, snowTop = !inCrag(x, y - 1) || !inCrag(x, y - 2);
-        px(x, y, 1, 1, snowTop ? SNOW[sh ? 2 : 0] : CLIFF[(sh ? 1 : 0) + (hash2(x >> 1, y >> 1) < 0.2 ? 1 : 0)]);
-      } else if (inCrag(x - 1, y) || inCrag(x + 1, y) || inCrag(x, y + 1) || inCrag(x, y - 1)) px(x, y, 1, 1, CLIFF[3]);
-    }
+  // Small ice shards standing loose round the foot.
+  for (const [sx, h, w] of [[240, 14, 5], [258, 9, 4], [404, 12, 5], [420, 8, 4]]) {
+    for (let j = 0; j < h; j++) { const ww = Math.max(1, Math.round(w * (j + 1) / h)), l = sx - (ww >> 1); px(l - 1, base + 2 - h + j, ww + 2, 1, OUT); px(l, base + 2 - h + j, ww, 1, BERG[j < 2 ? 1 : 3]); px(l + ww - 1, base + 2 - h + j, 1, 1, BERG[5]); }
+    px(sx - (w >> 1) - 1, base + 2, w + 2, 1, OUT);
   }
   // The ice cave: a wide arch of glacier ice in bands, lit from inside.
   const top = base - mh - 2;
@@ -688,10 +704,9 @@ function paintFrostPeak(r) {
     for (let j = 0; j < len; j++) px(x, y0 + j, j < len - 2 ? 2 : 1, 1, j < 2 ? ICE[0] : j < len - 1 ? ICE[1] : '#ffffff');
   }
   paintCaveRails(['#2a6aa0', '#1a4a7c', '#0f2e58', '#081a38']);
-  // Snowdrifts piled round the foot, a frozen puddle and a few rocks poking out of the snow.
+  // Snowdrifts piled round the foot and a frozen puddle.
   for (const [dx, w] of [[-80, 22], [-56, 14], [42, 18], [70, 24], [92, 12]]) { const x = mx + dx; pell(x, base + 1, w / 2 + 1, 5, OUT); pell(x, base, w / 2, 4.5, SNOW[1]); pell(x - 2, base - 1, w / 2 - 3, 2.5, SNOW[0]); px(x - w / 4, base + 3, w / 2, 1, SNOW[3]); }
   pell(mx - 64, base + 22, 14, 4, OUT); pell(mx - 64, base + 22, 13, 3.4, '#bfe8fa'); px(mx - 70, base + 21, 6, 1, '#ffffff'); px(mx - 58, base + 23, 4, 1, '#ffffff');
-  for (const [x, y] of [[mx + 60, base - 30], [mx - 74, base - 22]]) { if (!inside(x, y)) continue; pell(x, y, 4, 3, OUT); pell(x, y, 3, 2, CLIFF[1]); px(x - 2, y - 2, 4, 1, SNOW[0]); }
   // A frozen waterfall spilling down the right shoulder into an ice pool.
   const wx = FROST_FALL.x, wTop = frostTop(wx) + 8;
   for (let y = wTop; y <= base; y++) {
@@ -775,7 +790,7 @@ function drawFrostLife(g, dt, t) {
     if (up > 0) {
       const YETI = ['..kkkkkk..', '.kwwwwwwk.', 'kwwwwwwwwk', 'kwbbbbbbwk', 'kwbebbebwk', 'kwbbbbbbwk', 'kwbbkkbbwk', 'kwwbbbbwwk', 'kwwwwwwwwk', 'kwwwwwwwwk'];
       const yc = { k: OUT, w: '#ffffff', b: '#7a9ab8', e: (cyc % 2.5) < 0.1 ? '#7a9ab8' : OUT };
-      const yx = 358, yy = frostTop(358) + 1 - Math.round(up * 13);
+      const yx = 346, yy = frostTop(346) + 1 - Math.round(up * 13);
       YETI.forEach((row, j) => [...row].forEach((ch, c) => { const x = yx - 5 + c, y = yy + j; if (ch !== '.' && y < frostTop(x)) px(x, y, 1, 1, yc[ch]); }));
       if (up === 1 && cyc > 4.5 && cyc < 5.5) { px(yx - 8, yy + 2, 2, 4, OUT); px(yx - 7, yy + 3, 1, 3, '#ffffff'); } // a wave
     } }
