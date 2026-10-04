@@ -47,7 +47,7 @@ const CAVE_SHORE = { x: 238, y: 172, rx: 196, ry: 118 };
 const CAVE_PIER = { x0: 4, x1: 74, y0: 192, y1: 208 };
 const CAVE_BUILDINGS = [
   { tab: 'dock', name: 'Boat', x: 0, y: 194, w: 30, h: 30, dx: 12 },
-  { tab: 'fight', name: 'Cave', x: 290, y: 112, w: 64, h: 58, dx: 322 },
+  { tab: 'fight', name: 'Cave', x: 296, y: 140, w: 52, h: 46, dx: 322 },
 ];
 const CAVE_ROAD = [[20, 200], [70, 200], [130, 205], [190, 201], [250, 194], [298, 186], [318, 178], [322, 172]];
 function smoothRoad(pts) {
@@ -332,7 +332,7 @@ function paintCaveIsle(i) {
   for (let cy = 0; cy < GR; cy++) for (let cx = 0; cx < GC; cx++) {
     const x = cx * CELL + 1, y = cy * CELL + 1, e = caveShore(x, y);
     let t = T.WATER;
-    if (e < 0.86) t = caveHill(x, y) < 1 && y < 182 ? T.ROCK : road[cy * GC + cx] ? T.ROAD : T.GRASS;
+    if (e < 0.86) t = road[cy * GC + cx] ? T.ROAD : T.GRASS;
     else if (e < 1) t = T.SAND;
     cell[cy * GC + cx] = t;
   }
@@ -379,19 +379,156 @@ function paintCaveIsle(i) {
     const cx = 80 + r() * 320, cy = 150 + r() * 110, c = STYLE.flowers[Math.floor(r() * STYLE.flowers.length)];
     for (let q = 0; q < 3; q++) { const x = cx + (r() - 0.5) * 10, y = cy + (r() - 0.5) * 6; if (grassy(x, y, 4)) flower(x, y, c); }
   }
-  // Cracks on the hill, then the cave mouth shifted onto it.
-  for (let k = 0; k < 26; k++) { const x = CAVE_HILL.x - 58 + r() * 116, y = 100 + r() * 70; if (terrainAt(x, y) === T.ROCK && terrainAt(x, y - 6) === T.ROCK) { px(x, y, 1, 3 + r() * 4, STYLE.rockLo); px(x + 1, y, 1, 2, STYLE.rockHi); } }
-  g.save(); g.translate(CAVE_DX, 0); paintCave(); g.restore();
   paintDock(CAVE_PIER);
   // Trees and rocks round the island, back to front.
   const trees = [[96, 150], [128, 128], [168, 118], [210, 122], [244, 116], [398, 160], [414, 196], [392, 232], [118, 254], [168, 266], [236, 270], [300, 262], [352, 254], [84, 222],
     [118, 96], [160, 82], [206, 74], [250, 80], [96, 120], [190, 100], [232, 98], [140, 106], [62, 176], [70, 250]];
-  trees.sort((a, b) => a[1] - b[1]).forEach(([x, y], k) => { if (caveShore(x, y) < 0.8) forestTree(x + (r() - 0.5) * 6, y, k % 3 === 0); });
+  const behind = ([x, y]) => x > CAVE_MTN.x0 - 8 && x < CAVE_MTN.x1 + 8 && y < CAVE_MTN.base + 4;
+  const ok = ([x, y]) => caveShore(x, y) < 0.8 && !behind([x, y]);
+  trees.sort((a, b) => a[1] - b[1]).forEach(([x, y], k) => { if (ok([x, y]) && y < CAVE_MTN.base) forestTree(x + (r() - 0.5) * 6, y, k % 3 === 0); });
+  paintCaveMountain(ISLANDS[i].id, r);
+  trees.forEach(([x, y], k) => { if (ok([x, y]) && y >= CAVE_MTN.base) forestTree(x + (r() - 0.5) * 6, y, k % 3 === 0); });
   for (const [x, y] of [[262, 160], [372, 196], [150, 226], [270, 236]]) rock(x, y, r() < 0.5);
   if (STYLE.snow) snowman(206, 236);
   WORLD.ctx = prev;
   return cv;
 }
+// ---------- the cave mountains ----------
+// Each cave island's cave is a mountain in the island's style with the mouth at its foot.
+const CAVE_MTN = { x0: 236, x1: 412, base: 184, mx: 322, mw: 46, mh: 42 }; // mx, mw, mh: the mouth's centre, width, height
+const MTN_LOOK = {
+  green: { rock: ['#b4aa98', '#958b7b', '#766d61', '#585149', '#3d3833'], cap: ['#7ccc52', '#58a83c', '#3e7e2a'], vines: true, torches: true },
+  frost: { rock: ['#a8bcd4', '#8298b4', '#667c98', '#4e607c', '#3a4860'], cap: ['#ffffff', '#e8f2fc', '#c4d8ee'], snow: true, icicles: true, torches: true },
+  sand: { rock: ['#f2c88a', '#dca86a', '#c08850', '#9a6a3a', '#744c26'], mesa: true },
+  ember: { rock: ['#6e5c58', '#544644', '#3e3433', '#2c2424', '#1c1616'], volcano: true },
+  star: { rock: ['#7a6ab0', '#62549a', '#4a3e7c', '#352c5e', '#241e42'], crystals: true },
+};
+const MTN_PEAKS = [[322, 30, 1.45], [284, 70, 1.2], [366, 60, 1.35], [262, 112, 0.9], [392, 104, 1.0]];
+// Which side of a ridge a point is on: the tallest peak above it splits light (left) from shade (right).
+function mtnShade(look, x, y) {
+  if (look.mesa || look.volcano) return x > CAVE_MTN.mx ? 1 : 0;
+  let best = null;
+  for (const [px_, py, k] of MTN_PEAKS) if (py + Math.abs(x - px_) * k <= y + 2 && (!best || py < best[1])) best = [px_, py];
+  return best && x > best[0] ? 1 : 0;
+}
+// The mountain's skyline: the lowest of a few peaks' slopes, with a little rough edge.
+function mtnTop(look, x) {
+  const { x0, x1, base } = CAVE_MTN;
+  if (x < x0 || x > x1) return base + 1;
+  let y;
+  if (look.mesa) y = 78 + (x < 262 ? Math.ceil((262 - x) / 9) * 18 : x > 384 ? Math.ceil((x - 384) / 9) * 18 : 0) + Math.round(hash2(x >> 3, 9) * 1.5);
+  else if (look.volcano) { const d = Math.abs(x - 323); y = d < 15 ? 52 + Math.round(hash2(x, 3) * 2) : 52 + (d - 15) * 1.32 + Math.sin(x / 5) * 2; }
+  else {
+    const peaks = MTN_PEAKS;
+    y = Math.min(...peaks.map(([px_, py, k]) => py + Math.abs(x - px_) * k));
+    y += Math.round(Math.sin(x / 3.1) * 1.2 + hash2(x, 5) * 2.4);
+  }
+  // Foothills: the slopes always run down to the ground at both ends.
+  const foot = Math.min(x - x0, x1 - x);
+  if (!look.mesa) y = Math.max(y, base - foot * (look.volcano ? 1.6 : 2.6));
+  return Math.min(base + 1, Math.round(y));
+}
+function inMouth(x, y) {
+  const { mx, mw, mh, base } = CAVE_MTN, dx = (x - mx) / (mw / 2), top = base - mh;
+  if (Math.abs(dx) >= 1 || y > base) return false;
+  return y >= top + mh * 0.42 * (1 - Math.sqrt(1 - dx * dx)) * 1.9 + (1 - Math.sqrt(1 - dx * dx)) * mh * 0.35;
+}
+function paintCaveMountain(id, r) {
+  const look = MTN_LOOK[id] || MTN_LOOK.green, R = look.rock, { x0, x1, base, mx, mw, mh } = CAVE_MTN;
+  const ridge = look.volcano || look.mesa ? mx : 324;
+  // Body: lit from the left; the right of the ridge sits in shade. Strata every 9 pixels, each with
+  // a dark crack and a lit lip under it, like the cliffs in the old Pokemon games.
+  for (let x = x0; x <= x1; x++) {
+    const top = mtnTop(look, x);
+    for (let y = top; y <= base; y++) {
+      const shade = mtnShade(look, x, y), band = look.mesa ? 7 : 13;
+      const rel = (base - y + (look.mesa ? 0 : Math.round(Math.sin(x / 7) * 3 + Math.sin(x / 17) * 4))) % band, broken = hash2(Math.floor(x / 5), Math.floor((base - y) / band)) < (look.mesa ? 0.1 : 0.35);
+      // Clean two-tone faces, a touch darker toward the foot, with sparse speckles and strata.
+      let c = R[1 + shade + (y > base - 30 && hash2(x >> 1, y >> 1) < 0.5 ? 1 : 0)];
+      if (!broken && rel === 0) c = R[Math.min(4, 3 + shade)];
+      else if (!broken && rel === band - 1) c = R[shade];
+      else if (hash2(x, y) < 0.035) c = R[Math.min(4, 3 + shade)];
+      else if (hash2(x + 7, y) < 0.025) c = R[shade];
+      if (y < top + 2) c = R[shade];
+      if (look.mesa && y < top + 6) c = y < top + 1 ? R[0] : shade ? R[1] : R[0];
+      px(x, y, 1, 1, c);
+    }
+  }
+  // A solid 1-pixel outline round the whole silhouette.
+  const inside = (x, y) => x >= x0 && x <= x1 && y <= base && y >= mtnTop(look, x);
+  for (let x = x0 - 1; x <= x1 + 1; x++) for (let y = 0; y <= base; y++) if (!inside(x, y) && (inside(x - 1, y) || inside(x + 1, y) || inside(x, y + 1))) px(x, y, 1, 1, OUT);
+  // Caps on the peaks and ledges: snow or grass, dripping down a little.
+  if (look.cap) {
+    for (let x = x0 + 1; x < x1; x++) {
+      const top = mtnTop(look, x), deep = look.snow ? (top < 90 ? 7 + Math.round(hash2(x, 1) * 5) : 2) : 2 + Math.round(hash2(x, 2) * 2);
+      for (let y = top; y < top + deep; y++) px(x, y, 1, 1, look.cap[y - top < 2 ? 0 : 1]);
+      if (hash2(x, 4) < 0.18) px(x, top + deep, 1, 2, look.cap[2]);
+      for (let y = top + 12; y < base - 8; y++) if ((base - y + Math.round(Math.sin(x / 7) * 3 + Math.sin(x / 17) * 4)) % 13 === 12 && hash2(Math.floor(x / 4), y) < (look.snow ? 0.32 : 0.4)) { px(x, y - 1, 1, 1, look.cap[0]); px(x, y, 1, 1, look.cap[1]); }
+    }
+  }
+  if (look.vines) for (let k = 0; k < 14; k++) { const x = x0 + 10 + Math.round(r() * (x1 - x0 - 20)), y = mtnTop(look, x) + 2, len = 6 + Math.round(r() * 14); for (let j = 0; j < len; j++) px(x + (j % 5 === 4 ? 1 : 0), y + j, 1, 1, j % 3 ? '#3e7e2a' : '#58a83c'); }
+  // Mesa: carved bands and a temple door instead of a natural mouth.
+  if (look.mesa) {
+    for (let x = x0 + 2; x < x1 - 1; x++) { const top = mtnTop(look, x); px(x, top + 3, 1, 1, R[0]); if (x % 6 < 3) px(x, top + 6, 1, 1, R[3]); }
+  }
+  // Volcano: a glowing crater and lava running down the sides.
+  if (look.volcano) {
+    for (let x = mx - 14; x <= mx + 14; x++) { const top = mtnTop(look, x); px(x, top, 1, 2, x % 3 ? '#ff8a2a' : '#ffd060'); }
+    for (const [sx, dir] of [[mx - 10, -1], [mx + 9, 1], [mx - 3, -1]]) {
+      let x = sx, y = mtnTop(look, sx) + 2;
+      while (y < base - mh - 6) { px(x, y, 2, 1, hash2(x, y) < 0.3 ? '#ffd060' : '#ff6a1a'); px(x + 2, y, 1, 1, '#a8320e'); y += 1; if (hash2(x, y) < 0.45) x += dir; }
+    }
+  }
+  // The mouth: a dark arch with rocks round its rim, deeper and darker inside.
+  const top = base - mh, inner = look.volcano ? ['#ff9a2a', '#d8501a', '#7a1e0c', '#3a0c06'] : look.crystals ? ['#3a2a5e', '#24183e', '#140c26', '#0a0614'] : ['#3a2c26', '#241a16', '#140e0c', '#080505'];
+  if (look.mesa) {
+    // Temple door: a stepped stone frame with pillars and a glyph lintel.
+    const dw = 26, dh = 30, dx0 = mx - dw / 2, dy0 = base - dh;
+    parts([[dx0 - 9, dy0 - 10, dw + 18, 8, R[0]], [dx0 - 8, dy0 - 2, 6, dh + 2, R[0]], [dx0 + dw + 2, dy0 - 2, 6, dh + 2, R[0]]]);
+    for (const xx of [dx0 - 7, dx0 + dw + 3]) for (let y = dy0; y < base; y += 4) px(xx, y, 4, 1, R[2]);
+    for (let k = 0; k < 7; k++) px(dx0 - 4 + k * 5, dy0 - 7, 3, 3, k % 2 ? '#3a7ab8' : R[3]);
+    px(dx0, dy0, dw, dh, OUT);
+    for (let y = 0; y < dh; y++) px(dx0 + 1, dy0 + 1 + y, dw - 2, 1, inner[Math.min(3, Math.floor(y / 4))]);
+    px(dx0 + 1, dy0 + 1, dw - 2, 2, inner[0]);
+  } else {
+    for (let y = top - 6; y <= base; y++) for (let x = mx - mw / 2 - 6; x <= mx + mw / 2 + 6; x++) {
+      if (inMouth(x, y)) {
+        const edge = [[-1, 0], [1, 0], [0, -1]].some(([a, b]) => !inMouth(x + a, y + b));
+        const depth = Math.min(3, Math.floor((y - top) / 7) + (Math.abs(x - mx) < mw * 0.2 ? 1 : 0));
+        px(x, y, 1, 1, edge ? OUT : inner[depth]);
+      } else if ([[-3, 0], [3, 0], [0, -3], [-2, -2], [2, -2]].some(([a, b]) => inMouth(x + a, y + b)) && y >= mtnTop(look, x)) {
+        // the rim: big stones, lit on top
+        const k = hash2(Math.floor(x / 4), Math.floor(y / 3));
+        px(x, y, 1, 1, k < 0.15 ? OUT : inMouth(x, y + 3) ? R[0] : k < 0.5 ? R[1] : R[2]);
+      }
+    }
+    // Teeth: stalactites (or icicles) hanging inside the arch, and rails running in.
+    for (let k = -3; k <= 3; k++) {
+      const x = mx + k * 5, y0 = top + Math.round(mh * 0.12 + Math.abs(k) * 2.4), len = look.icicles ? 5 + (k & 1) * 3 : 3 + (k & 1) * 2;
+      if (!inMouth(x, y0 + 1)) continue;
+      for (let j = 0; j < len; j++) px(x, y0 + j, j < len - 1 ? 2 : 1, 1, look.icicles ? (j < 2 ? '#ffffff' : '#a8e8ff') : R[3]);
+    }
+    if (!look.volcano) { for (let y = base - 10; y <= base; y += 3) px(mx - 7, y, 14, 1, '#4a2e1a'); px(mx - 5, base - 11, 1, 12, '#a0a0aa'); px(mx + 4, base - 11, 1, 12, '#a0a0aa'); }
+    else for (let x = mx - mw / 2 + 3; x < mx + mw / 2 - 3; x++) if (inMouth(x, base - 1)) px(x, base - 2, 1, 2, x % 4 ? '#ffd060' : '#ff8a2a');
+  }
+  // Crystals: glowing clusters on the slopes and round the mouth.
+  if (look.crystals) {
+    const cols = [['#ffffff', '#bff8ff', '#6ae0ff', '#2a8ac0'], ['#ffffff', '#ffd0f8', '#ff9af0', '#b04ab0'], ['#ffffff', '#e0c8ff', '#c06aff', '#6a2ab0']];
+    for (let k = 0; k < 11; k++) {
+      const near = k < 5, x = near ? mx + [-30, -23, 23, 30, 0][k] : x0 + 24 + Math.round(r() * (x1 - x0 - 48)), c = cols[k % 3];
+      const yb = near ? (k === 4 ? top - 8 : base - 2) : Math.max(mtnTop(look, x) + 18, Math.min(base - 16, mtnTop(look, x) + 22 + Math.round(r() * 40)));
+      const h = near ? 18 + (k % 2) * 8 : 12 + Math.round(r() * 8);
+      for (const [ox, sc] of [[0, 1], [-3, 0.6], [3, 0.7]]) {
+        const hh = Math.round(h * sc);
+        for (let j = 0; j < hh; j++) { const w = Math.max(1, Math.round((1 - j / hh) * 5)); px(x + ox - Math.floor(w / 2) - 1, yb - j, w + 2, 1, OUT); }
+        for (let j = 0; j < hh - 1; j++) { const w = Math.max(1, Math.round((1 - j / hh) * 5)); px(x + ox - Math.floor(w / 2), yb - j, w, 1, j > hh - 4 ? c[0] : c[2]); px(x + ox - Math.floor(w / 2), yb - j, 1, 1, c[1]); if (w > 2) px(x + ox + Math.ceil(w / 2) - 1, yb - j, 1, 1, c[3]); }
+      }
+    }
+  }
+  // Rubble at the foot and a few boulders.
+  for (let k = 0; k < 10; k++) { const x = x0 + 6 + Math.round(r() * (x1 - x0 - 12)); if (Math.abs(x - mx) < mw / 2 + 6) continue; pell(x, base + 1, 3 + r() * 3, 2, OUT); pell(x, base, 2 + r() * 3, 1.5, R[1]); px(x - 1, base - 1, 2, 1, R[0]); }
+}
+
 // What moves on the cave island: sparkles on the sea, the cave's lanterns, a boss's red eyes, the
 // boat at the dock, you, the weather and the clouds.
 function drawCaveLive(g, dt, t) {
@@ -402,8 +539,16 @@ function drawCaveLive(g, dt, t) {
     g.fillStyle = wk === 'lava' ? '#ffd060' : wk === 'night' ? '#fff4a8' : '#ffffff'; g.fillRect(Math.round(x), Math.round(y), 2, 1);
   }
   if (wk === 'lava') glow(g, CAVE_SHORE.x, CAVE_SHORE.y, 230, `rgba(255,110,30,${0.08 + 0.03 * Math.sin(t * 2)})`);
-  for (const lx of [1112 + CAVE_DX, 1178 + CAVE_DX]) { g.fillStyle = Math.sin(t * 9 + lx) > -0.6 ? '#ffd860' : '#f2a028'; g.fillRect(lx - 1, 145, 3, 4); glow(g, lx, 147, 9, 'rgba(255,200,80,0.25)'); }
-  if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { const cx = CAVE_HILL.x; g.fillStyle = '#ff3040'; g.fillRect(cx - 6, 160, 2, 1); g.fillRect(cx + 4, 160, 2, 1); glow(g, cx, 162, 14, 'rgba(255,40,60,0.25)'); }
+  const look = MTN_LOOK[ISLANDS[WORLD.isle].id] || {}, M = CAVE_MTN;
+  if (look.torches) for (const lx of [M.mx - M.mw / 2 - 9, M.mx + M.mw / 2 + 8]) {
+    g.fillStyle = OUT; g.fillRect(lx - 1, M.base - 18, 3, 18); g.fillStyle = '#7a4c2a'; g.fillRect(lx, M.base - 17, 1, 17);
+    const f = Math.sin(t * 11 + lx); g.fillStyle = '#f07a20'; g.fillRect(lx - 1, M.base - 23 - (f > 0 ? 1 : 0), 3, 5); g.fillStyle = '#ffd860'; g.fillRect(lx, M.base - 22, 1, 3);
+    glow(g, lx, M.base - 21, 10, 'rgba(255,190,80,0.28)');
+  }
+  if (look.volcano) { glow(g, M.mx, 54, 26 + Math.sin(t * 2) * 3, 'rgba(255,120,40,0.35)'); glow(g, M.mx, M.base - 10, 22, `rgba(255,110,30,${0.25 + 0.08 * Math.sin(t * 3)})`); if (Math.random() < dt * 3) WORLD.smoke.push({ x: M.mx + (Math.random() - 0.5) * 16, y: 50, t: 0 }); }
+  if (look.crystals) for (let k = 0; k < 5; k++) glow(g, M.mx + [-28, -22, 22, 28, 0][k], k === 4 ? M.base - M.mh - 14 : M.base - 8, 12 + Math.sin(t * 2 + k) * 2, 'rgba(160,220,255,0.18)');
+  if (look.volcano) { for (const s of WORLD.smoke) { s.t += dt; s.y -= dt * 9; s.x += dt * (2 + s.t); g.fillStyle = `rgba(90,80,80,${Math.max(0, 0.6 - s.t * 0.12)})`; const rr = 3 + Math.round(s.t * 1.6); g.fillRect(Math.round(s.x - rr / 2), Math.round(s.y - rr / 2), rr, rr); } WORLD.smoke = WORLD.smoke.filter(s => s.t < 5); }
+  if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { const cx = CAVE_MTN.mx, ey = CAVE_MTN.base - 16; g.fillStyle = '#ff3040'; g.fillRect(cx - 6, ey, 2, 1); g.fillRect(cx + 4, ey, 2, 1); glow(g, cx, ey + 2, 14, 'rgba(255,40,60,0.25)'); }
   drawBoat(g, CAVE_PIER.x0 - 2, CAVE_PIER.y1 + 2, t);
   drawMe(g, t);
   drawBubbles(g, dt);
