@@ -1,43 +1,36 @@
 'use strict';
-// Version 2 home screen, rough draft: a small top-down world in the style of Stardew Valley or
-// Pokemon. You start on the spawn plaza (quest board, leaderboard sign, your miner) and swipe to
-// look around. Dirt roads lead from the plaza to the cave in the mountains, the forge, the temple,
-// the market, your house, the lighthouse and the dock. Every door faces down, so its path comes in
-// from below. The world is pixel art painted once into a 640x960 canvas; the camera shows part of
-// it. Buildings and signs are plain buttons in a layer that moves with the camera.
+// Version 2 home screen, rough draft: a side-scrolling route in the spirit of the old Pokemon
+// games. The world is one long strip that fills the screen top to bottom; you swipe left and right
+// only. You start at the far left in town on the spawn plaza (quest board, leaderboard sign, your
+// miner, your house), then the road heads east past the market, the forge and the temple, over a
+// wooden bridge across the river (lighthouse and dock), through tall grass to the mountain and the
+// cave. Every door faces down and a short path comes up into it from the road.
 
-const WW = 640, WH = 960; // world size in world pixels
-const WORLD = { cv: null, ctx: null, img: null, cam: { x: 0, y: 0 }, z: 2, vx: 0, vy: 0, drag: null, moved: false, t: 0, smoke: [], dpr: 1, vw: 0, vh: 0 };
-const SPAWN = { x: 320, y: 540, r: 54 };
+const WW = 1200, WH = 300; // world size in world pixels
+const WORLD = { cv: null, ctx: null, img: null, cam: { x: 0, y: 0 }, z: 2, vx: 0, drag: null, moved: false, t: 0, smoke: [], dpr: 1, vw: 0, vh: 0 };
+const SPAWN = { x: 110, y: 200 };
+const RIVER = [748, 872]; // the river's west and east banks
+const DOOR_Y = 168; // the bottom of every door on the north side of the road
 
-// Places: tap box (x, y, w, h) in world pixels. 'lb' opens the leaderboard.
+// Places: tap box (x, y, w, h) in world pixels and the door's x. 'lb' opens the leaderboard.
 const BUILDINGS = [
-  { tab: 'fight', name: 'Cave', x: 284, y: 150, w: 72, h: 54 },
-  { tab: 'forge', name: 'Forge', x: 114, y: 390, w: 84, h: 80 },
-  { tab: 'skills', name: 'Temple', x: 436, y: 392, w: 96, h: 80 },
-  { tab: 'cases', name: 'Market', x: 104, y: 574, w: 92, h: 52 },
-  { tab: 'bag', name: 'House', x: 448, y: 550, w: 80, h: 80 },
-  { tab: 'quests', name: 'Quests', x: 268, y: 490, w: 44, h: 32 },
-  { tab: 'lb', name: 'Leaderboard', x: 334, y: 490, w: 34, h: 32 },
-  { tab: 'more', name: 'Lighthouse', x: 146, y: 776, w: 36, h: 78 },
-  { tab: 'dock', name: 'Dock', x: 300, y: 900, w: 40, h: 60 },
+  { tab: 'quests', name: 'Quests', x: 66, y: 140, w: 40, h: 30, dx: 86 },
+  { tab: 'lb', name: 'Leaderboard', x: 120, y: 140, w: 34, h: 30, dx: 137 },
+  { tab: 'bag', name: 'House', x: 200, y: 104, w: 80, h: 66, dx: 240 },
+  { tab: 'cases', name: 'Market', x: 320, y: 112, w: 92, h: 58, dx: 366 },
+  { tab: 'forge', name: 'Forge', x: 462, y: 98, w: 84, h: 72, dx: 502 },
+  { tab: 'skills', name: 'Temple', x: 590, y: 92, w: 96, h: 78, dx: 638 },
+  { tab: 'more', name: 'Lighthouse', x: 790, y: 92, w: 36, h: 78, dx: 808 },
+  { tab: 'dock', name: 'Dock', x: 834, y: 214, w: 28, h: 56, dx: 848 },
+  { tab: 'fight', name: 'Cave', x: 1110, y: 112, w: 70, h: 58, dx: 1145 },
 ];
-// Roads wind naturally between places. Each is a smooth curve through these points; a spur's last
-// stretch runs straight up into its door, so every road still comes in from below.
-const ROADS = [
-  [[320, 488], [314, 440], [328, 380], [306, 320], [318, 262], [320, 230], [320, 206]], // north to the cave
-  [[268, 548], [226, 560], [186, 544], [140, 552], [96, 538], [56, 550]], // west road
-  [[372, 548], [418, 560], [466, 540], [518, 552], [560, 540], [604, 548]], // east road
-  [[320, 592], [308, 656], [334, 730], [312, 806], [322, 870], [320, 902]], // south road to the dock
-  [[182, 546], [164, 522], [156, 496], [156, 482], [156, 470]], // forge
-  [[458, 546], [478, 520], [486, 494], [486, 482], [486, 470]], // temple
-  [[98, 540], [82, 586], [92, 638], [124, 660], [150, 652], [150, 640], [150, 626]], // market, in from below
-  [[562, 542], [570, 600], [548, 652], [512, 664], [488, 652], [488, 642], [488, 630]], // house, in from below
-  [[314, 822], [262, 864], [206, 880], [168, 872], [164, 862], [164, 852]], // lighthouse
-];
-// Each road as a dense list of points along its curve (Catmull-Rom).
-const ROAD_PTS = ROADS.map(pts => {
-  const out = [], n = pts.length, at = i => pts[Math.max(0, Math.min(n - 1, i))];
+// Each building is painted at a fixed spot in its own paint function; this moves it into place.
+const SHIFT = { more: 698, cases: 126, bag: -140, quests: -490, lb: -490, town: -456, forge: -298, skills: -310 };
+// The road: a gentle winding curve from the dock to the cave.
+const ROAD = [[40, 200], [110, 200], [180, 204], [260, 197], [350, 205], [440, 198], [530, 206], [620, 198], [700, 204],
+  [760, 200], [860, 200], [930, 206], [1010, 198], [1080, 204], [1120, 190], [1145, 180], [1145, 170]];
+const ROAD_PTS = (() => {
+  const out = [], n = ROAD.length, at = i => ROAD[Math.max(0, Math.min(n - 1, i))];
   for (let i = 0; i < n - 1; i++) {
     const a = at(i - 1), b = at(i), c = at(i + 1), d = at(i + 2);
     for (let t = 0; t < 1; t += 0.05) {
@@ -45,13 +38,10 @@ const ROAD_PTS = ROADS.map(pts => {
       out.push([0, 1].map(k => 0.5 * (2 * b[k] + (-a[k] + c[k]) * t + (2 * a[k] - 5 * b[k] + 4 * c[k] - d[k]) * t2 + (-a[k] + 3 * b[k] - 3 * c[k] + d[k]) * t3)));
     }
   }
-  out.push(pts[n - 1]);
+  out.push(ROAD[n - 1]);
   return out;
-});
-function nearRoad(x, y, dist) {
-  for (const l of ROAD_PTS) for (const [px0, py0] of l) if (Math.abs(px0 - x) < dist && Math.abs(py0 - y) < dist && Math.hypot(px0 - x, py0 - y) < dist) return true;
-  return false;
-}
+})();
+function roadY(x) { let best = ROAD_PTS[0]; for (const p of ROAD_PTS) if (Math.abs(p[0] - x) < Math.abs(best[0] - x)) best = p; return best[1]; }
 
 // ---------- pixel helpers ----------
 function wg() { return WORLD.ctx; }
@@ -67,202 +57,195 @@ function paintWorld() {
   const cv = makeCanvas(WW, WH), prev = WORLD.ctx;
   WORLD.ctx = cv.getContext('2d');
   const r = prng(17);
-  // Grass with speckles and tufts.
-  px(0, 0, WW, WH, '#5fae45');
-  for (let i = 0; i < 9000; i++) px(r() * WW, r() * WH, r() < 0.5 ? 2 : 1, 1, r() < 0.5 ? '#549c3c' : '#6dbe50');
-  for (let i = 0; i < 500; i++) { const x = r() * WW, y = r() * WH; px(x, y, 1, 3, '#478a33'); px(x + 2, y - 1, 1, 4, '#4f9839'); px(x + 4, y, 1, 3, '#478a33'); }
-  // Sea and beach along the south.
-  for (let x = 0; x < WW; x += 2) {
-    const shore = 896 + Math.round(Math.sin(x / 37) * 5 + Math.sin(x / 11) * 2);
-    px(x, shore - 14, 2, 14, '#e8cf8f'); px(x, shore - 15, 2, 1, '#d6b874');
-    px(x, shore, 2, WH - shore, '#3a8fd8'); px(x, shore, 2, 3, '#bfe9f5');
+  // Grass in 16px tiles, the classic checker of light dots.
+  px(0, 0, WW, WH, '#78c850');
+  for (let ty = 0; ty < WH; ty += 16) for (let tx = 0; tx < WW; tx += 16) {
+    px(tx + 3, ty + 4, 1, 1, '#68b040'); px(tx + 11, ty + 10, 1, 1, '#68b040'); px(tx + 7, ty + 13, 1, 1, '#90d868'); px(tx + 13, ty + 3, 1, 1, '#90d868');
   }
-  for (let i = 0; i < 260; i++) { const x = r() * WW, y = 910 + r() * 50; px(x, y, 3 + r() * 4, 1, '#6fb6ec'); }
-  // Mountains along the north, with the cave in the middle.
-  for (let x = 0; x < WW; x += 2) {
-    const top = 140 + Math.round(Math.sin(x / 23) * 14 + Math.sin(x / 7) * 4);
-    px(x, 0, 2, top + 60, '#7d7486');
-    px(x, top + 40, 2, 20, '#655d70');
-    px(x, top + 58, 2, 4, '#4a4352');
+  // The river, crossing the whole strip.
+  for (let y = 0; y < WH; y += 2) {
+    const w0 = RIVER[0] + Math.round(Math.sin(y / 17) * 4), w1 = RIVER[1] + Math.round(Math.sin(y / 13 + 2) * 4);
+    px(w0 - 3, y, 3, 2, '#d8c078'); px(w0, y, w1 - w0, 2, '#4890f8'); px(w1, y, 3, 2, '#d8c078');
   }
-  for (let i = 0; i < 700; i++) { const x = r() * WW, y = r() * 190; px(x, y, 2 + r() * 4, 1, r() < 0.5 ? '#8f86a0' : '#665e72'); }
-  for (let i = 0; i < 40; i++) { const x = r() * WW, y = 20 + r() * 150; pell(x, y, 4 + r() * 6, 3 + r() * 3, '#8f86a0'); pell(x - 1, y - 1, 2 + r() * 3, 1 + r() * 2, '#a39aad'); }
-  // Roads (pixel tiles with a darker edge), then the plaza and its spawn pad.
-  paintRoads();
-  pell(SPAWN.x, SPAWN.y, SPAWN.r + 3, SPAWN.r - 6, '#8a7f72');
-  pell(SPAWN.x, SPAWN.y, SPAWN.r, SPAWN.r - 9, '#c9bfae');
-  for (let i = 0; i < 70; i++) { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * (SPAWN.r - 8); px(SPAWN.x + Math.cos(a) * d, SPAWN.y + Math.sin(a) * d * 0.8, 6, 4, r() < 0.5 ? '#b8ad9a' : '#d6ccbb'); }
-  pell(SPAWN.x, SPAWN.y + 8, 14, 9, '#8a7f72'); pell(SPAWN.x, SPAWN.y + 7, 12, 7, '#a39784');
-  pell(SPAWN.x, SPAWN.y + 6, 8, 4, '#7ad8ff');
-  // Trees: thick at the edges, a few inland, never on roads, buildings or the plaza.
-  const blocked = (x, y) => {
-    if (Math.hypot(x - SPAWN.x, (y - SPAWN.y) * 1.15) < SPAWN.r + 20) return true;
-    if (y < 222 || y > 872) return true;
-    for (const b of BUILDINGS) if (x > b.x - 18 && x < b.x + b.w + 18 && y > b.y - 10 && y < b.y + b.h + 30) return true;
-    return nearRoad(x, y + 6, 22);
-  };
-  const trees = [];
-  for (let i = 0; i < 900; i++) {
-    const x = r() * WW, y = 220 + r() * 660, edge = Math.min(x, WW - x);
-    if (edge > 70 && r() < 0.8) continue;
-    if (blocked(x, y) || trees.some(t => Math.hypot(t.x - x, t.y - y) < 18)) continue;
-    trees.push({ x, y, kind: r() < 0.6 ? 'oak' : 'pine' });
+  for (let i = 0; i < 120; i++) px(RIVER[0] + 6 + r() * (RIVER[1] - RIVER[0] - 16), r() * WH, 4 + r() * 3, 1, '#78b0f8');
+  // The mountain in the east, with the cave.
+  for (let x = 1070; x < WW; x += 2) {
+    const top = 20 + Math.max(0, (1120 - x) * 1.2) + Math.round(Math.sin(x / 9) * 3);
+    px(x, top, 2, 186 - top, '#a08870'); px(x, top, 2, 3, '#c0a888'); px(x, 182, 2, 4, '#685038');
   }
-  for (let i = 0; i < 40; i++) { const x = 40 + r() * 560, y = 240 + r() * 620; if (!blocked(x, y)) flowerBed(x, y, r); }
-  trees.sort((a, b) => a.y - b.y);
-  for (const t of trees) (t.kind === 'oak' ? oak : pine)(t.x, t.y);
-  paintCave(); paintForge(); paintTemple(); paintMarket(); paintHouse(); paintBoard(); paintLbSign(); paintLighthouse(); paintDock();
+  for (let i = 0; i < 120; i++) { const x = 1090 + r() * 110, y = 30 + r() * 140; px(x, y, 3 + r() * 5, 1, r() < 0.5 ? '#887058' : '#b89c80'); }
+  // Tall grass patches south of the road, and on the route east.
+  for (const [x0, y0, w, h] of [[400, 228, 64, 32], [600, 230, 64, 30], [900, 222, 96, 40], [940, 96, 80, 56], [1030, 230, 56, 32]]) tallGrass(x0, y0, w, h);
+  // Ledges on the route (you could hop down them).
+  for (const [x0, y0, w] of [[900, 270, 80], [1000, 214, 60]]) { px(x0, y0, w, 3, '#589838'); px(x0, y0 + 3, w, 2, '#407828'); }
+  // A pond south of town.
+  pell(250, 248, 30, 14, '#4890f8'); pell(242, 244, 10, 3, '#b0d8ff');
+  for (let i = 0; i < 360; i += 30) { const a = (i * Math.PI) / 180; px(250 + Math.cos(a) * 31, 248 + Math.sin(a) * 15, 3, 2, '#f8e8a8'); }
+  // The road, then the plaza.
+  paintRoad();
+  pell(SPAWN.x, SPAWN.y, 46, 22, '#a89880'); pell(SPAWN.x, SPAWN.y, 43, 20, '#d8d0c0');
+  for (let ty = SPAWN.y - 20; ty < SPAWN.y + 20; ty += 8) for (let tx = SPAWN.x - 44; tx < SPAWN.x + 44; tx += 8) if (((tx - SPAWN.x) / 43) ** 2 + ((ty - SPAWN.y) / 20) ** 2 < 0.8) px(tx, ty, 7, 1, '#c0b8a8');
+  pell(SPAWN.x, SPAWN.y + 4, 12, 6, '#a89880'); pell(SPAWN.x, SPAWN.y + 3, 10, 4, '#78d0f8');
+  // Flowers by the road.
+  const inRiver = x => x > RIVER[0] - 12 && x < RIVER[1] + 12;
+  for (let i = 0; i < 60; i++) { const x = 40 + r() * 1040, y = 214 + r() * 50; if (Math.abs(y - roadY(x)) > 16 && !inRiver(x) && !(x > 214 && x < 286 && y > 230)) flower(x, y, r); }
+  // Tree borders top, bottom and at the west edge, and trees between buildings.
+  for (let x = 0; x < 1110; x += 16) { if (inRiver(x)) continue; tree(x, 18); if (!inRiver(x + 8)) tree(x + 8, 34); }
+  for (let x = 0; x < 1090; x += 16) { if (inRiver(x)) continue; tree(x, 290); if (!inRiver(x + 8)) tree(x + 8, 274); }
+  for (let y = 50; y < 270; y += 16) { if (Math.abs(y - 200) < 20) continue; tree(10, y); tree(26, y + 8); }
+  for (const x of [178, 300, 434, 570, 712, 900, 1060]) tree(x, 150);
+  // Picket fences round the house garden and the forge yard.
+  fence(190, 180, 100); fence(452, 180, 104);
+  // Buildings.
+  const at = (k, fn) => { const g = wg(); g.save(); g.translate(SHIFT[k] || 0, 0); fn(); g.restore(); };
+  at('more', paintLighthouse); at('cases', paintMarket); at('bag', paintHouse); at('quests', paintBoard); at('lb', paintLbSign);
+  at('forge', paintForge); at('skills', paintTemple); paintCave(); at('town', paintTownSign); paintDock();
   WORLD.ctx = prev;
   return cv;
 }
 
-function paintRoads() {
+function paintRoad() {
   const cell = 4, cols = WW / cell, rows = WH / cell, grid = new Uint8Array(cols * rows);
-  // Mark every 4px cell within the road's half-width of its curve, so curves stay pixel-crisp.
-  for (const l of ROAD_PTS) for (const [x0, y0] of l) {
-    for (let cy = Math.floor((y0 - 11) / cell); cy <= Math.floor((y0 + 11) / cell); cy++) for (let cx = Math.floor((x0 - 11) / cell); cx <= Math.floor((x0 + 11) / cell); cx++) {
+  const mark = (x0, y0, rad) => {
+    for (let cy = Math.floor((y0 - rad) / cell); cy <= Math.floor((y0 + rad) / cell); cy++) for (let cx = Math.floor((x0 - rad) / cell); cx <= Math.floor((x0 + rad) / cell); cx++) {
       if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
-      if (Math.hypot(cx * cell + 2 - x0, cy * cell + 2 - y0) <= 10.5) grid[cy * cols + cx] = 1;
+      if (Math.hypot(cx * cell + 2 - x0, cy * cell + 2 - y0) <= rad - 0.5) grid[cy * cols + cx] = 1;
     }
+  };
+  for (const [x, y] of ROAD_PTS) mark(x, y, 11);
+  // A short path up from the road into every door.
+  for (const b of BUILDINGS) {
+    if (b.tab === 'dock' || b.tab === 'fight') continue;
+    for (let y = roadY(b.dx); y >= DOOR_Y + 6; y -= 2) mark(b.dx, y, 7);
   }
+  for (let y = roadY(848); y <= 262; y += 2) mark(848, y, 7); // the dock runs south into the river
   const r = prng(5), on = (x, y) => x >= 0 && y >= 0 && x < cols && y < rows && grid[y * cols + x];
   for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
     if (!on(x, y)) continue;
     const edge = !on(x - 1, y) || !on(x + 1, y) || !on(x, y - 1) || !on(x, y + 1);
-    px(x * cell, y * cell, cell, cell, edge ? '#a07a46' : r() < 0.15 ? '#c29a5c' : r() < 0.15 ? '#dcbb80' : '#cfaa6c');
+    const wx = x * cell;
+    if (wx >= RIVER[0] - 4 && wx < RIVER[1] + 4) px(wx, y * cell, cell, cell, edge ? '#603810' : y % 2 ? '#a87040' : '#c89060'); // wooden planks
+    else px(wx, y * cell, cell, cell, edge ? '#b89858' : r() < 0.12 ? '#d0b878' : '#e0c890');
   }
 }
 
-function shadowAt(x, y, rx) { pell(x, y, rx, Math.max(2, Math.round(rx / 4)), 'rgba(20,50,20,0.35)'); }
-function oak(x, y) {
-  shadowAt(x + 2, y + 1, 9);
-  px(x - 2, y - 8, 4, 9, '#6b4526'); px(x - 2, y - 8, 1, 9, '#8a6038');
-  pell(x, y - 15, 10, 9, '#2f7d3a'); pell(x - 2, y - 17, 7, 6, '#3f9a44'); pell(x - 3, y - 19, 4, 3, '#5cb853');
+function tree(x, y) {
+  px(x - 7, y - 2, 14, 4, 'rgba(0,40,0,0.25)');
+  px(x - 2, y - 6, 4, 6, '#785028');
+  pell(x, y - 13, 8, 8, '#306830'); pell(x, y - 14, 7, 6, '#48a048'); pell(x - 2, y - 16, 3, 2, '#78c870');
 }
-function pine(x, y) {
-  shadowAt(x + 2, y + 1, 7);
-  px(x - 1, y - 5, 3, 6, '#5a3a1e');
-  for (let i = 0; i < 18; i++) { const w = 2 + Math.floor(i * 0.7); px(x - w, y - 23 + i, w * 2, 1, i % 6 < 3 ? '#2a6e3a' : '#337f44'); }
-  px(x - 1, y - 24, 2, 2, '#337f44');
+function tallGrass(x0, y0, w, h) {
+  for (let y = y0; y < y0 + h; y += 8) for (let x = x0; x < x0 + w; x += 8) {
+    px(x, y, 8, 8, '#58a838');
+    px(x + 1, y + 2, 1, 5, '#307820'); px(x + 3, y + 1, 1, 6, '#307820'); px(x + 5, y + 2, 1, 5, '#307820');
+    px(x + 2, y + 1, 1, 2, '#90d868'); px(x + 6, y + 1, 1, 2, '#90d868');
+  }
 }
-function flowerBed(x, y, r) {
-  for (let i = 0; i < 6; i++) { const fx = x + (r() - 0.5) * 14, fy = y + (r() - 0.5) * 8; px(fx, fy, 2, 2, ['#fff6e0', '#ffd94d', '#ff8fb1', '#b9a2ff'][i % 4]); px(fx, fy + 2, 1, 1, '#2f7d3a'); }
+function flower(x, y, r) { const c = r() < 0.5 ? '#f85858' : '#f8f848'; px(x, y, 3, 1, c); px(x + 1, y - 1, 1, 3, c); px(x + 1, y, 1, 1, '#f8f8f8'); px(x + 1, y + 2, 1, 2, '#307820'); }
+function fence(x0, y, w) {
+  for (let x = x0; x < x0 + w; x += 6) { if (Math.abs(x + 2 - (x0 + w / 2)) < 10) continue; px(x, y - 8, 3, 9, '#f8f8f8'); px(x, y - 8, 3, 1, '#c0c0c0'); px(x + 2, y - 7, 1, 8, '#a8a8a8'); }
+  px(x0, y - 5, w, 1, '#d8d8d8');
 }
-// A wall with a stepped roof: the shape of every house.
+// The classic little house: wall, roof with eaves, door at the bottom middle.
 function hut(x, y, w, h, wall, wallDark, roof, roofDark, roofH) {
-  shadowAt(x + w / 2 + 3, y + h + 2, w / 2 + 2);
-  px(x, y + roofH, w, h - roofH, wall); px(x, y + h - 3, w, 3, wallDark);
-  for (let i = 0; i < roofH; i++) px(x - 4 + i * 0.5, y + i, w + 8 - i, 1, i % 3 === 2 ? roofDark : roof);
-  px(x - 4, y + roofH - 2, w + 8, 2, roofDark);
+  px(x + 3, y + h, w - 2, 3, 'rgba(0,40,0,0.25)');
+  px(x, y + roofH, w, h - roofH, wall); px(x, y + h - 2, w, 2, wallDark);
+  for (let i = 0; i < roofH; i++) px(x - 3, y + i, w + 6, 1, i % 4 === 3 ? roofDark : roof);
+  px(x - 3, y + roofH - 2, w + 6, 2, roofDark);
 }
-function door(cx, bottom, w, h, c) { px(cx - w / 2 - 1, bottom - h - 1, w + 2, h + 1, '#3a2416'); px(cx - w / 2, bottom - h, w, h, c); px(cx + w / 2 - 3, bottom - h / 2, 1, 2, '#ffcc4d'); }
-function pwin(x, y) { px(x - 1, y - 1, 10, 9, '#3a2416'); px(x, y, 8, 7, '#ffe08a'); px(x + 3.5, y, 1, 7, '#3a2416'); px(x, y + 3, 8, 1, '#3a2416'); }
+function door(cx, w, h, c) { px(cx - w / 2 - 1, DOOR_Y - h - 1, w + 2, h + 1, '#383028'); px(cx - w / 2, DOOR_Y - h, w, h, c); px(cx + w / 2 - 3, DOOR_Y - h / 2, 1, 2, '#f8d830'); }
+function win(x, y) { px(x - 1, y - 1, 10, 9, '#383028'); px(x, y, 8, 7, '#a8d8f8'); px(x, y, 8, 2, '#d8f0f8'); px(x + 3.5, y, 1, 7, '#383028'); }
 
-function paintCave() {
-  pell(320, 186, 26, 22, '#3a3344'); px(294, 186, 52, 18, '#3a3344');
-  pell(320, 188, 20, 17, '#120c18'); px(300, 188, 40, 16, '#120c18');
-  px(292, 168, 6, 36, '#7a5230'); px(342, 168, 6, 36, '#7a5230'); px(288, 164, 64, 6, '#6b4526'); px(288, 164, 64, 2, '#9a6c40');
-  for (let y = 190; y < 204; y += 3) px(310, y, 20, 1, '#5d4027');
-  px(312, 188, 2, 16, '#9aa0a8'); px(326, 188, 2, 16, '#9aa0a8');
-}
-function paintForge() {
-  hut(118, 404, 76, 66, '#8f8698', '#6b6273', '#b8443a', '#8a2f2a', 26);
-  for (let yy = 436; yy < 464; yy += 6) for (let xx = 120 + (yy % 12 ? 6 : 0); xx < 190; xx += 12) px(xx, yy, 10, 1, '#7a7186');
-  px(176, 392, 10, 22, '#6b6273'); px(174, 390, 14, 4, '#4d4655');
-  px(124, 444, 18, 22, '#2a1a12'); px(126, 447, 14, 19, '#ff8a2a'); px(129, 452, 8, 14, '#ffd04d');
-  door(156, 470, 12, 18, '#6b4526');
-  px(174, 456, 14, 4, '#3e3846'); px(177, 460, 8, 6, '#3e3846');
-}
-function paintTemple() {
-  shadowAt(486, 472, 48);
-  px(440, 462, 92, 8, '#b8aa8a'); px(446, 456, 80, 7, '#d8cca8');
-  px(450, 420, 72, 37, '#efe6d0');
-  for (const xx of [452, 466, 500, 514]) { px(xx, 420, 6, 36, '#fffaf0'); px(xx + 4, 420, 2, 36, '#d8ccae'); }
-  for (let i = 0; i < 24; i++) px(440 + i, 396 + 24 - i, 92 - i * 2, 1, i % 3 ? '#f0b92c' : '#c8901a');
-  px(440, 418, 92, 3, '#a87010');
-  px(483, 386, 6, 10, '#7ad8ff'); px(484, 384, 4, 2, '#bfefff');
-  door(486, 456, 14, 22, '#3a2a10');
-}
-function paintMarket() {
-  hut(108, 574, 84, 52, '#3f7fb8', '#2c5f8c', '#4a9ae0', '#2c5f8c', 16);
-  for (let s = 0; s < 8; s++) px(104 + s * 11.5, 590, 11.5, 8, s % 2 ? '#f2f6ff' : '#4a9ae0');
-  px(116, 600, 68, 22, '#1f3550');
-  const chest = (x, top) => { px(x, 610, 14, 10, '#3a2416'); px(x + 1, 611, 12, 8, '#8a5a2a'); px(x + 1, 611, 12, 3, top); px(x + 6, 614, 2, 2, '#ffe08a'); };
-  chest(120, '#b07a3a'); chest(136, '#5aa0e0'); chest(152, '#e0566b'); chest(168, '#ffcc4d');
-  door(150, 626, 14, 6, '#8a5a2a');
-}
-function paintHouse() {
-  hut(452, 566, 72, 64, '#e8dcc6', '#c4b6a0', '#e0566b', '#a8303a', 26);
-  px(452, 604, 72, 2, '#a36a3a');
-  pwin(460, 610); pwin(508, 610);
-  door(488, 630, 12, 18, '#7a4a24');
-  px(506, 552, 9, 18, '#a36a3a'); px(504, 550, 13, 3, '#7a4a24');
-}
-function paintBoard() {
-  px(274, 506, 3, 16, '#5e3d22'); px(303, 506, 3, 16, '#5e3d22');
-  px(270, 492, 40, 18, '#7a4a24'); px(272, 494, 36, 14, '#c88a4a');
-  px(276, 496, 8, 10, '#fff8e8'); px(286, 497, 7, 8, '#ffe8a8'); px(295, 496, 9, 10, '#fff8e8');
-}
-function paintLbSign() {
-  px(349, 508, 3, 14, '#5e3d22');
-  px(336, 492, 30, 18, '#7a4a24'); px(338, 494, 26, 14, '#e8b84a');
-  px(347, 496, 8, 2, '#8a5a10'); px(349, 498, 4, 5, '#8a5a10'); px(347, 503, 8, 2, '#8a5a10');
-}
 function paintLighthouse() {
-  pell(148, 850, 8, 5, '#6b6273'); pell(181, 848, 7, 5, '#6b6273');
-  for (let i = 0; i < 56; i++) { const w = 22 - Math.floor(i / 8); px(164 - w / 2, 852 - i, w, 1, Math.floor(i / 9) % 2 ? '#b76dff' : '#f6f0ff'); }
-  px(154, 790, 20, 6, '#3e3846'); px(156, 784, 16, 8, '#ffe08a'); px(158, 778, 12, 6, '#8a4fc8');
-  door(164, 852, 8, 12, '#3a2a4a');
+  pell(110, 166, 20, 7, '#887058'); pell(110, 164, 17, 5, '#a89070');
+  for (let i = 0; i < 70; i++) { const w = 22 - Math.floor(i / 10); px(110 - w / 2, DOOR_Y - i, w, 1, Math.floor(i / 10) % 2 ? '#b76dff' : '#f6f0ff'); }
+  px(100, 92, 20, 6, '#383028'); px(102, 86, 16, 7, '#f8e070'); px(104, 80, 12, 6, '#8a4fc8');
+  door(110, 8, 12, '#3a2a4a');
 }
 function paintDock() {
-  px(304, 900, 32, 60, '#a36a3a');
-  for (let y = 900; y < 960; y += 6) px(304, y, 32, 1, '#7a4a24');
-  px(302, 900, 2, 60, '#5e3d22'); px(336, 900, 2, 60, '#5e3d22');
-  px(342, 930, 22, 8, '#8a5a2a'); px(344, 938, 18, 3, '#5a3218');
+  // A boat tied up at the end of the dock (the dock's planks are part of the road).
+  px(856, 256, 22, 6, '#a87040'); px(858, 262, 18, 2, '#603810'); px(856, 256, 22, 1, '#c89060');
+}
+function paintMarket() {
+  hut(198, 112, 84, 56, '#5890d8', '#3868a8', '#f8f8f8', '#c0c0c8', 18);
+  for (let s = 0; s < 8; s++) px(195 + s * 11.25, 118, 11.25, 10, s % 2 ? '#f8f8f8' : '#5890d8');
+  px(208, 136, 64, 22, '#283858');
+  const chest = (x, top) => { px(x, 144, 12, 10, '#383028'); px(x + 1, 145, 10, 8, '#a87040'); px(x + 1, 145, 10, 3, top); };
+  chest(212, '#c89060'); chest(226, '#68a8f0'); chest(240, '#f06868'); chest(254, '#f8d830');
+  px(226, 108, 28, 9, '#f8f8f8'); px(228, 110, 24, 5, '#f85888');
+  door(240, 14, 8, '#a87040');
+}
+function paintHouse() {
+  hut(344, 104, 72, 64, '#f8f0d8', '#d0c0a0', '#e84848', '#a82828', 28);
+  win(352, 140); win(400, 140);
+  door(380, 12, 18, '#a86838');
+  px(396, 94, 9, 18, '#a86838'); px(394, 92, 13, 3, '#784818');
+  px(424, 164, 6, 8, '#e84848'); px(426, 172, 2, 6, '#784818'); // mailbox
+}
+function paintBoard() { px(560, 156, 3, 14, '#785028'); px(589, 156, 3, 14, '#785028'); px(556, 140, 40, 18, '#785028'); px(558, 142, 36, 14, '#d8a868'); px(562, 144, 8, 10, '#f8f8f0'); px(572, 145, 7, 8, '#f8e8a8'); px(581, 144, 9, 10, '#f8f8f0'); }
+function paintLbSign() { px(626, 156, 3, 14, '#785028'); px(612, 140, 32, 18, '#785028'); px(614, 142, 28, 14, '#f8d038'); px(624, 144, 8, 2, '#986810'); px(626, 146, 4, 5, '#986810'); px(624, 151, 8, 2, '#986810'); }
+function paintTownSign() { px(512, 176, 2, 12, '#785028'); px(500, 166, 28, 12, '#785028'); px(502, 168, 24, 8, '#d8a868'); for (let i = 0; i < 4; i++) px(505 + i * 5, 171, 3, 1, '#785028'); }
+function paintForge() {
+  hut(764, 98, 76, 70, '#a8a0b0', '#787088', '#c84838', '#902818', 26);
+  for (let yy = 128; yy < 162; yy += 6) px(764, yy, 76, 1, '#908898');
+  px(818, 84, 10, 22, '#787088'); px(816, 82, 14, 4, '#585068');
+  px(770, 138, 18, 24, '#383028'); px(772, 141, 14, 21, '#f88830'); px(775, 146, 8, 16, '#f8d850');
+  door(800, 12, 18, '#785028');
+  px(820, 154, 14, 4, '#585068'); px(823, 158, 8, 6, '#585068');
+}
+function paintTemple() {
+  px(900, 160, 96, 8, '#c0b090'); px(906, 154, 84, 7, '#e0d4b0');
+  px(910, 118, 76, 37, '#f8f0d8');
+  for (const xx of [912, 928, 962, 978]) { px(xx, 118, 6, 36, '#ffffff'); px(xx + 4, 118, 2, 36, '#d8ccae'); }
+  for (let i = 0; i < 24; i++) px(900 + i, 116 - i, 96 - i * 2, 1, i % 3 ? '#f8c838' : '#c89818');
+  px(946, 82, 6, 10, '#78d8f8'); px(947, 80, 4, 2, '#c8f0f8');
+  door(948, 14, 22, '#584018');
+}
+function paintCave() {
+  pell(1145, 152, 22, 20, '#685038'); px(1123, 152, 44, 18, '#685038');
+  pell(1145, 154, 16, 15, '#181010'); px(1129, 154, 32, 16, '#181010');
+  px(1120, 134, 6, 36, '#885830'); px(1164, 134, 6, 36, '#885830'); px(1116, 130, 58, 6, '#704020'); px(1116, 130, 58, 2, '#a87040');
+  for (let y = 156; y < 170; y += 3) px(1137, y, 16, 1, '#583820');
+  px(1139, 154, 2, 16, '#a0a0a8'); px(1149, 154, 2, 16, '#a0a0a8');
 }
 
-// ---------- each frame: the visible part of the world, plus the moving bits ----------
+// ---------- each frame ----------
 function drawWorld(dt) {
   const g = WORLD.ctx, dpr = WORLD.dpr, z = WORLD.z;
   WORLD.t += dt;
   const t = WORLD.t;
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.fillStyle = '#3a8fd8'; g.fillRect(0, 0, WORLD.cv.width, WORLD.cv.height);
+  g.fillStyle = '#306830'; g.fillRect(0, 0, WORLD.cv.width, WORLD.cv.height);
   g.setTransform(dpr * z, 0, 0, dpr * z, -WORLD.cam.x * dpr * z, -WORLD.cam.y * dpr * z);
   g.imageSmoothingEnabled = false;
   g.drawImage(WORLD.img, 0, 0);
-  for (let i = 0; i < 30; i++) if (Math.sin(t * 2 + i * 1.7) > 0.7) { g.fillStyle = '#d8f2ff'; g.fillRect((i * 83) % WW, 912 + ((i * 37) % 44), 4, 1); }
-  if (Math.random() < dt * 2) WORLD.smoke.push({ x: 180, y: 388, t: 0 });
-  for (const s of WORLD.smoke) { s.t += dt; s.y -= dt * 8; s.x += dt * 3; g.fillStyle = `rgba(220,218,228,${Math.max(0, 0.6 - s.t * 0.15)})`; g.fillRect(Math.round(s.x), Math.round(s.y), 3 + Math.round(s.t), 3 + Math.round(s.t)); }
+  // Sea sparkle, chimney smoke, the spawn pad glow, a boss waiting in the cave, and you.
+  for (let i = 0; i < 16; i++) if (Math.sin(t * 2 + i * 1.7) > 0.7) { g.fillStyle = '#f8f8f8'; g.fillRect(RIVER[0] + 8 + (i * 13) % 100, (i * 37) % WH, 3, 1); }
+  for (const [sx, sy] of [[525, 80], [260, 90]]) if (Math.random() < dt * 1.5) WORLD.smoke.push({ x: sx, y: sy, t: 0 });
+  for (const s of WORLD.smoke) { s.t += dt; s.y -= dt * 7; s.x += dt * 3; g.fillStyle = `rgba(240,240,248,${Math.max(0, 0.7 - s.t * 0.18)})`; g.fillRect(Math.round(s.x), Math.round(s.y), 3 + Math.round(s.t), 3 + Math.round(s.t)); }
   WORLD.smoke = WORLD.smoke.filter(s => s.t < 4);
-  if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { g.fillStyle = 'rgba(200,30,50,0.6)'; g.fillRect(304, 192, 32, 12); }
-  g.globalAlpha = 0.35 + 0.25 * Math.sin(t * 3); g.fillStyle = '#bff2ff'; g.fillRect(SPAWN.x - 6, SPAWN.y + 4, 12, 4); g.globalAlpha = 1;
-  g.drawImage(heroSprite(0), SPAWN.x - 8, SPAWN.y - 10 + (Math.floor(t * 2) % 2), 16, 16);
+  g.globalAlpha = 0.35 + 0.25 * Math.sin(t * 3); g.fillStyle = '#c8f8ff'; g.fillRect(SPAWN.x - 6, SPAWN.y + 1, 12, 4); g.globalAlpha = 1;
+  if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { g.fillStyle = 'rgba(220,40,60,0.6)'; g.fillRect(1131, 156, 28, 12); }
+  g.drawImage(heroSprite(0), SPAWN.x - 8, SPAWN.y - 13 + (Math.floor(t * 2) % 2), 16, 16);
+  // Arrows at the edges while there's more to see that way.
+  const l = $('#edgeL'), rgt = $('#edgeR');
+  if (l) l.classList.toggle('show', WORLD.cam.x > 4);
+  if (rgt) rgt.classList.toggle('show', WORLD.cam.x < WW - WORLD.vw / z - 4);
 }
 
-// ---------- camera: swipe to look around, with a little glide ----------
-function clampCam() {
-  const vw = WORLD.vw / WORLD.z, vh = WORLD.vh / WORLD.z;
-  WORLD.cam.x = Math.max(0, Math.min(WW - vw, WORLD.cam.x));
-  WORLD.cam.y = Math.max(0, Math.min(WH - vh, WORLD.cam.y));
-}
-function placeLayer() {
-  const layer = $('#worldLayer');
-  if (layer) layer.style.transform = `translate(${-WORLD.cam.x * WORLD.z}px, ${-WORLD.cam.y * WORLD.z}px) scale(${WORLD.z})`;
-}
+// ---------- camera: swipe left and right only, with a little glide ----------
+function clampCam() { WORLD.cam.x = Math.max(0, Math.min(WW - WORLD.vw / WORLD.z, WORLD.cam.x)); WORLD.cam.y = Math.max(0, (WH - WORLD.vh / WORLD.z) / 2); }
+function placeLayer() { const layer = $('#worldLayer'); if (layer) layer.style.transform = `translate(${-WORLD.cam.x * WORLD.z}px, ${-WORLD.cam.y * WORLD.z}px) scale(${WORLD.z})`; }
 function bindSwipe(el) {
-  el.addEventListener('pointerdown', e => {
-    WORLD.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() };
-    WORLD.moved = false; WORLD.vx = WORLD.vy = 0;
-  });
+  el.addEventListener('pointerdown', e => { WORLD.drag = { id: e.pointerId, x: e.clientX, sx: e.clientX, sy: e.clientY, t: performance.now() }; WORLD.moved = false; WORLD.vx = 0; });
   el.addEventListener('pointermove', e => {
     const d = WORLD.drag;
     if (!d || d.id !== e.pointerId) return;
-    const dx = e.clientX - d.x, dy = e.clientY - d.y, now = performance.now(), dt = Math.max(1, now - d.t);
+    const dx = e.clientX - d.x, now = performance.now(), dt = Math.max(1, now - d.t);
     if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > 8) WORLD.moved = true;
-    WORLD.cam.x -= dx / WORLD.z; WORLD.cam.y -= dy / WORLD.z;
-    WORLD.vx = ((-dx / WORLD.z) / dt) * 16; WORLD.vy = ((-dy / WORLD.z) / dt) * 16;
-    d.x = e.clientX; d.y = e.clientY; d.t = now;
+    WORLD.cam.x -= dx / WORLD.z;
+    WORLD.vx = ((-dx / WORLD.z) / dt) * 16;
+    d.x = e.clientX; d.t = now;
     clampCam(); placeLayer();
   });
   const end = e => { if (WORLD.drag && WORLD.drag.id === e.pointerId) WORLD.drag = null; };
@@ -270,10 +253,8 @@ function bindSwipe(el) {
   // A swipe that ends on a building must not open it.
   el.addEventListener('click', e => { if (WORLD.moved) { e.stopPropagation(); e.preventDefault(); WORLD.moved = false; } }, true);
 }
-function centerOnSpawn() {
-  WORLD.cam.x = SPAWN.x - WORLD.vw / WORLD.z / 2; WORLD.cam.y = SPAWN.y - WORLD.vh / WORLD.z / 2 + 10;
-  WORLD.vx = WORLD.vy = 0; clampCam(); placeLayer();
-}
+// Back to the start of the route: town sits at the far left.
+function centerOnSpawn() { WORLD.cam.x = 0; WORLD.vx = 0; clampCam(); placeLayer(); }
 
 // ---------- screen ----------
 function islandHtml() {
@@ -281,10 +262,11 @@ function islandHtml() {
   for (const b of BUILDINGS) {
     const act = b.tab === 'lb' ? 'data-lb="open"' : `data-go="${b.tab}"`;
     h += `<button class="bld" ${act} aria-label="${b.name}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></button>`;
-    h += `<button class="sign" ${act} aria-label="${b.name}" style="left:${b.x + b.w / 2}px;top:${b.y - 9}px">${b.name}<small id="isl-${b.tab}"></small><i class="dot"></i></button>`;
+    const sy = b.tab === 'dock' ? b.y + b.h + 12 : b.y - 8;
+    h += `<button class="sign" ${act} aria-label="${b.name}" style="left:${b.x + b.w / 2}px;top:${sy}px">${b.name}<small id="isl-${b.tab}"></small><i class="dot"></i></button>`;
   }
-  h += `<div class="signpost" style="left:${SPAWN.x}px;top:${SPAWN.y + SPAWN.r + 2}px">↑ Cave · ← Forge, Market<br>→ Temple, House · ↓ Lighthouse</div>`;
-  h += '</div><button class="toSpawn" id="toSpawn" aria-label="Back to spawn">⌂ Spawn</button></div>';
+
+  h += '</div><div class="edge l" id="edgeL">◀</div><div class="edge r" id="edgeR">▶</div><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button></div>';
   return h;
 }
 
@@ -304,13 +286,14 @@ function buildIsland() {
   updateBadges();
 }
 
+// The strip fills the screen's height; the width scrolls.
 function sizeIsland() {
   const w = $('#world');
   if (!w || UI.tab !== 'island') return;
   WORLD.vw = w.clientWidth; WORLD.vh = w.clientHeight;
   if (!WORLD.vw || !WORLD.vh) return;
   WORLD.dpr = Math.min(3, window.devicePixelRatio || 1);
-  WORLD.z = Math.max(1.6, WORLD.vw / 210); // about 210 world pixels across a phone
+  WORLD.z = WORLD.vh / WH;
   WORLD.cv.width = Math.round(WORLD.vw * WORLD.dpr); WORLD.cv.height = Math.round(WORLD.vh * WORLD.dpr);
   clampCam(); placeLayer();
 }
@@ -330,9 +313,7 @@ function islandLoop(now) {
   if (UI.tab !== 'island' || document.hidden || !WORLD.img) { WORLD.last = now; return; }
   const dt = Math.min(0.1, (now - (WORLD.last || now)) / 1000);
   WORLD.last = now;
-  if (!WORLD.drag && (Math.abs(WORLD.vx) > 0.05 || Math.abs(WORLD.vy) > 0.05)) {
-    WORLD.cam.x += WORLD.vx; WORLD.cam.y += WORLD.vy; WORLD.vx *= 0.9; WORLD.vy *= 0.9; clampCam(); placeLayer();
-  }
+  if (!WORLD.drag && Math.abs(WORLD.vx) > 0.05) { WORLD.cam.x += WORLD.vx; WORLD.vx *= 0.9; clampCam(); placeLayer(); }
   drawWorld(dt);
   if ((WORLD.signT = (WORLD.signT || 0) + dt) > 0.5) { WORLD.signT = 0; updateIslandSigns(); }
 }

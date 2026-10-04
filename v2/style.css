@@ -757,4 +757,9 @@ body.on-island #panel { overflow: hidden; }
   font-size: 6px; line-height: 1.25; text-align: center; color: #fff3d6; padding: 1.5px 4px;
   background: #6b4120; border: 1px solid #2a1a12; border-radius: 2px; text-shadow: 0 1px 0 #2a1a12;
 }
-.toSpawn { position: absolute; right: 8px; bottom: 8px; z-index: 2; padding: 6px 10px; font-size: 14px; color: #fff3d6; background: #6b4120; border: 2px solid #2a1a12; border-radius: 6px; box-shadow: 0 2px 0 #1a1220; }
+.toSpawn { position: absolute; right: 8px; top: 8px; z-index: 2; padding: 6px 10px; font-size: 14px; color: #fff3d6; background: #6b4120; border: 2px solid #2a1a12; border-radius: 6px; box-shadow: 0 2px 0 #1a1220; }
+/* Side-scrolling world: arrows at the edges while there's more to see that way. */
+.world .edge { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; pointer-events: none; color: #fff3d6; font-size: 18px; text-shadow: 0 1px 0 #1a1220, 0 0 6px rgba(0,0,0,.6); opacity: 0; transition: opacity .3s; animation: nudge 1.2s ease-in-out infinite; }
+.world .edge.l { left: 6px; } .world .edge.r { right: 6px; }
+.world .edge.show { opacity: .85; }
+@keyframes nudge { 50% { margin-left: 3px; } }
