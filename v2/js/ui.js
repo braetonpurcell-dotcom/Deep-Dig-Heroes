@@ -583,7 +583,7 @@ function buildClasses() {
       continue;
     }
     const lean = classLean(c), active = S.activeClass === i, by = classBranches(c), left = active ? classMissing(c) : 0;
-    const kit = SLOT_IDS.map(slot => { const f = c.gear[slot] != null ? findItem(c.gear[slot]) : null; return f ? `<img src="${gearUrl(f.it.slot, f.it.t, f.it.r)}" alt="${SLOTS[slot].name}">` : ''; }).join('')
+    const kit = SLOT_IDS.map(slot => { const f = c.gear[slot] != null ? findItem(c.gear[slot]) : null; return f ? `<img src="${gearUrl(f.it.slot, f.it.t, f.it.r, false, f.it.st)}" alt="${itemName(f.it)}">` : ''; }).join('')
       + c.pets.map(p => `<img src="${petUrl(p.sp, false, p.r)}" alt="${PETS[p.sp].name}">`).join('');
     h += `<div class="card classslot ${active ? 'active' : ''}" style="--cc:${lean ? lean.color : 'var(--line-hi)'}">
       <div class="classhead"><img class="classhero" src="${spriteUrl(heroSprite(0, c.look), 4)}" alt="">
@@ -736,7 +736,7 @@ function buildCases() {
     <button data-act="caseKind" data-v="pet" class="${pet ? 'on' : ''}">Pets</button>
     <button data-act="caseKind" data-v="drill" class="${S.caseKind === 'drill' ? 'on' : ''}">Drill</button></div>`;
   if (S.caseKind === 'drill') { $('#tab-cases').innerHTML = h + drillCasesHtml(); refreshCases(); return; }
-  h += `<div class="card"><div class="small muted">${pet ? 'Pet cases drop pets only.' : 'Tool cases drop pickaxes, helmets and charms only.'} Each kind has its own pity.</div><div class="pity">
+  h += `<div class="card"><div class="small muted">${pet ? 'Pet cases drop pets only.' : 'Tool cases drop pickaxes and swords, helmets and armor, in six styles: damage, coins, luck, XP, speed and tap strike.'} Each kind has its own pity.</div><div class="pity">
       <div>Epic+ guaranteed in <b>${epicPityLeft()}</b></div>
       <div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - pityFor().leg)}</b></div></div>
     <div class="odds" style="margin-top:6px">${RARITY.map((r, i) =>
@@ -773,7 +773,7 @@ function drillCardHtml(where) {
       <div class="drillbar"><i style="width:${pct.toFixed(1)}%"></i></div>
       <div class="small muted">${d.lv >= DRILL_MAX ? 'Fully upgraded' : `${fmt(Math.floor(d.xp))}/${fmt(need)} XP to Lv ${d.lv + 1}`}${next ? ` · ${next.name} at Lv ${next.lv}` : ''}</div>
       <div class="small">${d.lv ? `<span style="color:var(--good)">+${fmt(Math.round(DRILL_DMG * d.lv * 100))}% damage · +${(DRILL_APS * d.lv * 100).toFixed(1)}% attack speed</span>` : 'Every drill part from a Drill Crate builds and upgrades your drill.'}</div>
-      ${where === 'forge' ? `<div class="mbtns"><button class="btn small gold" data-act="goDrillCrates">Get drill parts</button>${m ? `<button class="btn small" data-act="drillShow">Holding: ${d.show ? 'Drill' : 'Pickaxe'}</button>` : ''}</div>` : ''}</div></div>`;
+      ${where === 'forge' ? `<div class="mbtns"><button class="btn small gold" data-act="goDrillCrates">Get drill parts</button>${m ? `<button class="btn small" data-act="drillShow">Holding: ${d.show ? 'Drill' : S.gear.eq.pick ? gearStyle(S.gear.eq.pick).name : 'Pickaxe'}</button>` : ''}</div>` : ''}</div></div>`;
 }
 function drillCasesHtml() {
   const odds = baseRarityOdds(), ready = freeCrateReady();
@@ -850,7 +850,7 @@ function dropView(d) {
   if (d.kind === 'pet') return { img: petUrl(d.sp, false, d.r), r: d.r, label: PETS[d.sp].name, odds: d.odds };
   if (d.kind === 'part') return { img: partUrl(d.part, d.r), r: d.r, label: DRILL_PARTS[d.part].name, odds: d.odds };
   const it = d.item;
-  return { img: gearUrl(it.slot, it.t, it.r), r: it.r, label: SLOTS[it.slot].name, odds: d.odds, wear: WEAR[wearIndex(it.fl)].short };
+  return { img: gearUrl(it.slot, it.t, it.r, false, it.st), r: it.r, label: gearStyle(it).name, odds: d.odds, wear: WEAR[wearIndex(it.fl)].short };
 }
 
 // Reel filler rolled with the real odds, so what slides past is what the case really holds.
@@ -864,9 +864,9 @@ function decoy(tier, forceR = null) {
     const sp = weightedPick(PET_IDS, id => PETS[id].weight);
     return { img: petUrl(sp, false, r), r, label: PETS[sp].name, odds: dropOdds(r) };
   }
-  const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight);
+  const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight), style = weightedPick(GEAR_STYLES[slot], s => s.weight);
   const fl = rollFloat();
-  return { img: gearUrl(slot, dropMaterial(tier), r), r, label: SLOTS[slot].name, odds: dropOdds(r, fl), wear: WEAR[wearIndex(fl)].short };
+  return { img: gearUrl(slot, dropMaterial(tier), r, false, style.id), r, label: style.name, odds: dropOdds(r, fl), wear: WEAR[wearIndex(fl)].short };
 }
 
 function tileHtml(v, extra = '') {
@@ -1108,9 +1108,16 @@ function lookViewHtml() {
   let h = `<div class="card lookcard"><div class="lookprev"><img class="f1" src="${spriteUrl(heroSprite(0), 6)}" alt="Your miner"><img class="f2" src="${spriteUrl(heroSprite(1), 6)}" alt=""></div>
     <div><h3>Your miner</h3><p class="small muted">Pick a hat and colours. Your miner looks like this in the world and in the cave. New islands unlock new hats.</p>
     <div class="mbtns"><button class="btn small" data-act="lookRandom">Random</button><button class="btn small" data-act="lookReset">Reset</button></div></div></div>`;
+  // Gear or outfit: your equipped helmet and armor show on your miner unless you pick the outfit.
+  const eqH = S.gear.eq.helm, eqA = S.gear.eq.charm;
+  const wearBtns = (k, it) => `<div class="seg wearseg"><button data-act="lookWear" data-k="${k}" data-v="1" class="${L[k] !== false ? 'on' : ''}">${it ? gearStyle(it).name : 'Gear'}</button><button data-act="lookWear" data-k="${k}" data-v="0" class="${L[k] === false ? 'on' : ''}">Outfit</button></div>`;
+  h += `<div class="card"><h3>Wear</h3>
+    <div class="lookrow"><span class="small muted">Head</span>${wearBtns('gearHelm', eqH)}</div>
+    <div class="lookrow"><span class="small muted">Body</span>${wearBtns('gearArmor', eqA)}</div>
+    <p class="small muted" style="margin:6px 0 0">Gear shows the helmet and armor you have equipped${!eqH || !eqA ? ' (equip one in the Gear tab)' : ''}; Outfit shows the hat and shirt you pick below.</p></div>`;
   h += '<div class="card"><h3>Hat</h3><div class="hatgrid">';
   for (const hat of LOOK_HATS) {
-    const ok = hatUnlocked(hat), img = spriteUrl(heroSprite(0, { ...L, hat: hat.id }), 3);
+    const ok = hatUnlocked(hat), img = spriteUrl(heroSprite(0, { ...L, hat: hat.id, gearHelm: false, gearArmor: false }), 3);
     h += `<button class="hatbtn ${L.hat === hat.id ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="look" data-k="hat" data-v="${hat.id}">
       <img src="${img}" alt="" ${ok ? '' : 'style="filter:brightness(0) opacity(.5)"'}><span>${ok ? hat.name : ISLANDS[hat.isle].name}</span></button>`;
   }
@@ -1134,8 +1141,8 @@ function gearViewHtml() {
       continue;
     }
     const main = itemStats(it)[0];
-    h += `<button class="eqslot rc${it.r}" data-act="item" data-id="${it.id}"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="">
-      <span class="sn">${SLOTS[slot].name}${it.lv ? ' +' + it.lv : ''}</span><span class="sv">${statText(main.k, main.v)}</span></button>`;
+    h += `<button class="eqslot rc${it.r}" data-act="item" data-id="${it.id}"><img src="${gearUrl(it.slot, it.t, it.r, false, it.st)}" alt="">
+      <span class="sn">${gearStyle(it).name}${it.lv ? ' +' + it.lv : ''}</span><span class="sv">${statText(main.k, main.v)}</span></button>`;
   }
   h += '</div>';
   h += `<div class="row small">${icon('scrap', '')}<span><b>${fmt(S.scrap)}</b> scrap · bag ${S.gear.bag.length}/${BAG_SIZE}</span></div>
@@ -1146,7 +1153,7 @@ function gearViewHtml() {
       <button class="btn small" data-act="bagShow">Show: ${bagShowText()} ▾</button></div>`;
   if (S.gear.bag.length) {
     h += `<div class="bagsearch"><input type="search" id="bagSearch" enterkeyhint="search" autocomplete="off" spellcheck="false"
-      placeholder="Search: eclipse charm fn, luck>50, t20" value="${escapeHtml(UI.bagQuery || '')}">
+      placeholder="Search: eclipse armor fn, luck>50, sword" value="${escapeHtml(UI.bagQuery || '')}">
       <button class="btn small" data-act="bagSearchHelp" aria-label="Search help">?</button></div>`;
   }
   h += `<div id="bagList">${bagListHtml()}</div>`;
@@ -1155,13 +1162,13 @@ function gearViewHtml() {
 
 function bagListHtml() {
   const shown = sortedBag();
-  if (!S.gear.bag.length) return '<div class="card muted small">Your bag is empty. Open cases to find pickaxes, helmets and charms. Compare the numbers and equip the best ones.</div>';
+  if (!S.gear.bag.length) return '<div class="card muted small">Your bag is empty. Open cases at the Market to find pickaxes, swords, helmets and armor. Compare the numbers and equip the best ones.</div>';
   if (!shown.length) return `<div class="card muted small">Nothing matches${(UI.bagQuery || '').trim() ? ' your search' : ''}. ${S.settings.bagShow !== 'all' || S.settings.bagOnly !== 'any' ? 'The Show filter is on too. ' : ''}</div>`;
   let h = (UI.bagQuery || '').trim() ? `<div class="small muted" style="margin-bottom:4px">${plural(shown.length, 'match')}</div>` : '';
   h += '<div class="baggrid">';
   for (const it of shown) {
     h += `<button class="bagtile rc${it.r}" data-act="item" data-id="${it.id}" aria-label="${RARITY[it.r].name} ${itemName(it)}">
-      <img src="${gearUrl(it.slot, it.t, it.r)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
+      <img src="${gearUrl(it.slot, it.t, it.r, false, it.st)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
   }
   return h + '</div>';
 }
@@ -1178,7 +1185,7 @@ const SEARCH_KEYS = {
 function itemSearchText(it) {
   const w = WEAR[wearIndex(it.fl)];
   const stats = itemStats(it).map(s => STATS[s.k].name.toLowerCase() + ' ' + s.k).join(' ');
-  return [RARITY[it.r].name, MATERIALS[it.t].name, SLOTS[it.slot].name, SLOTS[it.slot].name + 's', w.name, w.short, stats,
+  return [RARITY[it.r].name, MATERIALS[it.t].name, SLOTS[it.slot].name, SLOTS[it.slot].name + 's', gearStyle(it).name, it.slot === 'charm' ? 'charm charms' : '', w.name, w.short, stats,
     it.locked ? 'locked' : 'unlocked', it.isNew ? 'new' : '', it.lv ? 'upgraded +' + it.lv : ''].join(' ').toLowerCase().split(/\s+/);
 }
 function searchValue(it, key) {
@@ -1213,7 +1220,7 @@ const BAG_SORT_LABEL = {
   new: 'Newest', rarity: 'Rarity', best: 'Best by type', tier: 'Highest tier', lv: 'Most upgraded', fn: 'Best wear (FN)',
   dmg: 'Damage', coin: 'Coins', luck: 'Luck', aps: 'Attack speed', crit: 'Crit chance', critdmg: 'Crit damage', xp: 'XP', strike: 'Tap strike',
 };
-const BAG_SHOW_LABEL = { all: 'All', pick: 'Pickaxes', helm: 'Helmets', charm: 'Charms' };
+const BAG_SHOW_LABEL = { all: 'All', pick: 'Pickaxes', helm: 'Helmets', charm: 'Armor' };
 const BAG_ONLY_LABEL = {
   any: 'Anything', r3: 'Legendary+', r5: 'Exotic+', r7: 'Celestial+', fn: 'Factory New', locked: 'Locked', unlocked: 'Unlocked', new: 'New', upg: 'Upgraded',
 };
@@ -1374,8 +1381,9 @@ function showItem(id) {
   } else actions += `<button class="btn" data-act="unequip" data-slot="${it.slot}">Unequip</button>`;
   actions += '<button class="btn" data-act="close">Close</button>';
   openModal(`<button class="lockbtn ${it.locked ? 'on' : ''}" data-act="lockItem" data-id="${it.id}" aria-pressed="${it.locked}" aria-label="${it.locked ? 'Unlock item' : 'Lock item'}">${icon(it.locked ? 'lock' : 'unlock', '')}<small>${it.locked ? 'Locked' : 'Lock'}</small></button>
-    <div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
+    <div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r, false, it.st)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}${it.lv ? ' +' + it.lv : ''}</div>
+    <div class="rsub">${it.slot === 'pick' ? 'Tool' : SLOTS[it.slot].name} · ${STATS[gearStyle(it).main].name.toLowerCase()} style${it.slot !== 'pick' ? ', worn on your miner' : ', held in the cave'}</div>
     <div class="rsub">${MATERIALS[it.t].name} (B${(it.t - 1) * MATERIAL_FLOORS + 1}+ material) · ${wearHtml(it)}</div>
     <div class="rsub">${RARITY[it.r].name} ${WEAR[wearIndex(it.fl)].short} pulls are ${oddsLong(dropOdds(it.r, it.fl))}</div>
     ${lines}<div class="rsub">Reforging adds +10% to every stat (max +${MAX_ITEM_LEVEL}).</div></div>${cmp}
@@ -1815,11 +1823,11 @@ function handleAction(el) {
     case 'bagShowDone': closeModal(); break;
     case 'bagSearchHelp':
       openModal(`<h2>Search the bag</h2><div class="small" style="line-height:1.6">
-        <p>Type words and every one has to match: <b>eclipse charm</b>, <b>fn pickaxe</b>, <b>legendary crit</b>, <b>locked</b>, <b>new</b>.</p>
+        <p>Type words and every one has to match: <b>eclipse armor</b>, <b>fn sword</b>, <b>clover</b>, <b>legendary crit</b>, <b>locked</b>, <b>new</b>.</p>
         <p>Compare numbers with &gt; &lt; &gt;= &lt;= or =:</p>
         <p><b>luck&gt;50</b> over +50% luck (main and sub-stats added up)<br><b>dmg&gt;1000</b>, <b>coins&gt;200</b>, <b>speed&gt;10</b>, <b>crit&gt;5</b>, <b>cd&gt;100</b>, <b>xp&gt;20</b>, <b>tap&gt;50</b><br>
         <b>t20</b> or <b>t&gt;=20</b> tier · <b>lv&gt;0</b> upgraded · <b>float&lt;0.01</b> cleanest floats</p>
-        <p>Mix them: <b>charm fn luck&gt;100 t&gt;=17</b></p></div>
+        <p>Mix them: <b>armor fn luck&gt;100 t&gt;=17</b></p></div>
         <button class="btn good" style="width:100%" data-act="close">Got it</button>`);
       break;
     case 'again': {
@@ -1841,11 +1849,12 @@ function handleAction(el) {
     }
     case 'lookRandom': {
       const pick = n => Math.floor(Math.random() * n), hats = LOOK_HATS.filter(hatUnlocked);
-      S.look = { hat: hats[pick(hats.length)].id, hatC: pick(LOOK_CLOTH.length), hair: pick(LOOK_HAIR.length), skin: pick(LOOK_SKIN.length), shirt: pick(LOOK_CLOTH.length), pants: pick(LOOK_CLOTH.length), boots: pick(LOOK_BOOTS.length) };
+      S.look = { ...S.look, hat: hats[pick(hats.length)].id, hatC: pick(LOOK_CLOTH.length), hair: pick(LOOK_HAIR.length), skin: pick(LOOK_SKIN.length), shirt: pick(LOOK_CLOTH.length), pants: pick(LOOK_CLOTH.length), boots: pick(LOOK_BOOTS.length) };
       SFX.click(); buildBag();
       break;
     }
     case 'lookReset': S.look = { ...DEFAULT_LOOK }; SFX.click(); buildBag(); break;
+    case 'lookWear': S.look[d.k] = d.v === '1'; SFX.click(); buildBag(); break;
     case 'item': showItem(Number(d.id)); break;
     case 'equipItem':
       if (equipItem(Number(d.id))) { SFX.buy(); toast('Equipped', 'good'); }

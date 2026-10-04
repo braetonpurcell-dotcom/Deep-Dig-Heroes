@@ -334,7 +334,7 @@ const STATS = {
 const SLOTS = {
   pick: { name: 'Pickaxe', main: 'dmg', weight: 40 },
   helm: { name: 'Helmet', main: 'coin', weight: 30 },
-  charm: { name: 'Charm', main: 'luck', weight: 30 },
+  charm: { name: 'Armor', main: 'luck', weight: 30 }, // Version 2: charms became armor you can see on your miner
 };
 const SLOT_IDS = Object.keys(SLOTS);
 const SUB_POOL = ['aps', 'crit', 'critdmg', 'xp', 'strike', 'dmg', 'coin', 'luck'];
@@ -485,7 +485,7 @@ const LOOK_HATS = [
   { id: 'viking', name: 'Viking helmet', isle: 3 },
   { id: 'crown', name: 'Crown', isle: 4 },
 ];
-const DEFAULT_LOOK = { hat: 'helmet', hatC: 7, hair: 0, skin: 0, shirt: 0, pants: 11, boots: 0 };
+const DEFAULT_LOOK = { hat: 'helmet', hatC: 7, hair: 0, skin: 0, shirt: 0, pants: 11, boots: 0, gearHelm: true, gearArmor: true };
 
 // Version 2: the drill (Jackson's idea). Drill parts come from the Drill Crate in the Market. Each
 // part adds XP to your drill by its rarity; the drill levels up (more damage and speed) and every
@@ -516,3 +516,37 @@ const DRILL_APS = 0.004; // +0.4% attack speed per drill level
 const DRILL_CRATE_MULT = 2; // a Drill Crate costs twice a Copper Crate
 function drillNeed(lv) { return Math.round(10 * Math.pow(1.12, lv)); } // XP to go from lv to lv + 1
 function drillModelIndex(lv) { let m = -1; DRILL_MODELS.forEach((d, i) => { if (lv >= d.lv) m = i; }); return m; }
+
+// Version 2: gear styles. Every slot comes in six styles, one per main stat, and the style decides
+// how the item looks, both as an icon and on your miner. Items from before styles existed have none
+// and read as the slot's first style, which has the main stat they always had.
+const GEAR_STYLES = {
+  pick: [
+    { id: 'war', main: 'dmg', name: 'War Pick', weight: 40 },
+    { id: 'gilded', main: 'coin', name: 'Gilded Pick', weight: 12 },
+    { id: 'clover', main: 'luck', name: 'Clover Pick', weight: 11 },
+    { id: 'rune', main: 'xp', name: 'Rune Pick', weight: 11 },
+    { id: 'swift', main: 'aps', name: 'Swift Pick', weight: 12 },
+    { id: 'sword', main: 'strike', name: 'Sword', weight: 14 },
+  ],
+  helm: [
+    { id: 'prospector', main: 'coin', name: 'Prospector Helmet', weight: 36 },
+    { id: 'horned', main: 'dmg', name: 'Horned Helm', weight: 14 },
+    { id: 'lucky', main: 'luck', name: 'Lucky Cap', weight: 13 },
+    { id: 'scholar', main: 'xp', name: "Scholar's Hat", weight: 12 },
+    { id: 'aviator', main: 'aps', name: 'Aviator Goggles', weight: 12 },
+    { id: 'storm', main: 'strike', name: 'Storm Band', weight: 13 },
+  ],
+  charm: [
+    { id: 'cloak', main: 'luck', name: 'Lucky Cloak', weight: 36 },
+    { id: 'plate', main: 'dmg', name: 'Plate Armor', weight: 14 },
+    { id: 'vest', main: 'coin', name: 'Merchant Vest', weight: 13 },
+    { id: 'robe', main: 'xp', name: 'Scholar Robe', weight: 12 },
+    { id: 'jerkin', main: 'aps', name: 'Runner Jerkin', weight: 12 },
+    { id: 'mail', main: 'strike', name: 'Storm Mail', weight: 13 },
+  ],
+};
+// Speed as a main stat grows like a sub-stat (times 2); grown like damage, a top item would make
+// the miner swing fifty times as fast.
+const MAIN_SUBLIKE = { aps: 2 };
+function gearStyle(it) { const list = GEAR_STYLES[it.slot]; return list.find(s => s.id === it.st) || list[0]; }

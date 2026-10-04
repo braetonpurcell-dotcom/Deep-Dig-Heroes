@@ -825,3 +825,5 @@ body.roomtab #screenbar b { text-shadow: 0 2px 0 #000, 0 0 6px rgba(0,0,0,.8); }
 .v2row { display: grid; grid-template-columns: 52px 1fr; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .v2row:last-of-type { border-bottom: 0; }
 .v2row > img, .v2row > .isleswatch { justify-self: center; }
+
+.wearseg button { font-size: 13px; min-height: 32px; padding-inline: 4px; }

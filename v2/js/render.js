@@ -460,7 +460,7 @@ function drawHero() {
     ctx.save();
     ctx.translate(hx + 12.5, hy + 11.5);
     ctx.rotate(a);
-    const pk = gearSprite('pick', it ? it.t : 0, it ? it.r : 0);
+    const pk = gearSprite('pick', it ? it.t : 0, it ? it.r : 0, it ? it.st : null);
     const pad = pk.fxPad || 0;
     ctx.drawImage(pk, -5.5 - pad, -11.5 - pad);
     ctx.restore();

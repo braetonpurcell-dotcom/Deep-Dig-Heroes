@@ -162,6 +162,7 @@ function repairItem(it) {
   it.fl = isFinite(it.fl) ? clamp(it.fl, 0, 1) : 0.5;
   it.lv = Number.isInteger(it.lv) ? clamp(it.lv, 0, MAX_ITEM_LEVEL) : 0;
   it.subs = (Array.isArray(it.subs) ? it.subs : []).filter(sb => sb && STATS[sb.k] && isFinite(sb.roll));
+  if (it.st != null && !GEAR_STYLES[it.slot].some(s => s.id === it.st)) delete it.st; // unknown style: the slot's first
   it.isNew = !!it.isNew;
   it.locked = !!it.locked;
   return true;
@@ -1298,7 +1299,7 @@ function cleanLook(l) {
   for (const [k, list] of [['hatC', LOOK_CLOTH], ['hair', LOOK_HAIR], ['skin', LOOK_SKIN], ['shirt', LOOK_CLOTH], ['pants', LOOK_CLOTH], ['boots', LOOK_BOOTS]]) {
     if (!Number.isInteger(L[k]) || L[k] < 0 || L[k] >= list.length) L[k] = DEFAULT_LOOK[k];
   }
-  return { hat: L.hat, hatC: L.hatC, hair: L.hair, skin: L.skin, shirt: L.shirt, pants: L.pants, boots: L.boots };
+  return { hat: L.hat, hatC: L.hatC, hair: L.hair, skin: L.skin, shirt: L.shirt, pants: L.pants, boots: L.boots, gearHelm: L.gearHelm !== false, gearArmor: L.gearArmor !== false };
 }
 // Points a class puts in each direction of the web, and the direction it leans to most.
 function classBranches(c) {
@@ -1466,12 +1467,13 @@ function rollDrop(tier, minR = 0, kind = S.caseKind) {
     return { kind: 'part', part: weightedPick(DRILL_PART_IDS, id => DRILL_PARTS[id].weight), r, xp: PART_XP[r], odds: dropOdds(r) };
   }
   const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight);
-  const main = SLOTS[slot].main;
+  const style = weightedPick(GEAR_STYLES[slot], s => s.weight);
+  const main = style.main;
   const subs = shuffle(SUB_POOL.filter(k => k !== main))
     .slice(0, SUB_COUNT[r])
     .map(k => ({ k, roll: Math.round(rand(0.7, 1.3) * 1000) / 1000 }));
   const fl = rollFloat();
-  const item = { id: S.nextId++, slot, r, t: dropMaterial(tier), fl, lv: 0, subs, isNew: true };
+  const item = { id: S.nextId++, slot, st: style.id, r, t: dropMaterial(tier), fl, lv: 0, subs, isNew: true };
   return { kind: 'gear', r, item, odds: dropOdds(r, fl) };
 }
 
@@ -1538,9 +1540,12 @@ function grantDrop(d) {
   S.gear.bag.unshift(it);
 }
 
+// An upgrade is a better item of the same main stat; a different style is a different choice.
 function isUpgrade(it) {
   const eq = S.gear.eq[it.slot];
-  return !eq || itemStats(it)[0].v > itemStats(eq)[0].v;
+  if (!eq) return true;
+  const a = itemStats(it)[0], b = itemStats(eq)[0];
+  return a.k === b.k && a.v > b.v;
 }
 
 function itemRank(it) { return it.r * 1000 + it.t * 20 + it.lv; }
@@ -1598,12 +1603,13 @@ function statValue(k, r, t, mult, sub = false) {
 function itemStats(it) {
   const lv = 1 + 0.1 * it.lv;
   const q = quality(it.fl);
-  const main = SLOTS[it.slot].main;
-  const out = [{ k: main, v: statValue(main, it.r, it.t, q * lv), main: true }];
+  const main = gearStyle(it).main;
+  const boost = MAIN_SUBLIKE[main];
+  const out = [{ k: main, v: boost ? statValue(main, it.r, it.t, q * lv * boost, true) : statValue(main, it.r, it.t, q * lv), main: true }];
   for (const s of it.subs) out.push({ k: s.k, v: statValue(s.k, it.r, it.t, q * s.roll * lv, true) * 0.5 });
   return out;
 }
-function itemName(it) { return `${MATERIALS[it.t].name} ${SLOTS[it.slot].name}`; }
+function itemName(it) { return `${MATERIALS[it.t].name} ${gearStyle(it).name}`; }
 function scrapValue(it) {
   const st = ST || { scrapMult: 1 };
   return Math.ceil(SCRAP_BY_RARITY[it.r] * materialScale(it.t) * st.scrapMult * (1 + it.lv * 0.5));

@@ -545,16 +545,35 @@ const HAT_ROWS = {
   crown: ['................', '....k..kk..k....', '....kykyykyk....', '....kyyyyyyk....', '....kywyywyk....', '....kkkkkkkk....', '....khhhhhhk....'],
 };
 function lookOf(look) { return look || (typeof S !== 'undefined' && S && S.look) || DEFAULT_LOOK; }
-function lookKey(L) { return [L.hat, L.hatC, L.hair, L.skin, L.shirt, L.pants, L.boots].join('.'); }
+function lookKey(L) { return [L.hat, L.hatC, L.hair, L.skin, L.shirt, L.pants, L.boots, L.gearHelm === false ? 0 : 1, L.gearArmor === false ? 0 : 1].join('.'); }
 function heroPalette(L) {
   const hat = L.hat === 'crown' ? '#ffcc4d' : LOOK_CLOTH[L.hatC], skin = LOOK_SKIN[L.skin], shirt = LOOK_CLOTH[L.shirt], pants = LOOK_CLOTH[L.pants], hair = LOOK_HAIR[L.hair];
   return { ...HERO_PALETTE, y: hat, Y: shade(hat, -0.28), w: L.hat === 'crown' ? '#ff4d6d' : '#ffffff', s: skin[0], S: skin[1], b: shirt, B: shade(shirt, -0.3),
     d: pants, D: shade(pants, -0.3), o: LOOK_BOOTS[L.boots], h: hair, H: shade(hair, -0.3) };
 }
-function heroSprite(step, look = null) {
-  const L = lookOf(look), base = step ? 'heroStep' : 'hero', name = base + ':' + L.hat;
+function heroBody(step, L) {
+  const base = step ? 'heroStep' : 'hero', name = base + ':' + L.hat;
   if (!PX[name]) PX[name] = (HAT_ROWS[L.hat] || HAT_ROWS.helmet).concat(PX[base].slice(7));
   return sprite(name, heroPalette(L), lookKey(L));
+}
+// Your miner: the body in your look, wearing your equipped armor and helmet (unless the wardrobe
+// says to show the outfit instead). gear defaults to what you have equipped.
+function heroSprite(step, look = null, gear = null) {
+  const L = lookOf(look);
+  const eq = gear || (typeof S !== 'undefined' && S && S.gear ? S.gear.eq : {});
+  const helm = L.gearHelm !== false ? eq.helm : null, armor = L.gearArmor !== false ? eq.charm : null;
+  if (!helm && !armor) return heroBody(step, L);
+  const tag = it => (it ? `${it.st || ''}.${it.t}.${it.r}` : '-');
+  const key = `heroC|${step ? 1 : 0}|${lookKey(L)}|${tag(helm)}|${tag(armor)}`;
+  let c = spriteCache.get(key);
+  if (c) return c;
+  c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const g = c.getContext('2d');
+  g.drawImage(heroBody(step, helm ? { ...L, hat: 'none' } : L), 0, 0);
+  if (armor) g.drawImage(wornSprite('charm', armor), 0, 0);
+  if (helm) g.drawImage(wornSprite('helm', helm), 0, 0);
+  spriteCache.set(key, c);
+  return c;
 }
 
 function pickSprite(tier) {
@@ -605,6 +624,85 @@ function gradientAt(colors, t) {
   return mix(colors[i], colors[Math.min(i + 1, colors.length - 1)], x - i);
 }
 
+// ---------- Version 2: gear styles ----------
+// Mirror a half-width row list into a symmetric sprite.
+const sym = rows => rows.map(r => r + r.split('').reverse().join(''));
+const GEAR_ICON = {
+  pick: {
+    war: ['kk.kkkkk.kk', 'kmkkMMMkkmk', 'kmMmmmmmmnk', '.kmmkwknmk.', '..kkkwkkk..', '....kwk....', '....kak....', '....kak....', '....kwk....', '....kWk....', '....kwk....', '....kkk....'],
+    gilded: ['..kkkkkkk..', '.kyyyyyyyk.', 'kmmkkkkknmk', 'kmk.kwk.knk', 'kk..kwk..kk', '....kwk....', '...kkwkk...', '...kyYyk...', '...kkwkk...', '....kWk....', '....kwk....', '....kkk....'],
+    clover: ['..kkkakkk..', '.kMMaAammk.', 'kmmkkakknmk', 'kmk.kwk.knk', 'kk..kwk..kk', '....kwk....', '....kak....', '....kwk....', '....kak....', '....kWk....', '....kwk....', '....kkk....'],
+    rune: ['..kkkkkkk..', '.kMaMmamak.', 'kmmkkkkknmk', 'kak.kwk.kak', 'kk..kwk..kk', '....kak....', '....kwk....', '....kak....', '....kwk....', '....kWk....', '....kwk....', '....kkk....'],
+    swift: ['......kk...', '.kkkkkMmk..', 'kmmmmmmmmkk', '.kkkkwkkknk', '....kwk..kk', '....kwk....', '....kak....', '....kwk....', '....kak....', '....kwk....', '....kWk....', '....kkk....'],
+    sword: ['.....k.....', '....kMk....', '....kMk....', '....kmk....', '....kmk....', '....kmk....', '....knk....', '.kyyyyyyyk.', '..kkkakkk..', '....kak....', '....kgk....', '....kkk....'],
+  },
+  helm: {
+    prospector: ['............', '............', '....kkkk....', '..kkmmmmkk..', '.kmmMmmmmmk.', '.kmMmmmmmkLk', 'kmmmmmmmmkLk', 'kmmmmmmmmmkk', 'kddddddddddk', 'kkkkkkkkkkkk'],
+    horned: sym(['k.....', 'kok...', 'kok.kk', '.kokMm', '..kmMm', '.kmmmm', 'kmmmmm', 'kddddd', 'kkkkkk', '......']),
+    lucky: sym(['......', '......', '...kkk', '..kccc', '.kccca', '.kcaAA', '.kccca', 'kkkkkk', 'kCCCCC', '.kkkkk']),
+    scholar: ['.....kk.....', '....kcck....', '....kcck....', '...kccyck...', '...kcccck...', '..kccccyck..', '..kccccccck.', 'kkkkkkkkkkkk', 'kCCCCCCCCCCk', 'kkkkkkkkkkkk'],
+    aviator: sym(['....kk', '..kkcc', '.kcccc', 'kmmmkc', 'kmaAmk', 'kkmmkc', '.kcccc', '.kckkk', '.kk...', '......']),
+    storm: ['............', '............', '..kkkkkkkkk.', '.kccccccaAck', 'kccccccaAcck', 'kcccccaacck.', '.kkkkkaakk..', '..kk..kak...', '.kck...kk...', '.kk.........'],
+  },
+  charm: {
+    cloak: sym(['...kkk', '..kccc', '.kcCCC', '.kcCkk', 'kcckaA', 'kcccka', 'kccccc', 'kcCccc', 'kccCcc', 'kcccCc', 'kCcccc', '.kkkkk']),
+    plate: sym(['......', '.kkk..', 'kMmmkk', 'kmmmMm', '.kkmMm', '..kmmm', '..kmnm', '..kmmm', '..knmm', '..kddd', '...kmm', '....kk']),
+    vest: sym(['......', '.kkk..', 'kccckk', 'kccckw', 'kcyckw', '.kcckw', '.kyckw', '.kcckw', '.kdddd', '.kcckk', '..kkk.', '......']),
+    robe: sym(['......', '.kkk..', 'kccckk', 'kccckY', 'kcccky', '.kccka', '.kcccy', '.kcccy', '.kcccy', '.kcccy', '.kcccc', '.kkkkk']),
+    jerkin: sym(['......', '..kk..', '.kcckk', 'kccccc', 'kcaccc', '.kaccc', '.kcacc', '.kccac', '.kdddy', '.kcccc', '.kcckk', '.kkk..']),
+    mail: sym(['......', '.kkk..', 'kmnmkk', 'knmnmn', 'kmnmna', '.knmaa', '.kmnmA', '.knmnm', '.kmnmn', '.kdddd', '..kmnm', '...kkk']),
+  },
+};
+// What your miner wears: a helmet over the head (rows 0-6) and armor over the body (rows 10-13).
+const BLANK16 = '................';
+const wornRows = (top, rows) => { const out = Array(16).fill(BLANK16); rows.forEach((r, i) => { out[top + i] = r; }); return out; };
+const torso = (sh, mid1, mid2, hem = null) => wornRows(10, [sh.length === 16 ? sh : '...kk' + sh + 'kk...', '..k' + mid1 + '....', '..k' + mid2 + '....'].concat(hem ? [hem] : [])); // the hand (column 12) stays bare
+const GEAR_WORN = {
+  helm: {
+    prospector: wornRows(0, [BLANK16, '.....kkkkk......', '....kmmmmmkk....', '...kmmMmmmmmkk..', '...kmmmmmmmmkLk.', '..knnnnnnnnnkLk.', '..kkkkkkkkkkkk..']),
+    horned: wornRows(0, [BLANK16, '.k............k.', '.kok.kkkkkk.kok.', '..kokmmmmmmkok..', '...kmMmmmmmmk...', '...knnnnnnnnk...', '...kkkkkkkkkk...']),
+    lucky: wornRows(3, ['.....kkkkkk.....', '....kcccaAck....', '...kccccaaackkk.', '...k.kkkkkkCCCCk']),
+    scholar: wornRows(0, ['...kk...........', '..kcck..........', '...kcyk.........', '...kccckk.......', '....kccccck.....', '..kkkkkkkkkkkk..', '.kCCCCCCCCCCCCk.']),
+    aviator: wornRows(3, ['.....kkkkkk.....', '....kccccccck...', '...kccckmaAmk...', '..kckkkkkmmkk...']),
+    storm: wornRows(6, ['.kcccccccaAk....']),
+  },
+  charm: {
+    cloak: torso('ccaAcc', 'Ccccccccc', 'CccccccCc'),
+    plate: torso('..kMMmmmmmmMMk..', 'nmmmMmmmm', 'nmmmmmmmm', '...kddddddddk...'),
+    vest: torso('cwwwwc', 'Cccwwwwcc', 'Ccywwwwyc'),
+    robe: torso('cyyyyc', 'Cccyayccc', 'Ccccycccc', '...kCccccccCk...'),
+    jerkin: torso('caccac', 'Ccaccacca', 'Cddddyddd'),
+    mail: torso('nmnmnm', 'mnmnaamnm', 'nmnaamnmn'),
+  },
+};
+// Each style's own colours: accent (a), cloth (c). Metal comes from the material, gems from rarity.
+const STYLE_ART = {
+  war: { a: '#a83a3a' }, gilded: {}, clover: { a: '#3eaa4a', A: '#8ae070' }, rune: { a: '#3ac8ff', A: '#c8f6ff' }, swift: { a: '#7ad0ff', A: '#e8f8ff' }, sword: { a: '#6e4428', A: '#9a6a3a' },
+  prospector: {}, horned: {}, lucky: { c: '#f2ece0', C: '#c8bea8', a: '#3eaa4a', A: '#8ae070' }, scholar: { c: '#3a3a8a', C: '#26265e' },
+  aviator: { c: '#8a5a32', C: '#5e3a1e', a: '#7ad0ff', A: '#e8f8ff' }, storm: { c: '#2e3a6a', C: '#1e2648', a: '#ffd23f', A: '#fff3a0' },
+  cloak: { c: '#2e7a46', C: '#1e5230', a: '#7ae070', A: '#c8ffb0' }, plate: {}, vest: { c: '#6a3a8a', C: '#4a2462' },
+  robe: { c: '#2e3a8a', C: '#1e2660', a: '#5ad8ff' }, jerkin: { c: '#8a5a32', C: '#5e3a1e', a: '#7ad0ff' }, mail: { a: '#ffd23f', A: '#fff3a0' },
+};
+function gearPalette(slot, tier, r, style) {
+  const mat = MATERIALS[tier].color, rc = RARITY[r].color, art = STYLE_ART[style] || {};
+  const trim = r >= 1 ? mix('#9a6a3a', rc, 0.55) : '#9a6a3a';
+  const cloth = art.c ? (r >= 3 ? mix(art.c, rc, 0.25) : art.c) : '#6a6a74';
+  const acc = art.a || rc;
+  return {
+    m: mat, M: r >= 3 ? mix(shade(mat, 0.45), rc, 0.6) : shade(mat, 0.45), n: shade(mat, -0.35), d: r >= 1 ? mix(shade(mat, -0.45), rc, 0.45) : shade(mat, -0.45),
+    w: slot === 'charm' ? '#f2ece0' : trim, W: r >= 2 ? shade(rc, -0.2) : '#6e4520', L: r >= 2 ? shade(rc, 0.5) : '#fff7c2',
+    g: rc, G: shade(rc, 0.6), y: '#ffcc4d', Y: '#c8901e', o: '#efe6d2',
+    a: acc, A: art.A || shade(acc, 0.45), c: cloth, C: art.C ? (r >= 3 ? mix(art.C, rc, 0.2) : art.C) : shade(cloth, -0.3),
+  };
+}
+function wornSprite(slot, it) {
+  const st = (GEAR_STYLES[slot].find(x => x.id === it.st) || GEAR_STYLES[slot][0]).id;
+  const key = `worn|${slot}|${st}|${it.t}|${it.r}`;
+  let c = spriteCache.get(key);
+  if (!c) { c = buildSprite(GEAR_WORN[slot][st], gearPalette(slot, it.t, it.r, st)); spriteCache.set(key, c); }
+  return c;
+}
+
 function basePalette(slot, tier, r) {
   const mat = MATERIALS[tier].color;
   const rc = RARITY[r].color;
@@ -618,11 +716,12 @@ function basePalette(slot, tier, r) {
   return { m: mat, M: r >= 3 ? mix(shade(mat, 0.5), rc, 0.5) : shade(mat, 0.5), g: rc, G: shade(rc, 0.6) };
 }
 
-function gearSprite(slot, tier, rarity) {
-  const key = `gearfx|${slot}|${tier}|${rarity}`;
+function gearSprite(slot, tier, rarity, style = null) {
+  const st = style || GEAR_STYLES[slot][0].id;
+  const key = `gearfx|${slot}|${st}|${tier}|${rarity}`;
   let c = spriteCache.get(key);
   if (c) return c;
-  const base = buildSprite(PX[slot], basePalette(slot, tier, rarity));
+  const base = buildSprite(GEAR_ICON[slot][st], gearPalette(slot, tier, rarity, st));
   c = rarity >= 4 ? decorateSprite(base, rarity, hashStr(key)) : base;
   spriteCache.set(key, c);
   return c;
@@ -781,9 +880,9 @@ function petUrl(sp, locked = false, r = 0) {
   const s = petSprite(sp, r);
   return spriteUrl(locked ? silhouette(s, '#2e2440') : s, 4, 'pet:' + sp + ':' + r + (locked ? ':l' : ''));
 }
-function gearUrl(slot, tier, rarity, locked = false) {
-  const s = gearSprite(slot, tier, rarity);
-  return spriteUrl(locked ? silhouette(s, '#2e2440') : s, 4, `gear:${slot}:${tier}:${rarity}${locked ? ':l' : ''}`);
+function gearUrl(slot, tier, rarity, locked = false, style = null) {
+  const s = gearSprite(slot, tier, rarity, style);
+  return spriteUrl(locked ? silhouette(s, '#2e2440') : s, 4, `gear:${slot}:${style || '-'}:${tier}:${rarity}${locked ? ':l' : ''}`);
 }
 function chestUrl(tier) {
   return spriteUrl(chestSprite(tier), 4, 'chest:' + tier);
