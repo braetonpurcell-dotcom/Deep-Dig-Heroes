@@ -858,6 +858,9 @@ function drillSprite(mi, frame = 0) {
 }
 function drillUrl(mi, scale = 4) { return spriteUrl(drillSprite(mi, 0), scale, 'drill:' + mi + ':' + scale); }
 
+PX.boat = ['.......k........', '.......kk.......', '......kwrk......', '.....kwwwwk.....', '....kwwwwwwk....', '...kwwwwwwwwk...', '..kWWWWWWWWWWk..', '.......kmk......', 'kkkkkkkkkkkkkkkk', '.khhhhhhhhhhhhk.', '..kHHHHHHHHHHk..', '...kkkkkkkkkk...'];
+function boatSprite() { return sprite('boat', { w: '#f6efe0', W: '#d6ccb4', r: '#d84848', m: '#6e4428', h: '#a8743e', H: '#7a4c2a' }, 'boat'); }
+
 // Scaled-up PNG data URLs for <img> tags in the HTML UI, drawn with hard pixel edges.
 const iconUrlCache = new Map();
 function spriteUrl(canvas, scale = 4, key = null) {

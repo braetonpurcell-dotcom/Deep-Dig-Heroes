@@ -923,7 +923,7 @@ function islandHtml() {
     h += `<button class="sign" ${act} aria-label="${b.name}" style="left:${b.x + b.w / 2}px;top:${sy}px">${b.name}<small id="isl-${b.tab}"></small><i class="dot"></i></button>`;
   }
 
-  h += '</div><div class="edge l" id="edgeL">◀</div><div class="edge r" id="edgeR">▶</div><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button><div class="islebanner" id="isleBanner"></div></div>';
+  h += '</div><div class="edge l" id="edgeL">◀</div><div class="edge r" id="edgeR">▶</div><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button><div class="islebanner" id="isleBanner"></div><button class="bossalert" id="bossAlert" data-act="worldBoss" hidden></button></div>';
   return h;
 }
 
@@ -965,6 +965,14 @@ window.addEventListener('resize', sizeIsland);
 
 function updateIslandSigns() {
   const set = (tab, txt) => { const el = $('#isl-' + tab); if (el && el.textContent !== txt) el.textContent = txt; };
+  // A boss blocks the way: say so on the world, with a button straight into the fight.
+  const ba = $('#bossAlert');
+  if (ba) {
+    const on = bossWaiting();
+    if (ba.hidden === on) ba.hidden = !on;
+    const txt = `<b>⚔ Boss at B${S.run.floor}</b><small>Tap to fight it in the Cave</small>`;
+    if (on && ba.dataset.f !== String(S.run.floor)) { ba.dataset.f = S.run.floor; ba.innerHTML = txt; }
+  }
   set('fight', bossWaiting() ? 'Boss!' : 'B' + S.run.floor);
   set('skills', S.run.sp > 0 ? S.run.sp + ' pts' : '');
   set('cases', freeCrateReady() ? 'Free!' : '');
@@ -979,7 +987,7 @@ function islandLoop(now) {
   if (!WORLD.drag && Math.abs(WORLD.vx) > 0.05) { WORLD.cam.x += WORLD.vx; WORLD.vx *= 0.9; clampCam(); placeLayer(); }
   // Dug past the next 50 floors, or sailed somewhere: repaint the world as that island.
   const isle = worldIsle();
-  if (isle !== WORLD.isle) { WORLD.isle = isle; WORLD.img = paintWorld(); updateIsleBanner(true); }
+  if (isle !== WORLD.isle) { WORLD.isle = isle; WORLD.img = paintWorld(); updateIsleBanner(true); showIsleTravel(isle); }
   drawWorld(dt);
   if ((WORLD.signT = (WORLD.signT || 0) + dt) > 0.5) { WORLD.signT = 0; updateIslandSigns(); }
 }
@@ -1035,4 +1043,19 @@ function sailTo(i) {
   S.isle.view = i;
   SFX.claim();
   toast(i < 0 ? 'The world follows your depth again' : `Sailing to ${ISLANDS[i].name}`, 'gold');
+}
+// Arriving on a new island: a boat sails across and the island's name comes up.
+function showIsleTravel(i) {
+  const w = $('#world');
+  if (!w) return;
+  const old = $('.isletravel', w);
+  if (old) old.remove();
+  const isl = ISLANDS[i], el = document.createElement('div');
+  el.className = 'isletravel';
+  el.innerHTML = `<div class="itsea"><img class="itboat" src="${spriteUrl(boatSprite(), 4, 'boat')}" alt=""></div>
+    <div class="itcard"><small>Now arriving</small><b>${isl.name}</b><span>${isl.blurb}</span></div>`;
+  w.appendChild(el);
+  SFX.claim();
+  setTimeout(() => el.classList.add('out'), 2600);
+  setTimeout(() => el.remove(), 3200);
 }

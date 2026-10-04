@@ -1022,7 +1022,7 @@ function revealResult(drops, ctx) {
     h += `<div class="small" style="text-align:center;margin-top:4px">Bonus drop: <span class="tc${v.r}">${RARITY[v.r].name} ${d.kind === 'pet' ? PETS[d.sp].name : d.kind === 'part' ? DRILL_PARTS[d.part].name + ' (+' + fmt(d.xp) + ' XP)' : itemName(d.item)}</span></div>`;
   }
   if (extra.length && drops.some(d => d.kind === 'part')) h += drillLevelNote(extra);
-  if (drops.some(d => d.evolved)) { SFX.levelup(); toast(evolveText(drops.filter(d => d.evolved).pop().evolved), 'gold'); }
+  if (drops.some(d => d.evolved)) showDrillEvolve(drops.filter(d => d.evolved).pop().evolved);
   let actions = '';
   if (win.kind === 'gear' && !win.autoEquipped && !win.salvaged && findItem(win.item.id)) {
     actions += `<button class="btn good" data-act="equipItem" data-id="${win.item.id}">Equip</button>`;
@@ -1061,7 +1061,7 @@ function showMulti(drops, ctx) {
         }
         const best = Math.max(...views.map(v => v.r));
         releaseToasts();
-        if (drops.some(d => d.evolved)) toast(evolveText(drops.filter(d => d.evolved).pop().evolved), 'gold');
+        if (drops.some(d => d.evolved)) showDrillEvolve(drops.filter(d => d.evolved).pop().evolved);
         SFX.reveal(best);
         if (best >= 2) vibrate([30, 40, 80]);
         if (best >= ULTRA) celebrate(best);
@@ -1653,6 +1653,39 @@ function showV2Welcome() {
     <div class="mbtns"><button class="btn gold" data-act="close">Let's go</button></div>`, { dismissable: true });
 }
 
+// Version 2: a boss waiting is easy to miss from the world, so it gets said once per boss floor.
+on('floor', () => {
+  if (!bossWaiting() || UI.tab === 'fight' || UI.bossToast === S.run.floor) return;
+  UI.bossToast = S.run.floor;
+  setTimeout(() => { if (bossWaiting() && UI.tab !== 'fight') toast(`A boss blocks B${S.run.floor}! Fight it in the Cave to go deeper.`, 'bad', 'skull'); }, 400);
+});
+
+// Version 2: the drill evolving gets its own moment, over whatever is open.
+function showDrillEvolve(name) {
+  const mi = DRILL_MODELS.findIndex(m => m.name === name);
+  if (mi < 0) return;
+  const el = document.createElement('div');
+  el.className = 'evolve';
+  el.innerHTML = `<div class="evburst"></div>
+    ${mi > 0 ? `<img class="evold" src="${drillUrl(mi - 1, 6)}" alt="">` : ''}<img class="evnew" src="${drillUrl(mi, 6)}" alt="">
+    <div class="evtext"><small>${mi > 0 ? 'Your drill evolved' : 'You built your first drill'}</small><b>${name}</b>
+    <span>Lv ${S.drill.lv} · +${fmt(Math.round(DRILL_DMG * S.drill.lv * 100))}% damage · +${(DRILL_APS * S.drill.lv * 100).toFixed(1)}% speed</span></div>`;
+  document.body.appendChild(el);
+  SFX.rankUp(4);
+  vibrate([40, 40, 40, 40, 160]);
+  const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 400); };
+  el.addEventListener('pointerdown', close, { once: true });
+  setTimeout(close, 3400);
+}
+// A flash in the class's colour when you switch class.
+function classFlash(color) {
+  const el = document.createElement('div');
+  el.className = 'classflash';
+  el.style.setProperty('--cc', color || '#ffcc4d');
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+}
+
 // Version 2: reaching a new island for the first time.
 on('isles', list => {
   const keys = list.reduce((a, x) => a + x.keys, 0), last = ISLANDS[list[list.length - 1].i];
@@ -1708,6 +1741,7 @@ function handleAction(el) {
     case 'goDrillCrates': if (UI.auto) stopAutoRoll(); S.caseKind = 'drill'; SFX.click(); showTab('cases'); break;
     case 'drillShow': S.drill.show = !S.drill.show; SFX.click(); buildForge(); break;
     case 'sail': sailTo(Number(d.i)); break;
+    case 'worldBoss': if (UI.tab === 'island') history.pushState({ ddh: 'fight' }, ''); fightBoss(); break;
     case 'v2Welcome': showV2Welcome(); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
@@ -1739,7 +1773,8 @@ function handleAction(el) {
     case 'classUse': {
       const res = applyClass(Number(d.i));
       if (!res) break;
-      const c = S.classes[Number(d.i)];
+      const c = S.classes[Number(d.i)], lean = classLean(c);
+      classFlash(lean ? lean.color : null);
       SFX.levelup();
       toast(res.left ? `${c.name}: ${res.wanted - res.left}/${res.wanted} points placed. Earn ${res.left} more to finish it.` : `Switched to ${c.name}`, 'good');
       if (res.missing.length) toast(`No longer have: ${res.missing.join(', ')}`, 'bad');
