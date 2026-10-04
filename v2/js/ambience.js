@@ -96,9 +96,9 @@ function ambTick() {
   if (!audible) grass = water = cave = 0;
   AMB.w = { grass, water, cave };
   const k = document.hidden ? 0.05 : 0.5;
-  L.grass.gain.setTargetAtTime(grass * 0.75, now, k);
-  L.water.gain.setTargetAtTime(water * 0.6, now, k);
-  L.cave.gain.setTargetAtTime(cave * 0.32, now, k);
+  L.grass.gain.setTargetAtTime(grass * 0.18, now, k);
+  L.water.gain.setTargetAtTime(water * 0.073, now, k);
+  L.cave.gain.setTargetAtTime(cave * 0.27, now, k);
   // Gusts of wind, flickering water, a slowly moving howl.
   const t = now;
   L.gust.gain.setTargetAtTime(0.25 + 0.35 * clamp01(0.5 + 0.5 * Math.sin(t * 0.35) * Math.sin(t * 0.13 + 1)) + Math.random() * 0.05, now, 0.4);
@@ -123,13 +123,14 @@ document.addEventListener('pointerdown', () => { audioUnlock(); setTimeout(ambSt
 // ---------- one-shot ambient touches ----------
 function voice(freq, t, dur, type, vol, dest = AU.master) {
   const c = AU.ctx, o = c.createOscillator(), g = c.createGain();
+  vol *= AU.trim;
   o.type = type; o.frequency.setValueAtTime(freq, t);
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.05);
   return o;
 }
 function drip() {
-  const t = AU.ctx.currentTime, o = voice(1500 + Math.random() * 900, t, 0.12, 'sine', 0.12, AMB.layers.cave);
+  const t = AU.ctx.currentTime, o = voice(1500 + Math.random() * 900, t, 0.12, 'sine', 0.05, AMB.layers.cave);
   o.frequency.exponentialRampToValueAtTime(3200, t + 0.06);
   const g = AU.ctx.createGain(); g.gain.value = 0.5; o.connect(g); g.connect(AMB.layers.echo);
 }
@@ -139,13 +140,13 @@ function whisper() {
   for (const f of [base, base * 1.06]) {
     const c = AU.ctx, o = c.createOscillator(), g = c.createGain();
     o.type = 'sine'; o.frequency.value = f;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09, t + 1.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.5);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 1.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.5);
     o.connect(g); g.connect(AMB.layers.cave); g.connect(AMB.layers.echo); o.start(t); o.stop(t + 3.6);
   }
 }
 function birdChirp(v) {
   const t = AU.ctx.currentTime, n = 2 + Math.floor(Math.random() * 3), f = 2600 + Math.random() * 1200;
-  for (let i = 0; i < n; i++) { const o = voice(f, t + i * 0.11, 0.07, 'sine', 0.05 * v, AMB.layers.bed); o.frequency.exponentialRampToValueAtTime(f * 1.3, t + i * 0.11 + 0.05); }
+  for (let i = 0; i < n; i++) { const o = voice(f, t + i * 0.11, 0.07, 'sine', 0.02 * v, AMB.layers.bed); o.frequency.exponentialRampToValueAtTime(f * 1.3, t + i * 0.11 + 0.05); }
 }
 
 // ---------- tapping things in the world ----------
@@ -157,7 +158,7 @@ const CRITTER_SFX = {
     o.type = 'sawtooth'; o.frequency.setValueAtTime(330 * pitch, t); o.frequency.linearRampToValueAtTime(300 * pitch, t + 0.12); o.frequency.linearRampToValueAtTime(260 * pitch, t + 0.6);
     vib.frequency.value = 9; vg.gain.value = 14 * pitch; vib.connect(vg); vg.connect(o.frequency);
     f1.type = 'bandpass'; f1.frequency.value = 800; f1.Q.value = 4; f2.type = 'bandpass'; f2.frequency.value = 1250; f2.Q.value = 5;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.04); g.gain.setValueAtTime(0.45, t + 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5 * AU.trim, t + 0.04); g.gain.setValueAtTime(0.45 * AU.trim, t + 0.4); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
     o.connect(f1); o.connect(f2); f1.connect(mix); f2.connect(mix); mix.gain.value = 1.4; mix.connect(g); g.connect(AU.master);
     o.start(t); vib.start(t); o.stop(t + 0.75); vib.stop(t + 0.75);
   },
@@ -173,3 +174,4 @@ const CRITTER_SFX = {
     for (let i = 0; i < n; i++) voice(m2f(64 + MEL_SCALE[Math.floor(Math.random() * 5)]) * base, t + i * 0.075, 0.06, 'triangle', 0.22);
   },
 };
+trimSounds(CRITTER_SFX, { baa: 0.4, cluck: 1.16, talk: 0.82 });
