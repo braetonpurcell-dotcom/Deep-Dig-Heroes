@@ -486,3 +486,33 @@ const LOOK_HATS = [
   { id: 'crown', name: 'Crown', isle: 4 },
 ];
 const DEFAULT_LOOK = { hat: 'helmet', hatC: 7, hair: 0, skin: 0, shirt: 0, pants: 11, boots: 0 };
+
+// Version 2: the drill (Jackson's idea). Drill parts come from the Drill Crate in the Market. Each
+// part adds XP to your drill by its rarity; the drill levels up (more damage and speed) and every
+// 10 levels it evolves into a new model. Your miner holds the drill instead of the pickaxe.
+const PART_XP = [1, 2, 4, 8, 16, 40, 100, 250, 600, 1500, 4000];
+const DRILL_PARTS = {
+  bit: { name: 'Drill bit', weight: 30 },
+  gear: { name: 'Gear', weight: 30 },
+  motor: { name: 'Motor', weight: 25 },
+  cell: { name: 'Power cell', weight: 15 },
+};
+const DRILL_PART_IDS = Object.keys(DRILL_PARTS);
+const DRILL_MODELS = [
+  { lv: 1, name: 'Hand Drill', body: '#c48a3a', trim: '#6e4520', bit: '#b9c2c9' },
+  { lv: 10, name: 'Power Drill', body: '#f2c14e', trim: '#2a2a34', bit: '#cfd6df' },
+  { lv: 20, name: 'Twin Drill', body: '#d84848', trim: '#2a2a34', bit: '#e9eef4', twin: true },
+  { lv: 30, name: 'Diamond Drill', body: '#4f7bd9', trim: '#e9eef4', bit: '#7ff6ff' },
+  { lv: 40, name: 'Magma Drill', body: '#ff6a2a', trim: '#3a140c', bit: '#ffd23f', glow: '#ffd860' },
+  { lv: 50, name: 'Plasma Drill', body: '#2aa8a0', trim: '#e9eef4', bit: '#c4fff2', glow: '#62ffd8' },
+  { lv: 60, name: 'Void Drill', body: '#5b4a86', trim: '#c46cff', bit: '#e07bff', glow: '#e07bff', twin: true },
+  { lv: 70, name: 'Star Drill', body: '#fff6c0', trim: '#cfae45', bit: '#ffffff', glow: '#fff1a8' },
+  { lv: 80, name: 'Eternium Drill', body: '#ff9cf0', trim: '#7f6bff', bit: '#3be8ff', glow: '#ff6bd6', twin: true },
+  { lv: 90, name: 'Singularity Drill', body: '#241a34', trim: '#ffffff', bit: '#ff4dd2', glow: 'rainbow', twin: true },
+];
+const DRILL_MAX = 100;
+const DRILL_DMG = 0.06; // +6% damage per drill level
+const DRILL_APS = 0.004; // +0.4% attack speed per drill level
+const DRILL_CRATE_MULT = 2; // a Drill Crate costs twice a Copper Crate
+function drillNeed(lv) { return Math.round(10 * Math.pow(1.12, lv)); } // XP to go from lv to lv + 1
+function drillModelIndex(lv) { let m = -1; DRILL_MODELS.forEach((d, i) => { if (lv >= d.lv) m = i; }); return m; }

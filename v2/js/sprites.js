@@ -708,6 +708,57 @@ function iconSprite(name) {
   return sprite(name, ICON_PALETTES[name] || {}, 'icon');
 }
 
+// ---------- Version 2: drill parts, the Drill Crate and the drill itself ----------
+PX.part_bit = ['.....kk.....', '....kaak....', '....kAak....', '....kmmk....', '...kMmmnk...', '...kmMmnk...', '...knmMmk...', '....kmMk....', '....knmk....', '.....kk.....', '.....k......', '............'];
+PX.part_gear = ['............', '....kkkk....', '.kk.kaak.kk.', '.kakaaaakak.', '..kaaAAaak..', 'kkaaAkkAaakk', 'kaaaAkkAaaak', '.kkaaAAaakk.', '..kaaaaaak..', '.kakkaakkak.', '.kk.kaak.kk.', '....kkkk....'];
+PX.part_motor = ['............', '..kkkkkkk...', '.kmMMMMMmk..', '.kmaaaaamkkk', '.kmAaAaAmkMk', '.kmaaaaamkkk', '.kmAaAaAmk..', '.kmaaaaamk..', '.knnnnnnnk..', '..kk...kk...', '............', '............'];
+PX.part_cell = ['....kkkk....', '....kMMk....', '..kkkkkkkk..', '..kMmmmmnk..', '..kaaaaaak..', '..kAaaaaak..', '..kaaAAaak..', '..kaAAaaak..', '..kaaaaaak..', '..kmmmmmnk..', '..kkkkkkkk..', '............'];
+function partSprite(part, r = 0) {
+  const acc = r <= 0 ? '#8fa6bf' : RARITY[r].color;
+  const base = sprite('part_' + part, { m: '#b9c2c9', M: '#eef2f6', n: '#6e7682', a: acc, A: shade(acc, 0.45) }, 'r' + r);
+  if (r < 4) return base;
+  const key = `partfx|${part}|${r}`;
+  let c = spriteCache.get(key);
+  if (!c) { c = decorateSprite(base, r, hashStr(key)); spriteCache.set(key, c); }
+  return c;
+}
+function partUrl(part, r = 0) { return spriteUrl(partSprite(part, r), 4, 'part:' + part + ':' + r); }
+// A yellow and black hazard crate.
+function drillCrateSprite() { return sprite('chest', { m: '#f2c14e', M: '#fff3b0', b: '#2a2a34', d: '#16161c', y: '#f2c14e' }, 'drillcrate'); }
+function drillCrateUrl() { return spriteUrl(drillCrateSprite(), 4, 'drillcrate'); }
+// The drill, facing right: a body with a pistol grip, a chuck, and a bit whose spiral turns with frame.
+const DRILL_RAINBOW = ['#ff4d4d', '#ffb84d', '#fff34d', '#4dff88', '#4dd2ff', '#a64dff', '#ff4dd2'];
+function drillSprite(mi, frame = 0) {
+  const key = 'drill|' + mi + '|' + (frame % 3);
+  let c = spriteCache.get(key);
+  if (c) return c;
+  const m = DRILL_MODELS[Math.max(0, mi)];
+  c = document.createElement('canvas'); c.width = 23; c.height = 11;
+  const g = c.getContext('2d'), P = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  const hi = shade(m.body, 0.35), dark = shade(m.body, -0.35), bitD = shade(m.bit, -0.4), bitH = shade(m.bit, 0.3);
+  // Grip (angled back a little) and trigger.
+  P(2, 5, 5, 6, OUTLINE); P(3, 5, 3, 5, m.trim); P(3, 6, 1, 4, shade(m.trim, 0.3)); P(1, 9, 2, 2, OUTLINE); P(7, 6, 1, 2, OUTLINE);
+  // Body with a rounded back, a highlight on top and vents (they glow on the later models).
+  P(1, 0, 11, 7, OUTLINE); P(0, 1, 1, 5, OUTLINE);
+  P(1, 1, 10, 5, m.body); P(2, 1, 9, 1, hi); P(1, 5, 10, 1, dark); P(1, 1, 1, 1, OUTLINE); P(1, 5, 1, 1, OUTLINE);
+  for (let i = 0; i < 3; i++) P(4 + i * 2, 2, 1, 3, m.glow ? (m.glow === 'rainbow' ? DRILL_RAINBOW[(i + frame) % DRILL_RAINBOW.length] : m.glow) : dark);
+  // Chuck.
+  P(11, 1, 3, 5, OUTLINE); P(12, 2, 1, 3, m.trim);
+  // Bit: a tapering cone with a diagonal stripe that moves with frame, so it spins.
+  const bit = (cy, hs) => {
+    hs.forEach((h, i) => {
+      const x = 14 + i, top = Math.round(cy - h / 2);
+      P(x, top - 1, 1, h + 2, OUTLINE);
+      for (let y = 0; y < h; y++) P(x, top + y, 1, 1, (x + (top + y) + frame) % 3 === 0 ? bitD : y === 0 ? bitH : m.bit);
+    });
+    P(14 + hs.length, Math.round(cy - 0.5), 1, 1, OUTLINE);
+  };
+  if (m.twin) { bit(2, [2, 2, 2, 1, 1, 1]); bit(5, [2, 2, 2, 1, 1, 1]); } else bit(3.5, [5, 4, 4, 3, 3, 2, 2, 1]);
+  spriteCache.set(key, c);
+  return c;
+}
+function drillUrl(mi, scale = 4) { return spriteUrl(drillSprite(mi, 0), scale, 'drill:' + mi + ':' + scale); }
+
 // Scaled-up PNG data URLs for <img> tags in the HTML UI, drawn with hard pixel edges.
 const iconUrlCache = new Map();
 function spriteUrl(canvas, scale = 4, key = null) {

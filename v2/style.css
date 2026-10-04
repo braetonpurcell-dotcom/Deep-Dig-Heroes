@@ -800,3 +800,10 @@ body.roomtab #screenbar b { text-shadow: 0 2px 0 #000, 0 0 6px rgba(0,0,0,.8); }
 .classkit img { width: 32px; height: 32px; image-rendering: pixelated; background: var(--ink); border: 1px solid var(--line); }
 .classbtns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .classbtns .btn { padding-inline: 2px; }
+
+/* Version 2 drill */
+.drillcard { display: flex; gap: 10px; align-items: center; }
+.drillimg { width: 84px; height: 64px; flex: none; display: grid; place-items: center; background: radial-gradient(circle at 50% 55%, #3a2d52, #1a1424 70%); border: 2px solid var(--line); }
+.drillimg img { width: 76px; image-rendering: pixelated; }
+.drillbar { height: 8px; margin: 4px 0 2px; background: var(--raise); border: 2px solid var(--line); position: relative; }
+.drillbar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#9af6ff, var(--info)); }

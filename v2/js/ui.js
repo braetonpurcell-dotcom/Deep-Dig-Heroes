@@ -346,7 +346,8 @@ function upgradeEffect(u) {
 
 function buildForge() {
   const amt = S.settings.buyAmt;
-  let h = `<div class="seg" role="group" aria-label="Buy amount">${['1', '10', 'max'].map(a =>
+  let h = drillCardHtml('forge');
+  h += `<div class="seg" role="group" aria-label="Buy amount">${['1', '10', 'max'].map(a =>
     `<button data-act="buyAmt" data-v="${a}" class="${amt === a ? 'on' : ''}">${a === 'max' ? 'Max' : '×' + a}</button>`).join('')}</div>`;
   h += '<div class="list">';
   for (const u of UPGRADES) {
@@ -731,8 +732,10 @@ function buildCases() {
   const best = bestCaseTier();
   const ready = freeCrateReady();
   const pet = S.caseKind === 'pet';
-  let h = `<div class="seg"><button data-act="caseKind" data-v="tool" class="${pet ? '' : 'on'}">Tool cases</button>
-    <button data-act="caseKind" data-v="pet" class="${pet ? 'on' : ''}">Pet cases</button></div>`;
+  let h = `<div class="seg"><button data-act="caseKind" data-v="tool" class="${S.caseKind === 'tool' ? 'on' : ''}">Tools</button>
+    <button data-act="caseKind" data-v="pet" class="${pet ? 'on' : ''}">Pets</button>
+    <button data-act="caseKind" data-v="drill" class="${S.caseKind === 'drill' ? 'on' : ''}">Drill</button></div>`;
+  if (S.caseKind === 'drill') { $('#tab-cases').innerHTML = h + drillCasesHtml(); refreshCases(); return; }
   h += `<div class="card"><div class="small muted">${pet ? 'Pet cases drop pets only.' : 'Tool cases drop pickaxes, helmets and charms only.'} Each kind has its own pity.</div><div class="pity">
       <div>Epic+ guaranteed in <b>${epicPityLeft()}</b></div>
       <div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - pityFor().leg)}</b></div></div>
@@ -759,6 +762,37 @@ function buildCases() {
   }
   $('#tab-cases').innerHTML = h;
   refreshCases();
+}
+
+// ---------- Version 2: drill crates ----------
+function drillCardHtml(where) {
+  const d = S.drill, mi = drillModelIndex(d.lv), m = mi >= 0 ? DRILL_MODELS[mi] : null, next = DRILL_MODELS[mi + 1];
+  const need = d.lv >= DRILL_MAX ? 0 : drillNeed(d.lv), pct = need ? Math.min(100, (d.xp / need) * 100) : 100;
+  return `<div class="card drillcard"><div class="drillimg">${m ? `<img src="${drillUrl(mi, 4)}" alt="${m.name}">` : `<img src="${partUrl('bit', 0)}" alt="" style="opacity:.45;width:48px">`}</div>
+    <div class="grow"><b>${m ? m.name : 'No drill yet'}</b> <span class="small muted">Lv ${d.lv}${d.lv >= DRILL_MAX ? ' (max)' : ''}</span>
+      <div class="drillbar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="small muted">${d.lv >= DRILL_MAX ? 'Fully upgraded' : `${fmt(Math.floor(d.xp))}/${fmt(need)} XP to Lv ${d.lv + 1}`}${next ? ` · ${next.name} at Lv ${next.lv}` : ''}</div>
+      <div class="small">${d.lv ? `<span style="color:var(--good)">+${fmt(Math.round(DRILL_DMG * d.lv * 100))}% damage · +${(DRILL_APS * d.lv * 100).toFixed(1)}% attack speed</span>` : 'Every drill part from a Drill Crate builds and upgrades your drill.'}</div>
+      ${where === 'forge' ? `<div class="mbtns"><button class="btn small gold" data-act="goDrillCrates">Get drill parts</button>${m ? `<button class="btn small" data-act="drillShow">Holding: ${d.show ? 'Drill' : 'Pickaxe'}</button>` : ''}</div>` : ''}</div></div>`;
+}
+function drillCasesHtml() {
+  const odds = baseRarityOdds(), ready = freeCrateReady();
+  let h = drillCardHtml('market');
+  h += `<div class="card"><div class="small muted">Drill Crates drop drill parts. Each part adds XP to your drill by its rarity, and every 10 levels the drill evolves into a new model. Drill Crates have their own pity.</div>
+    <div class="pity"><div>Epic+ guaranteed in <b>${epicPityLeft()}</b></div><div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - pityFor().leg)}</b></div></div>
+    <div class="odds" style="margin-top:6px">${RARITY.map((r, i) => `<span class="tc${i}">${r.name} ${oddsShort(1 / odds[i])} · ${fmt(PART_XP[i])} XP</span>`).join('')}</div>
+    <div class="small muted" style="margin-top:4px">Raw odds shown. Your luck ${fmtPct(Math.max(0, ST.luck))} makes rare parts more likely.</div></div>`;
+  h += autoCardHtml();
+  h += `<div class="card casecard"><div class="chest"><img src="${drillCrateUrl()}" alt=""></div><div>
+      <b>Free Drill Crate</b><div class="small muted" id="freeTimer">${ready ? 'Ready now' : 'Next in ' + fmtClock((S.freeCrateAt - Date.now()) / 1000)}</div>
+      <div class="casebtns"><button class="btn good" data-act="openFree" ${ready ? '' : 'disabled'}>Open free crate</button></div></div></div>`;
+  h += `<div class="card casecard"><div class="chest"><img src="${drillCrateUrl()}" alt=""></div><div>
+      <b>Drill Crate</b> <span class="small muted">· drill parts</span>
+      <div class="casebtns">
+        ${[1, 10, 25, 'max'].map(n => `<button class="btn gold" data-act="openCase" data-t="1" data-n="${n}"></button>`).join('')}
+        <button class="btn purple wide" data-act="openKey" data-t="1">${icon('key', '')} Use key</button>
+      </div></div></div>`;
+  return h;
 }
 
 // Case prices follow the deepest floor of the run, which keeps changing while the miner digs,
@@ -814,6 +848,7 @@ function oddsLong(n) { return '1 in ' + Math.round(n).toLocaleString('en-US'); }
 
 function dropView(d) {
   if (d.kind === 'pet') return { img: petUrl(d.sp, false, d.r), r: d.r, label: PETS[d.sp].name, odds: d.odds };
+  if (d.kind === 'part') return { img: partUrl(d.part, d.r), r: d.r, label: DRILL_PARTS[d.part].name, odds: d.odds };
   const it = d.item;
   return { img: gearUrl(it.slot, it.t, it.r), r: it.r, label: SLOTS[it.slot].name, odds: d.odds, wear: WEAR[wearIndex(it.fl)].short };
 }
@@ -821,6 +856,10 @@ function dropView(d) {
 // Reel filler rolled with the real odds, so what slides past is what the case really holds.
 function decoy(tier, forceR = null) {
   const r = forceR == null ? weightedIndex(rarityWeights(0)) : forceR;
+  if (S.caseKind === 'drill') {
+    const part = weightedPick(DRILL_PART_IDS, id => DRILL_PARTS[id].weight);
+    return { img: partUrl(part, r), r, label: DRILL_PARTS[part].name, odds: dropOdds(r) };
+  }
   if (S.caseKind === 'pet') {
     const sp = weightedPick(PET_IDS, id => PETS[id].weight);
     return { img: petUrl(sp, false, r), r, label: PETS[sp].name, odds: dropOdds(r) };
@@ -836,6 +875,7 @@ function tileHtml(v, extra = '') {
 
 function caseLabel(ctx) {
   const c = CASES[ctx.tier - 1];
+  if (S.caseKind === 'drill' && ctx.method !== 'reward') return ctx.method === 'free' ? 'Free Drill Crate' : 'Drill Crate';
   if (ctx.method === 'free') return 'Free ' + c.name;
   if (ctx.method === 'reward') return ctx.title || 'Reward Crate';
   return c.name;
@@ -923,7 +963,17 @@ function againButton(ctx) {
   return `<button class="btn gold" data-act="again" data-t="${c.tier}" data-n="${n}" data-cost="${cost}" ${S.coins < cost ? 'disabled' : ''}>Open another ${costHtml(cost)}</button>`;
 }
 
+function evolveText(name) { return name === DRILL_MODELS[0].name ? `You built your first drill: a ${name}!` : `Your drill evolved into a ${name}!`; }
+function drillLevelNote(drops) {
+  const lv = drops.filter(d => d.levelTo).map(d => d.levelTo), ev = drops.filter(d => d.evolved).map(d => d.evolved);
+  return (ev.length ? `<div class="rsub record">${evolveText(ev[ev.length - 1])}</div>` : '')
+    + (lv.length ? `<div class="rsub" style="color:var(--good)">Drill reached Lv ${Math.max(...lv)}</div>` : '');
+}
 function dropDetailHtml(d) {
+  if (d.kind === 'part') {
+    return `<div class="rname tc${d.r}">${RARITY[d.r].name} ${DRILL_PARTS[d.part].name}</div>
+      ${pullOddsHtml(d)}<div class="rsub">+${fmt(d.xp)} drill XP</div>${drillLevelNote([d])}`;
+  }
   if (d.kind === 'pet') {
     const def = PETS[d.sp];
     const inParty = petEquippedCount(d.sp, d.r) > 0;
@@ -953,7 +1003,7 @@ function dropDetailHtml(d) {
 function pullOddsHtml(d) {
   if (!isFinite(d.odds)) return '';
   const wear = d.kind === 'gear' ? ' ' + WEAR[wearIndex(d.item.fl)].short : '';
-  const what = d.kind === 'pet' ? 'pet' : SLOTS[d.item.slot].name.toLowerCase();
+  const what = d.kind === 'pet' ? 'pet' : d.kind === 'part' ? 'drill part' : SLOTS[d.item.slot].name.toLowerCase();
   const rec = d.recordAll ? 'Your rarest pull ever!' : d.record ? `Your rarest ${what} yet!` : '';
   return `<div class="pull-odds tc${d.r}">${RARITY[d.r].name}${wear} · ${oddsLong(d.odds)}</div>${rec ? `<div class="rsub record">${rec}</div>` : ''}`;
 }
@@ -969,8 +1019,10 @@ function revealResult(drops, ctx) {
   const extra = drops.slice(1);
   for (const d of extra) {
     const v = dropView(d);
-    h += `<div class="small" style="text-align:center;margin-top:4px">Bonus drop: <span class="tc${v.r}">${RARITY[v.r].name} ${d.kind === 'pet' ? PETS[d.sp].name : itemName(d.item)}</span></div>`;
+    h += `<div class="small" style="text-align:center;margin-top:4px">Bonus drop: <span class="tc${v.r}">${RARITY[v.r].name} ${d.kind === 'pet' ? PETS[d.sp].name : d.kind === 'part' ? DRILL_PARTS[d.part].name + ' (+' + fmt(d.xp) + ' XP)' : itemName(d.item)}</span></div>`;
   }
+  if (extra.length && drops.some(d => d.kind === 'part')) h += drillLevelNote(extra);
+  if (drops.some(d => d.evolved)) { SFX.levelup(); toast(evolveText(drops.filter(d => d.evolved).pop().evolved), 'gold'); }
   let actions = '';
   if (win.kind === 'gear' && !win.autoEquipped && !win.salvaged && findItem(win.item.id)) {
     actions += `<button class="btn good" data-act="equipItem" data-id="${win.item.id}">Equip</button>`;
@@ -1009,6 +1061,7 @@ function showMulti(drops, ctx) {
         }
         const best = Math.max(...views.map(v => v.r));
         releaseToasts();
+        if (drops.some(d => d.evolved)) toast(evolveText(drops.filter(d => d.evolved).pop().evolved), 'gold');
         SFX.reveal(best);
         if (best >= 2) vibrate([30, 40, 80]);
         if (best >= ULTRA) celebrate(best);
@@ -1024,7 +1077,8 @@ function showMulti(drops, ctx) {
           ${salvaged ? `<div class="rsub">Auto-salvaged for ${salvaged} scrap</div>` : ''}
           ${room.length ? `<div class="rsub">Bag full: scrapped ${plural(room.length, 'weaker item')} (+${roomScrap} scrap) to make room</div>` : ''}
           ${drops.some(d => d.recordAll) ? '<div class="rsub record">New rarest pull ever!</div>' : ''}
-          <div class="rsub">Check the Bag tab to compare and equip.</div>
+          ${drops.some(d => d.kind === 'part') ? `<div class="rsub">+${fmt(drops.reduce((a, d) => a + (d.xp || 0), 0))} drill XP · ${drillModel() ? drillModel().name : 'Drill'} Lv ${S.drill.lv}</div>${drillLevelNote(drops)}` : ''}
+          ${drops.some(d => d.kind === 'gear') ? '<div class="rsub">Check the House to compare and equip.</div>' : ''}
           <div class="mbtns">${againButton(ctx)}<button class="btn" data-act="close">Close</button></div>`;
         if (UI.modalOpts) UI.modalOpts.dismissable = true;
       };
@@ -1607,7 +1661,11 @@ function handleAction(el) {
     case 'buy':
       if (buyUpgrade(d.id)) { SFX.buy(); buildForge(); updateHud(); } else SFX.error();
       break;
-    case 'caseKind': S.caseKind = d.v === 'pet' ? 'pet' : 'tool'; SFX.click(); buildCases(); break;
+    case 'caseKind':
+      if (UI.auto) { toast('Stop auto-roll first', 'bad'); break; }
+      S.caseKind = d.v === 'pet' || d.v === 'drill' ? d.v : 'tool'; SFX.click(); buildCases(); break;
+    case 'goDrillCrates': if (UI.auto) stopAutoRoll(); S.caseKind = 'drill'; SFX.click(); showTab('cases'); break;
+    case 'drillShow': S.drill.show = !S.drill.show; SFX.click(); buildForge(); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
     case 'learnPlan': doLearnPlan(d.id); break;
@@ -2068,7 +2126,8 @@ function uiTick(dt) {
 // "Off", "Commons", "Rare and below" ... "Eclipse and below" for a scrap-below-rarity threshold.
 function salvageLabel(n) { return n <= 0 ? 'Off' : n === 1 ? 'Commons' : `${RARITY[n - 1].name} and below`; }
 
-function autoCases() { return CASES.filter(caseUnlocked); }
+function autoCases() { return S.caseKind === 'drill' ? [CASES[0]] : CASES.filter(caseUnlocked); }
+function autoCaseName(c) { return S.caseKind === 'drill' ? 'Drill Crate' : c.name; }
 function autoTier() {
   const ok = autoCases();
   if (!UI.autoTier || !ok.some(c => c.tier === UI.autoTier)) UI.autoTier = ok[ok.length - 1].tier;
@@ -2094,13 +2153,13 @@ function renderAutoBox() {
   if (!a) {
     const cost = caseCost(c);
     h += `<div class="autoopts">
-        <button class="btn small" data-act="autoCase">${c.name}</button>
+        <button class="btn small" data-act="autoCase">${autoCaseName(c)}</button>
         <button class="btn small" data-act="autoStopAt">Stop at <span class="tc${stop}">${RARITY[stop].name}+</span></button>
-        <button class="btn small" data-act="autoScrap">Scrap: ${salvageLabel(S.settings.autoSalvage)}</button></div>
+        ${S.caseKind === 'drill' ? '' : `<button class="btn small" data-act="autoScrap">Scrap: ${salvageLabel(S.settings.autoSalvage)}</button>`}</div>
       <div class="casebtns"><button class="btn gold" data-act="autoStart" ${S.coins < cost ? 'disabled' : ''}>Start · ${costHtml(cost)} per case</button>
       <button class="btn purple" data-act="autoStartKeys" ${S.keys < 1 ? 'disabled' : ''}>${icon('key', '')} Use keys (${fmt(S.keys)})</button></div>`;
   } else {
-    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${c.name}: <b>${fmt(a.n)}</b> opened · ${a.keys ? `${plural(a.spent, 'key')} used, ${fmt(S.keys)} left` : fmt(a.spent) + ' coins'} · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
+    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${autoCaseName(c)}: <b>${fmt(a.n)}</b> opened · ${a.keys ? `${plural(a.spent, 'key')} used, ${fmt(S.keys)} left` : fmt(a.spent) + ' coins'} · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
       <div class="odds">${a.counts.map((n, r) => (n ? `<span class="tc${r}">${fmt(n)} ${RARITY[r].name}</span>` : '')).join('')}</div>
       <div class="autorecent">${a.recent.map(v => tileHtml(v, 'mini')).join('')}</div>
       ${a.best ? `<div class="small">Best this session: <span class="tc${a.best.r}">${RARITY[a.best.r].name}</span> · ${oddsLong(a.best.odds)}</div>` : ''}

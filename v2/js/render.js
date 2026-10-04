@@ -449,13 +449,22 @@ function drawHero() {
     else a = lerp(2.1, 0.35, (p - 0.6) / 0.4);
   }
   const it = S.gear.eq.pick;
-  ctx.save();
-  ctx.translate(hx + 12.5, hy + 11.5);
-  ctx.rotate(a);
-  const pk = gearSprite('pick', it ? it.t : 0, it ? it.r : 0);
-  const pad = pk.fxPad || 0;
-  ctx.drawImage(pk, -5.5 - pad, -11.5 - pad);
-  ctx.restore();
+  const mi = S.drill && S.drill.show ? drillModelIndex(S.drill.lv) : -1;
+  if (mi >= 0) {
+    // Version 2: the drill thrusts forward on each swing, its bit spinning fast, then pulls back.
+    const thrust = p >= 0 ? Math.round(Math.sin(Math.PI * Math.min(1, p)) * 4) : 0;
+    const frame = p >= 0 ? Math.floor(R.time * 30) : Math.floor(R.time * 3);
+    ctx.drawImage(drillSprite(mi, frame), hx + 10 + thrust, hy + 6);
+    if (p >= 0 && p > 0.3 && p < 0.7 && Math.random() < 0.5) { ctx.fillStyle = Math.random() < 0.5 ? '#ffd860' : '#ffffff'; ctx.fillRect(hx + 32 + thrust + Math.round(Math.random() * 3), hy + 8 + Math.round(Math.random() * 3), 1, 1); }
+  } else {
+    ctx.save();
+    ctx.translate(hx + 12.5, hy + 11.5);
+    ctx.rotate(a);
+    const pk = gearSprite('pick', it ? it.t : 0, it ? it.r : 0);
+    const pad = pk.fxPad || 0;
+    ctx.drawImage(pk, -5.5 - pad, -11.5 - pad);
+    ctx.restore();
+  }
   if (S.math.streak > 0) {
     if (S.math.streak > SCN.lastStreak) SCN.comboPop = 0.15;
     const lift = SCN.comboPop > 0 ? 2 : 0;

@@ -108,6 +108,8 @@ function freshState() {
     pets: { inv, eq: [] },
     look: { ...DEFAULT_LOOK }, // Version 2: the miner's wardrobe
     classes: [], // Version 2: saved builds (skills, gear, pets and look), up to CLASS_SLOTS
+    drill: { lv: 0, xp: 0, show: true }, // Version 2: the drill, levelled with parts from Drill Crates
+    pityDrill: { epic: 0, leg: 0 },
     activeClass: -1,
     pity: { epic: 0, leg: 0 },
     pace: 0, // tap pad pace you settled at last session
@@ -244,7 +246,7 @@ function hydrate(obj) {
   }
   let lockUsed = 0;
   for (const k of Object.keys(s.locks)) { const room = Math.max(0, (s.ptree.memory || 0) - lockUsed); s.locks[k] = Math.min(s.locks[k], room); lockUsed += s.locks[k]; if (!s.locks[k]) delete s.locks[k]; }
-  if (s.caseKind !== 'pet') s.caseKind = 'tool';
+  if (s.caseKind !== 'pet' && s.caseKind !== 'drill') s.caseKind = 'tool';
   if (!s.pityPet || typeof s.pityPet !== 'object') s.pityPet = { epic: 0, leg: 0 };
   s.pityPet.epic = nonNegInt(s.pityPet.epic); s.pityPet.leg = nonNegInt(s.pityPet.leg);
   if (!s.fresh || typeof s.fresh !== 'object') s.fresh = { left: 0 };
@@ -376,6 +378,11 @@ function hydrate(obj) {
   st.music = st.music !== false;
   // The miner's look: any bad value goes back to the default.
   s.look = cleanLook(s.look);
+  // The drill.
+  if (!s.drill || typeof s.drill !== 'object') s.drill = { lv: 0, xp: 0, show: true };
+  s.drill = { lv: Math.min(DRILL_MAX, nonNegInt(s.drill.lv)), xp: nonNeg(s.drill.xp), show: s.drill.show !== false };
+  if (!s.pityDrill || typeof s.pityDrill !== 'object') s.pityDrill = { epic: 0, leg: 0 };
+  s.pityDrill = { epic: nonNegInt(s.pityDrill.epic), leg: nonNegInt(s.pityDrill.leg) };
   // Saved classes.
   s.classes = (Array.isArray(s.classes) ? s.classes : []).slice(0, CLASS_SLOTS).map(c => {
     if (!c || typeof c !== 'object') return null;
@@ -452,10 +459,10 @@ function computeStats() {
   st.deepDiver = sk('deepdiver') > 0;
   st.baseDmg = sharpenDamage(up('sharpen'));
   st.dmgMult = (1 + add.dmg) * (1 + 0.02 * branchPoints('brawler')) * (1 + (fx.dmg || 0))
-    * powerMult() * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1);
+    * powerMult() * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1) * drillDmgMult();
   st.hit = Math.min(BIG, st.baseDmg * st.dmgMult);
   st.aps = 1.25 * (1 + 0.04 * up('fury')) * (1 + add.aps + 0.1 * sk('autodrill'))
-    * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner')) * (1 + 0.08 * sk('overclock')) * (sk('m-speed') ? 1.3 : 1);
+    * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner')) * (1 + 0.08 * sk('overclock')) * (sk('m-speed') ? 1.3 : 1) * drillApsMult();
   st.critChance = Math.min(0.75, 0.05 + 0.015 * up('crit') + add.crit + (fx.crit || 0) + 0.02 * sk('seismic'));
   st.critMult = 2 + 0.15 * up('critdmg') + add.critdmg + (fx.critdmg || 0) + (sk('m-crits') ? 0.5 : 0);
   if (sk('earthquake')) { st.critChance *= 0.5; st.critMult *= 2; }
@@ -1246,6 +1253,17 @@ function learnSkill(id) {
   return true;
 }
 
+// ---------- Version 2: the drill ----------
+function addDrillXp(x) {
+  const d = S.drill;
+  d.xp += x;
+  while (d.lv < DRILL_MAX && d.xp >= drillNeed(d.lv)) { d.xp -= drillNeed(d.lv); d.lv++; }
+  if (d.lv >= DRILL_MAX) d.xp = 0;
+}
+function drillModel() { const i = drillModelIndex(S.drill.lv); return i >= 0 ? DRILL_MODELS[i] : null; }
+function drillDmgMult() { return 1 + DRILL_DMG * S.drill.lv; }
+function drillApsMult() { return 1 + DRILL_APS * S.drill.lv; }
+
 // ---------- Version 2: classes (saved builds) ----------
 const CLASS_SLOTS = 4;
 function cleanLook(l) {
@@ -1352,9 +1370,10 @@ function bestCaseTier() {
   for (const c of CASES) if (caseUnlocked(c)) t = c.tier;
   return t;
 }
-function caseCost(c) {
+function caseCost(c, kind = S.caseKind) {
   const runInflation = Math.pow(CASE_INFLATION, S.run.cases || 0);
-  return Math.ceil(c.base * coinUnit(S.run.maxFloor) * runInflation * (1 - ST.caseDiscount) * ST.caseCostMult);
+  const base = kind === 'drill' ? CASES[0].base * DRILL_CRATE_MULT : c.base;
+  return Math.ceil(base * coinUnit(S.run.maxFloor) * runInflation * (1 - ST.caseDiscount) * ST.caseCostMult);
 }
 function freeCrateReady() { return Date.now() >= S.freeCrateAt; }
 
@@ -1374,7 +1393,7 @@ function rarityOdds() {
 }
 
 // Tool cases and pet cases each keep their own pity counters.
-function pityFor(kind = S.caseKind) { return kind === 'pet' ? S.pityPet : S.pity; }
+function pityFor(kind = S.caseKind) { return kind === 'pet' ? S.pityPet : kind === 'drill' ? S.pityDrill : S.pity; }
 function rollRarity(minR = 0, kind = S.caseKind) {
   const pity = pityFor(kind);
   let lo = minR;
@@ -1417,6 +1436,9 @@ function rollDrop(tier, minR = 0, kind = S.caseKind) {
   if (kind === 'pet') {
     return { kind: 'pet', sp: weightedPick(PET_IDS, id => PETS[id].weight), r, odds: dropOdds(r) };
   }
+  if (kind === 'drill') {
+    return { kind: 'part', part: weightedPick(DRILL_PART_IDS, id => DRILL_PARTS[id].weight), r, xp: PART_XP[r], odds: dropOdds(r) };
+  }
   const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight);
   const main = SLOTS[slot].main;
   const subs = shuffle(SUB_POOL.filter(k => k !== main))
@@ -1442,6 +1464,13 @@ function recordPull(d) {
 
 function grantDrop(d) {
   if (d.r > S.stats.bestDrop) S.stats.bestDrop = d.r;
+  if (d.kind === 'part') {
+    const before = S.drill.lv, modelBefore = drillModelIndex(before);
+    addDrillXp(d.xp);
+    if (S.drill.lv > before) d.levelTo = S.drill.lv;
+    if (drillModelIndex(S.drill.lv) > modelBefore) d.evolved = DRILL_MODELS[drillModelIndex(S.drill.lv)].name;
+    return;
+  }
   recordPull(d);
   if (d.kind === 'pet') {
     S.pets.inv[d.sp][d.r]++;
