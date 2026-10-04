@@ -551,13 +551,13 @@ const EARTH = ['#a07c56', '#83643f', '#664c2e', '#4a3620'];
 function paintGreenHill(r) {
   const { base, mx, mw, mh } = CAVE_MTN, x0 = 226, x1 = 434;
   const inside = (x, y) => x > x0 && x < x1 && y <= base && y >= greenTop(x);
-  // Grass: lit from the upper left, darker toward the foot and the right; dithered between tones.
+  // Grass: lit from straight above, lighter on the crest and darker toward the foot; dithered between tones.
   for (let x = x0; x < x1; x++) {
     const top = greenTop(x);
     if (top === Infinity) continue;
     for (let y = Math.ceil(top); y <= base; y++) {
-      const t = (y - top) / Math.max(8, base - top), side = (x - 300) / 140;
-      const v = Math.max(0, Math.min(0.999, t * 0.75 + side * 0.35 + 0.12)), k = Math.floor(v * 5 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
+      const t = (y - top) / Math.max(8, base - top);
+      const v = Math.max(0, Math.min(0.999, t * 0.85 + 0.12)), k = Math.floor(v * 5 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
       px(x, y, 1, 1, GREEN[Math.max(0, Math.min(5, k))]);
     }
   }
@@ -624,7 +624,7 @@ function paintCaveRails(dark) {
   }
 }
 // ---------- Frostpeak: a glacier peak with an ice cave ----------
-// A tall snow mountain with dark cliffs showing through and blue shadow on its far side. The cave
+// A tall snow mountain with dark cliffs showing through, bluer toward its foot. The cave
 // is cut into glacier ice at its foot: bands of glowing blue ice round the mouth, icicles, and a
 // deep blue inside instead of black. Snowdrifts pile round the base. Hares, an arctic fox and a
 // snowy owl live here (drawn live, see drawFrostLife).
@@ -639,26 +639,16 @@ function frostTop(x) {
   y = Math.max(y, base - Math.min(x - x0, x1 - x) * 2.3);
   return Math.min(base + 1, Math.round(y));
 }
-// How far into the shadow side a point is (0 sunlit to 1 shaded). The sun is up and to the left, so
-// each peak's right-hand slope is in shade; the ridge between them wanders down and to the right
-// like a real one, and the edge is blended rather than a hard line.
-function frostShade(x, y) {
-  let best = null;
-  for (const [px_, py, k] of FROST_PEAKS) if (py + Math.abs(x - px_) * k <= y + 2 && (!best || py < best[1])) best = [px_, py];
-  if (!best) return 0;
-  const ridge = best[0] + (y - best[1]) * 0.42 + Math.sin(y / 9 + best[0]) * 4;
-  return Math.max(0, Math.min(1, (x - ridge + 3) / 8));
-}
 function paintFrostPeak(r) {
   const { base, mx, mw, mh } = CAVE_MTN, x0 = 228, x1 = 424, inside = (x, y) => y <= base && y >= frostTop(x);
   for (let x = x0; x <= x1; x++) {
     const top = frostTop(x);
     if (top === Infinity) continue;
     for (let y = top; y <= base; y++) {
-      const sh = frostShade(x, y), depth = y - top;
-      const t = Math.min(1, depth / 120), k = Math.floor(0.2 + sh * 0.95 + t * 1.6 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
+      const depth = y - top;
+      const t = Math.min(1, depth / 120), k = Math.floor(0.2 + t * 1.8 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
       let c = SNOW[Math.max(0, Math.min(4, k))];
-      if (sh < 0.5 && (y + Math.round(Math.sin(x / 6) * 3)) % 17 === 0 && hash2(x >> 2, y) < 0.5) c = SNOW[2]; // wind-blown ridges
+      if ((y + Math.round(Math.sin(x / 6) * 3)) % 17 === 0 && hash2(x >> 2, y) < 0.5) c = SNOW[2]; // wind-blown ridges
       px(x, y, 1, 1, c);
     }
   }
@@ -669,7 +659,7 @@ function paintFrostPeak(r) {
     const inCrag = (x, y) => { const v = (y - (cy - h / 2)) / h; if (v < 0 || v > 1) return false; const jag = (hash2(Math.floor(y / 3), cx) - 0.5) * 6 + Math.sin(x / 3 + cx) * 2; return Math.abs(x - cx) < w / 2 * (0.45 + 0.55 * Math.sqrt(v)) + jag * 0.5 && y >= cy - h / 2 + Math.abs(Math.sin((x - cx) / 3.5)) * 4 && inside(x, y); };
     for (let y = cy - h / 2 - 1; y <= cy + h / 2 + 1; y++) for (let x = cx - w / 2 - 4; x <= cx + w / 2 + 4; x++) {
       if (inCrag(x, y)) {
-        const sh = frostShade(x, y) > 0.5, snowTop = !inCrag(x, y - 1) || !inCrag(x, y - 2);
+        const sh = false, snowTop = !inCrag(x, y - 1) || !inCrag(x, y - 2);
         px(x, y, 1, 1, snowTop ? SNOW[sh ? 2 : 0] : CLIFF[(sh ? 1 : 0) + (hash2(x >> 1, y >> 1) < 0.2 ? 1 : 0)]);
       } else if (inCrag(x - 1, y) || inCrag(x + 1, y) || inCrag(x, y + 1) || inCrag(x, y - 1)) px(x, y, 1, 1, CLIFF[3]);
     }
@@ -863,9 +853,9 @@ function forestTree(x, y, alt) {
   if (k === 'crystal') return alt ? glowShroom(x, y) : crystalTree(x, y);
   return alt ? pineTree(x, y) : tree(x, y);
 }
-// Shadows: the sun sits up and to the left, so everything standing on the ground casts the same
-// soft shadow down and to the right of its foot, sized to the thing casting it.
-function groundShadow(x, y, rx, dark = '15,35,15') { pell(x + Math.round(rx * 0.4), y + 1, rx, Math.max(1.5, rx * 0.3), `rgba(${dark},0.32)`); }
+// Shadows: it is always noon, the sun straight overhead, so everything standing on the ground casts
+// a soft round shadow right under its foot, sized to the thing casting it. No side is ever shaded.
+function groundShadow(x, y, rx, dark = '15,35,15') { pell(x, y + 1, Math.round(rx * 0.85), Math.max(1.5, rx * 0.28), `rgba(${dark},0.32)`); }
 function tree(x, y) {
   const [o, d, m, l, t, t2] = STYLE.leaf, [tk, tkd] = STYLE.trunk;
   groundShadow(x, y, 11);
@@ -1005,7 +995,7 @@ function paintTownDecor() {
 }
 
 // ---------- buildings ----------
-function shadow(x, y, w, h) { const g = wg(); g.fillStyle = 'rgba(20,45,15,0.32)'; g.fillRect(x + 3, y + h, w, 3); g.fillRect(x + w, y + 6, 4, h - 3); }
+function shadow(x, y, w, h) { const g = wg(); g.fillStyle = 'rgba(20,45,15,0.32)'; g.fillRect(x - 1, y + h, w + 2, 2); } // noon: a strip right along the foot
 // Shingled roof, slightly narrower at the top, with a light ridge and a dark eave lip.
 function roof(x, y, w, h, base, dark, light) {
   for (let i = 0; i < h; i++) {
@@ -1535,10 +1525,10 @@ function drawDecor(g, t) {
   } else if (d.state === 'lie') {
     // Lying down: the pet flattened low to the ground, breathing slowly.
     const h = 11 + (Math.sin(t * 2) > 0 ? 1 : 0);
-    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(d.dir < 0 ? -9 : -5, base - 1, 15, 2);
+    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(-7, base - 1, 15, 2);
     g.drawImage(spr, 0, 0, spr.width, spr.height, -9 - pad, base - h - pad, spr.width + 2, h + pad * 2);
   } else {
-    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(d.dir < 0 ? -7 : -3, base - 1, 10, 2);
+    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(-5, base - 1, 10, 2);
     g.drawImage(spr, -8 - pad, base - 16 - hop - pad);
   }
   g.restore();
@@ -1599,7 +1589,7 @@ function drawMe(g, t) {
   if (pet) {
     const def = PETS[pet.sp], spr = petSprite(pet.sp, pet.r), pad = spr.fxPad || 0, px = x - me.dir * 20;
     const py = def.fly ? y - 30 + Math.round(Math.sin(t * 5) * 2) : y - 12 - (me.held && Math.floor(me.walkT * 8) % 2 ? 1 : 0);
-    if (!def.fly) { g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(px - 3, y + 2, 10, 2); }
+    if (!def.fly) { g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(px - 5, y + 2, 10, 2); }
     g.save(); g.translate(px, 0); if (me.dir < 0) g.scale(-1, 1); g.drawImage(spr, -8 - pad, py - pad); g.restore();
   }
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x - 7, y + 2, 14, 2);
