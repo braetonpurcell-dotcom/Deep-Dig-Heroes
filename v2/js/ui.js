@@ -111,7 +111,7 @@ function pumpModalQueue() {
 
 // ---------- tabs ----------
 // Version 2: the island is home; every other screen gets a back bar with its name.
-const SCREEN_TITLE = { fight: 'Cave', forge: 'Forge', skills: 'Temple', cases: 'Market', bag: 'House', quests: 'Quest board', more: 'Lighthouse' };
+const SCREEN_TITLE = { fight: 'Cave', forge: 'Forge', skills: 'Temple', cases: 'Market', bag: 'House', quests: 'Quest board', more: 'Settings' };
 function showTab(name) {
   if (UI.tab === 'bag' && name !== 'bag') markItemsSeen();
   UI.tab = name;
@@ -205,6 +205,7 @@ function updateFloorBar() {
 function setDot(tab, on) {
   const b = $(`.isle .sign[data-go="${tab}"] .dot`);
   if (b) b.classList.toggle('show', !!on);
+  if (tab === 'more') $('#setBtn').classList.toggle('has-dot', !!on); // settings lives in the HUD now
 }
 
 function updateBadges() {
