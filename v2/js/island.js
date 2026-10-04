@@ -300,7 +300,8 @@ function paintWorld() {
   paintTownDecor(); paintTownSign(); paintBoard(); paintTrophy();
   WORLD.ctx.save(); WORLD.ctx.translate(0, -HOUSE_BACK); paintHouse(); WORLD.ctx.restore();
   paintMarket(); paintForge(); paintTemple();
-  fence(188, 182, 104, 240); paintMailbox();
+  // The fence: left of the path, then (after the gate and the mailbox) on to the right.
+  fence(188, 182, 45, -99); fence(260, 182, 32, -99); paintMailbox();
   // The forest along the bottom edge, front-most.
   const south = [];
   for (let x = 0; x < SEA_X - 16; x += gap) { if (inRiver(x)) continue; south.push([x + r() * 4, 286 + r() * 3, r() < 0.3]); south.push([x + 4 + r() * 4, 300 + r() * 3, r() < 0.3]); }
@@ -619,9 +620,12 @@ function paintHouse() {
   win(212, 135, 11, 9); win(255, 135, 11, 9);
   door(240, 12, 20, '#a86838');
 }
+// Draw something shifted by (dx, dy).
+function g0(dx, dy, fn) { const g = WORLD.ctx; g.save(); g.translate(dx, dy); fn(); g.restore(); }
 // The mailbox stands at the gate, where the house's path meets the road.
 function paintMailbox() {
-  px(253, 183, 3, 11, OUT); px(254, 184, 1, 10, '#7a4c2a'); parts([[250, 177, 9, 6, '#d84848']]); px(251, 178, 7, 1, '#f07a6a'); px(258, 175, 1, 3, '#f8e04a');
+  // Its top-left is at (246, 164), placed with the layout tool so it stands in the fence line.
+  g0(246 - 249, 164 - 174, () => { px(253, 183, 3, 11, OUT); px(254, 184, 1, 10, '#7a4c2a'); parts([[250, 177, 9, 6, '#d84848']]); px(251, 178, 7, 1, '#f07a6a'); px(258, 175, 1, 3, '#f8e04a'); });
 }
 function paintMarket() {
   shadow(324, 128, 84, 42);
