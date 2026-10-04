@@ -43,7 +43,8 @@ function titleLoop(now) {
   // The camera glides along the route and turns around at each end.
   const z = H / WH, span = W / z;
   TITLE.x += TITLE.dir * dt * 14;
-  if (TITLE.x > WW - span) { TITLE.x = WW - span; TITLE.dir = -1; }
+  const wmax = WORLD.wmax || WW;
+  if (TITLE.x > wmax - span) { TITLE.x = wmax - span; TITLE.dir = -1; }
   if (TITLE.x < 0) { TITLE.x = 0; TITLE.dir = 1; }
   // Draw the world as the island screen does, but through the title's camera.
   const cam = { ...WORLD.cam }, vw = WORLD.vw, wz = WORLD.z;
