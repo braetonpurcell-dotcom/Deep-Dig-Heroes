@@ -281,8 +281,11 @@ function paintWorld() {
     if (inRiver(cx)) continue;
     for (let k = 0; k < 4; k++) { const x = cx + (r() - 0.5) * 12, y = cy + (r() - 0.5) * 7; if (grassy(x, y, 4)) flower(x, y, c); }
   }
-  for (let i = 0; i < 22; i++) { const x = 40 + r() * 680, y = 214 + r() * 50; if (!inRiver(x) && grassy(x, y, 6)) rock(x, y, r() < 0.5); }
-  for (const [bx, by] of [[184, 236], [296, 232], [418, 258], [566, 262], [700, 226], [726, 250], [890, 160], [1060, 262]]) bush(bx, by);
+  // Everything that stands on the ground (trees, rocks, bushes, snowmen) goes in one list and is
+  // drawn back to front by its foot: the lower on screen, the nearer, so it covers what is behind.
+  const props = [];
+  for (let i = 0; i < 22; i++) { const x = 40 + r() * 680, y = 214 + r() * 50; if (!inRiver(x) && grassy(x, y, 6)) { const big = r() < 0.5; props.push([y, () => rock(x, y, big)]); } }
+  for (const [bx, by] of [[184, 236], [296, 232], [418, 258], [566, 262], [700, 226], [726, 250]]) props.push([by, () => bush(bx, by)]);
   // Bridge over the river and the pier to the boat.
   paintDock(PIER);
   // Farm (crops are drawn live so the farmer can walk between them), woodpile and the forge yard.
@@ -292,21 +295,21 @@ function paintWorld() {
   const gap = STYLE.gap || 9; // palms spread wide, so the desert's tree line is sparser
   for (let x = 0; x < SEA_X - 16; x += gap) { if (inRiver(x)) continue; forest.push([x + r() * 4, 22 + r() * 6, r() < 0.3]); forest.push([x + 4 + r() * 4, 38 + r() * 6, r() < 0.3]); }
   for (let y = 54; y < 186; y += gap + 4) { forest.push([6 + r() * 3, y, r() < 0.4]); forest.push([24 + r() * 3, y + 6, r() < 0.4]); }
-  forest.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt));
+  for (const [x, y, alt] of forest) props.push([y, () => forestTree(x, y, alt)]);
   const loose = [176, 300, 432, 568, 714].map(x => [x, 150, false]).concat([[296, 128, false], [716, 130, true], [722, 252, true]]);
-  loose.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt)); // back to front
-  for (const [x, y] of [[728, 232], [734, 168]]) rock(x, y, true);
-  if (STYLE.snow) for (const [sx, sy] of [[150, 128], [610, 262]]) snowman(sx, sy);
+  for (const [x, y, alt] of loose) props.push([y, () => forestTree(x, y, alt)]);
+  for (const [x, y] of [[728, 232], [734, 168]]) props.push([y, () => rock(x, y, true)]);
+  if (STYLE.snow) for (const [sx, sy] of [[150, 128], [610, 262]]) props.push([sy, () => snowman(sx, sy)]);
+  const south = [];
+  for (let x = 0; x < SEA_X - 16; x += gap) { if (inRiver(x)) continue; south.push([x + r() * 4, 286 + r() * 3, r() < 0.3]); south.push([x + 4 + r() * 4, 300 + r() * 3, r() < 0.3]); }
+  for (let y = 220; y < 286; y += gap + 4) { south.push([6 + r() * 3, y, r() < 0.4]); south.push([24 + r() * 3, y + 6, r() < 0.4]); }
+  for (const [x, y, alt] of south) props.push([y, () => forestTree(x, y, alt)]);
+  props.sort((a, b) => a[0] - b[0]).forEach(([, draw]) => draw());
   paintTownDecor(); paintTownSign(); paintBoard(); paintTrophy();
   WORLD.ctx.save(); WORLD.ctx.translate(0, -HOUSE_BACK); paintHouse(); WORLD.ctx.restore();
   paintMarket(); paintForge(); paintTemple();
   // The fence: left of the path, then (after the gate and the mailbox) on to the right.
   fence(188, 182, 45, -99); fence(260, 182, 32, -99); paintMailbox();
-  // The forest along the bottom edge, front-most.
-  const south = [];
-  for (let x = 0; x < SEA_X - 16; x += gap) { if (inRiver(x)) continue; south.push([x + r() * 4, 286 + r() * 3, r() < 0.3]); south.push([x + 4 + r() * 4, 300 + r() * 3, r() < 0.3]); }
-  for (let y = 220; y < 286; y += gap + 4) { south.push([6 + r() * 3, y, r() < 0.4]); south.push([24 + r() * 3, y + 6, r() < 0.4]); }
-  south.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt));
   WORLD.ctx = prev;
   return cv;
 }
@@ -385,13 +388,17 @@ function paintCaveIsle(i) {
   // Trees and rocks round the island, back to front.
   const trees = [[96, 150], [128, 128], [168, 118], [210, 122], [244, 116], [398, 160], [414, 196], [392, 232], [118, 254], [168, 266], [236, 270], [300, 262], [352, 254], [84, 222],
     [118, 96], [160, 82], [206, 74], [250, 80], [96, 120], [190, 100], [232, 98], [140, 106], [62, 176], [70, 250]];
-  const behind = ([x, y]) => x > CAVE_MTN.x0 - 8 && x < CAVE_MTN.x1 + 8 && y < CAVE_MTN.base + 4;
-  const ok = ([x, y]) => caveShore(x, y) < 0.8 && !behind([x, y]);
-  trees.sort((a, b) => a[1] - b[1]).forEach(([x, y], k) => { if (ok([x, y]) && y < CAVE_MTN.base) forestTree(x + (r() - 0.5) * 6, y, k % 3 === 0); });
+  // Trees, rocks and the snowman, back to front by their foot; whatever is behind the cave's hill
+  // is drawn before the hill, the rest after it.
+  const props = [];
+  trees.forEach(([x, y], k) => { if (caveShore(x, y) < 0.8) { const jx = x + (r() - 0.5) * 6; props.push([y, jx, () => forestTree(jx, y, k % 3 === 0)]); } });
+  for (const [x, y] of [[262, 160], [372, 196], [150, 226], [270, 236]]) { const big = r() < 0.5; props.push([y, x, () => rock(x, y, big)]); }
+  if (STYLE.snow) props.push([236, 206, () => snowman(206, 236)]);
+  props.sort((a, b) => a[0] - b[0]);
+  const hidden = ([y, x]) => x > CAVE_MTN.x0 - 8 && x < CAVE_MTN.x1 + 8 && y < CAVE_MTN.base + 4;
+  props.filter(hidden).forEach(([, , draw]) => draw());
   if (ISLANDS[i].id === 'green') paintGreenHill(r); else paintCaveMountain(ISLANDS[i].id, r);
-  trees.forEach(([x, y], k) => { if (ok([x, y]) && y >= CAVE_MTN.base) forestTree(x + (r() - 0.5) * 6, y, k % 3 === 0); });
-  for (const [x, y] of [[262, 160], [372, 196], [150, 226], [270, 236]]) rock(x, y, r() < 0.5);
-  if (STYLE.snow) snowman(206, 236);
+  props.filter(q => !hidden(q)).forEach(([, , draw]) => draw());
   WORLD.ctx = prev;
   return cv;
 }
