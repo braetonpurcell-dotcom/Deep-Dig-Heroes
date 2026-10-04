@@ -1,4 +1,10 @@
 'use strict';
+// Version 2: the fight only makes sound (and buzzes) while you're in the cave watching it. The
+// miner keeps fighting while you're elsewhere, quietly.
+const SILENT = new Proxy({}, { get: () => () => {} });
+function caveSfx() { return UI.tab === 'fight' ? SFX : SILENT; }
+function caveVibrate(p) { if (UI.tab === 'fight') vibrate(p); }
+
 // The pixel scene: a 160x96 logical canvas scaled up with hard pixel edges.
 
 const LW = 160;
@@ -253,41 +259,41 @@ on('damage', ({ d, kind, enemy }) => {
       addFloat(fmt(d), cx + rand(-6, 6), top - 2, '#ffffff', 1, 0.7);
     }
     addParticles(cx - 4, top + box.h * 0.6, 2, enemyColors(enemy), 30, 0.35);
-    SFX.hit();
+    caveSfx().hit();
   } else if (kind === 'crit') {
     addFloat(fmt(d) + '!', cx + rand(-6, 6), top - 4, '#ffcc4d', 1, 0.9);
     addParticles(cx - 4, top + box.h * 0.5, 5, enemyColors(enemy), 45, 0.45);
     shake(1);
     hitStop(35);
-    SFX.crit();
+    caveSfx().crit();
   } else if (kind === 'mega') {
     addFloat('MEGA ' + fmt(d), cx, top - 8, '#ff5ad2', 2, 1.3, -12);
     addParticles(cx, top + box.h / 2, 26, ['#ff5ad2', '#ffffff', '#62c9ff'], 80, 0.8);
     shake(4);
     hitStop(100);
-    vibrate([20, 30, 20, 30, 45]);
+    caveVibrate([20, 30, 20, 30, 45]);
   } else {
     const color = kind === 'critstrike' ? '#ff9a3d' : '#62c9ff';
     addFloat(fmt(d) + (kind === 'critstrike' ? '!' : ''), cx, top - 7, color, 2, 1.0, -14);
     addParticles(cx, top + box.h / 2, 10, [color, '#ffffff'], 60, 0.55);
     shake(2);
     hitStop(kind === 'critstrike' ? 70 : 35);
-    if (kind === 'critstrike') vibrate([15, 40, 25]);
+    if (kind === 'critstrike') caveVibrate([15, 40, 25]);
   }
   if (enemy.boss && SCN.halfBoss !== enemy && enemy.hp > 0 && enemy.hp < enemy.max / 2) {
     // Halfway through a boss: a clear "phase change" beat.
     SCN.halfBoss = enemy;
     banner('ENRAGED', 'HALF HEALTH LEFT', '#ff9a3d', 1.4);
     shake(3);
-    SFX.rankUp(-5);
+    caveSfx().rankUp(-5);
   }
 });
 
 on('strike', ({ kind, crit }) => {
   SCN.slash = 0.16;
   SCN.slashKind = kind;
-  SFX.strike(kind);
-  if (crit) SFX.crit();
+  caveSfx().strike(kind);
+  if (crit) caveSfx().crit();
 });
 
 on('kill', ({ enemy }) => {
@@ -299,25 +305,25 @@ on('kill', ({ enemy }) => {
   addParticles(box.x + box.w / 2, box.y + box.h / 2, enemy.boss ? 16 : 5, ['#ffcc4d', '#fff2b0'], 50, 0.7, 60);
   shake(enemy.boss ? 5 : 1.5);
   hitStop(enemy.boss ? 120 : Math.round(60 * (1 - 0.6 * R.flow)));
-  SFX.kill(enemy.boss ? 0 : R.flow);
-  if (enemy.boss) vibrate([30, 40, 60]);
+  caveSfx().kill(enemy.boss ? 0 : R.flow);
+  if (enemy.boss) caveVibrate([30, 40, 60]);
 });
 
 on('spawn', e => {
   if (e.boss) {
     banner('BOSS', e.name.toUpperCase(), '#ff5d6c', 2.4);
-    SFX.boss();
-    vibrate(80);
+    caveSfx().boss();
+    caveVibrate(80);
   } else if (e.type === 'goldie') {
     banner('TREASURE MOLE', 'DEFEAT IT BEFORE IT DIGS AWAY', '#ffcc4d', 1.8);
-    SFX.ore();
+    caveSfx().ore();
   }
 });
 
 on('levelup', ({ level }) => {
   addFloat('LEVEL ' + level + '!', HERO_X + 8, GROUND_Y - 30, '#ffcc4d', 1, 1.4, -10);
   addParticles(HERO_X + 8, GROUND_Y - 10, 16, ['#ffcc4d', '#fff2b0', '#ffffff'], 50, 0.8, 30);
-  SFX.levelup();
+  caveSfx().levelup();
 });
 
 on('floor', ({ floor, newBiome }) => {
@@ -326,7 +332,7 @@ on('floor', ({ floor, newBiome }) => {
 
 on('bossFail', () => {
   banner('BOSS ESCAPED', 'GET STRONGER, THEN TRY AGAIN', '#ff5d6c', 2.2);
-  SFX.error();
+  caveSfx().error();
 });
 
 on('treasureEscaped', () => {
@@ -350,14 +356,14 @@ on('tap', res => {
     if (r && r[0] === res.streak) {
       // Rank-up moment: fixed reward feel (no random bonus), flash, chord and a beat of freeze.
       SCN.rank = { text: 'RANK ' + r[1], color: r[2], t: 0 };
-      SFX.rankUp(RANKS.indexOf(r) * 2);
+      caveSfx().rankUp(RANKS.indexOf(r) * 2);
       hitStop(90);
       shake(2);
-      vibrate([20, 30, 40]);
+      caveVibrate([20, 30, 40]);
       addParticles(HERO_X + 8, GROUND_Y - 20, 24, [r[2], '#ffffff'], 70, 0.8, 40);
     }
   } else if (res.lost >= 3) {
-    SFX.comboBreak();
+    caveSfx().comboBreak();
   }
   if (res.ok && res.streak > 0 && res.streak % 25 === 0) {
     addFloat('STREAK ' + res.streak, HERO_X + 8, GROUND_Y - 36, '#ffcc4d', 1, 1.2, -10);
@@ -369,8 +375,8 @@ on('oreCollect', ({ x, y, res }) => {
   addParticles(x, y, 22, ['#ffd23f', '#fff6c0', '#ffffff'], 60, 0.8, 40);
   const label = res.kind === 'coins' ? '+' + fmt(res.amount) : res.kind === 'key' ? '+1 KEY' : 'FRENZY x3';
   addFloat(label, x, y - 6, '#ffcc4d', 1, 1.2, -10);
-  SFX.ore();
-  vibrate(20);
+  caveSfx().ore();
+  caveVibrate(20);
 });
 
 // Taps on the canvas collect lucky ore.
@@ -398,7 +404,7 @@ function canvasTap(clientX, clientY) {
     }
   }
   addParticles(x, y, 6, colors, 35, 0.4, 80);
-  SFX.pop();
+  caveSfx().pop();
   return false;
 }
 

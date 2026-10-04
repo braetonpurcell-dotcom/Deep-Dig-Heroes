@@ -119,8 +119,8 @@ function showTab(name) {
   $('#screenbar').hidden = name === 'island';
   $('#screenTitle').textContent = SCREEN_TITLE[name] || '';
   document.body.classList.toggle('on-island', name === 'island');
-  // The island and Skills get the whole screen: the mine view and floor bar step aside.
-  const full = name === 'skills' || name === 'island';
+  // Version 2: every screen but the cave is its own page; the fight scene only shows in the cave.
+  const full = name !== 'fight';
   if (document.body.classList.contains('fulltab') !== full) {
     document.body.classList.toggle('fulltab', full);
     if (!full) resizeCanvas();

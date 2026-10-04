@@ -22,19 +22,36 @@ const BUILDINGS = [
   { tab: 'more', name: 'Lighthouse', x: 146, y: 776, w: 36, h: 78 },
   { tab: 'dock', name: 'Dock', x: 300, y: 900, w: 40, h: 60 },
 ];
-// Roads as straight runs (Pokemon style). Four main roads leave the plaza; spurs reach each door
-// from below.
+// Roads wind naturally between places. Each is a smooth curve through these points; a spur's last
+// stretch runs straight up into its door, so every road still comes in from below.
 const ROADS = [
-  [[320, 486], [320, 208]], // north to the cave
-  [[266, 540], [60, 540]], // west road
-  [[374, 540], [590, 540]], // east road
-  [[320, 594], [320, 900]], // south road to the dock
-  [[156, 540], [156, 472]], // forge, straight up from the west road
-  [[486, 540], [486, 472]], // temple, straight up from the east road
-  [[86, 540], [86, 654], [150, 654], [150, 628]], // market: round the side, in from below
-  [[556, 540], [556, 660], [488, 660], [488, 632]], // house: round the side, in from below
-  [[320, 876], [164, 876], [164, 854]], // lighthouse, off the south road
+  [[320, 488], [314, 440], [328, 380], [306, 320], [318, 262], [320, 230], [320, 206]], // north to the cave
+  [[268, 548], [226, 560], [186, 544], [140, 552], [96, 538], [56, 550]], // west road
+  [[372, 548], [418, 560], [466, 540], [518, 552], [560, 540], [604, 548]], // east road
+  [[320, 592], [308, 656], [334, 730], [312, 806], [322, 870], [320, 902]], // south road to the dock
+  [[182, 546], [164, 522], [156, 496], [156, 482], [156, 470]], // forge
+  [[458, 546], [478, 520], [486, 494], [486, 482], [486, 470]], // temple
+  [[98, 540], [82, 586], [92, 638], [124, 660], [150, 652], [150, 640], [150, 626]], // market, in from below
+  [[562, 542], [570, 600], [548, 652], [512, 664], [488, 652], [488, 642], [488, 630]], // house, in from below
+  [[314, 822], [262, 864], [206, 880], [168, 872], [164, 862], [164, 852]], // lighthouse
 ];
+// Each road as a dense list of points along its curve (Catmull-Rom).
+const ROAD_PTS = ROADS.map(pts => {
+  const out = [], n = pts.length, at = i => pts[Math.max(0, Math.min(n - 1, i))];
+  for (let i = 0; i < n - 1; i++) {
+    const a = at(i - 1), b = at(i), c = at(i + 1), d = at(i + 2);
+    for (let t = 0; t < 1; t += 0.05) {
+      const t2 = t * t, t3 = t2 * t;
+      out.push([0, 1].map(k => 0.5 * (2 * b[k] + (-a[k] + c[k]) * t + (2 * a[k] - 5 * b[k] + 4 * c[k] - d[k]) * t2 + (-a[k] + 3 * b[k] - 3 * c[k] + d[k]) * t3)));
+    }
+  }
+  out.push(pts[n - 1]);
+  return out;
+});
+function nearRoad(x, y, dist) {
+  for (const l of ROAD_PTS) for (const [px0, py0] of l) if (Math.abs(px0 - x) < dist && Math.abs(py0 - y) < dist && Math.hypot(px0 - x, py0 - y) < dist) return true;
+  return false;
+}
 
 // ---------- pixel helpers ----------
 function wg() { return WORLD.ctx; }
@@ -82,11 +99,7 @@ function paintWorld() {
     if (Math.hypot(x - SPAWN.x, (y - SPAWN.y) * 1.15) < SPAWN.r + 20) return true;
     if (y < 222 || y > 872) return true;
     for (const b of BUILDINGS) if (x > b.x - 18 && x < b.x + b.w + 18 && y > b.y - 10 && y < b.y + b.h + 30) return true;
-    for (const road of ROADS) for (let i = 1; i < road.length; i++) {
-      const [ax, ay] = road[i - 1], [bx, by] = road[i];
-      if (x > Math.min(ax, bx) - 24 && x < Math.max(ax, bx) + 24 && y > Math.min(ay, by) - 10 && y < Math.max(ay, by) + 30) return true;
-    }
-    return false;
+    return nearRoad(x, y + 6, 22);
   };
   const trees = [];
   for (let i = 0; i < 900; i++) {
@@ -105,11 +118,11 @@ function paintWorld() {
 
 function paintRoads() {
   const cell = 4, cols = WW / cell, rows = WH / cell, grid = new Uint8Array(cols * rows);
-  for (const road of ROADS) for (let i = 1; i < road.length; i++) {
-    const [ax, ay] = road[i - 1], [bx, by] = road[i];
-    for (let x = Math.min(ax, bx) - 11; x <= Math.max(ax, bx) + 11; x += cell) for (let y = Math.min(ay, by) - 11; y <= Math.max(ay, by) + 11; y += cell) {
-      const cx = Math.floor(x / cell), cy = Math.floor(y / cell);
-      if (cx >= 0 && cy >= 0 && cx < cols && cy < rows) grid[cy * cols + cx] = 1;
+  // Mark every 4px cell within the road's half-width of its curve, so curves stay pixel-crisp.
+  for (const l of ROAD_PTS) for (const [x0, y0] of l) {
+    for (let cy = Math.floor((y0 - 11) / cell); cy <= Math.floor((y0 + 11) / cell); cy++) for (let cx = Math.floor((x0 - 11) / cell); cx <= Math.floor((x0 + 11) / cell); cx++) {
+      if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) continue;
+      if (Math.hypot(cx * cell + 2 - x0, cy * cell + 2 - y0) <= 10.5) grid[cy * cols + cx] = 1;
     }
   }
   const r = prng(5), on = (x, y) => x >= 0 && y >= 0 && x < cols && y < rows && grid[y * cols + x];
