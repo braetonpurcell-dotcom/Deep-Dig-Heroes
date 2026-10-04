@@ -14,7 +14,7 @@ const WW = 1200, WH = 300; // world size in world pixels
 const SPAWN = { x: 110, y: 200 };
 // me: your miner walking the road (hold the arrow buttons); held is -1, 0 or 1.
 const WORLD = { cv: null, ctx: null, img: null, cam: { x: 0, y: 0 }, z: 2, vx: 0, drag: null, moved: false, t: 0, smoke: [], fx: [], dpr: 1, vw: 0, vh: 0,
-  me: { x: SPAWN.x, dir: 1, held: 0, walkT: 0 } };
+  me: { x: SPAWN.x, dir: 1, held: 0, walkT: 0 }, scene: 'home', wmax: 1200 };
 const WALK_SPEED = 70; // world pixels a second
 const RIVER = [748, 872]; // the river's west and east banks
 const DOOR_Y = 168; // the bottom of every door on the north side of the road
@@ -29,14 +29,27 @@ const BUILDINGS = [
   { tab: 'cases', name: 'Market', x: 320, y: 104, w: 92, h: 66, dx: 366 },
   { tab: 'forge', name: 'Forge', x: 462, y: 90, w: 84, h: 80, dx: 502 },
   { tab: 'skills', name: 'Temple', x: 590, y: 84, w: 96, h: 86, dx: 638 },
-  { tab: 'dock', name: 'Harbor', x: 834, y: 214, w: 28, h: 56, dx: 848 },
-  { tab: 'fight', name: 'Cave', x: 1110, y: 112, w: 70, h: 58, dx: 1145 },
+  { tab: 'dock', name: 'Dock', x: 1092, y: 186, w: 80, h: 28, dx: 1100 },
 ];
-// The road: a gentle winding curve from town to the cave.
+// The road: a gentle winding curve from town east to the beach, where the dock goes out to sea.
 const ROAD = [[40, 200], [110, 200], [180, 204], [260, 197], [350, 205], [440, 198], [530, 206], [620, 198], [700, 204],
-  [760, 200], [860, 200], [930, 206], [1010, 198], [1080, 204], [1120, 190], [1145, 180], [1145, 170]];
-const ROAD_PTS = (() => {
-  const out = [], n = ROAD.length, at = i => ROAD[Math.max(0, Math.min(n - 1, i))];
+  [760, 200], [860, 200], [930, 206], [1010, 198], [1060, 202], [1100, 200]];
+const SEA_X = 1100; // the east shore; past it is open sea
+function seaX(y) { return SEA_X + Math.round(Math.sin(y / 15) * 6 + Math.sin(y / 5) * 1.5); }
+const PIER = { x0: 1088, x1: 1176, y0: 191, y1: 209 };
+// Version 2: the cave islands. Each is a small island of its own: a beach, scenery in the island's
+// style, a cave in a rocky hill, and a dock where the boat lands. No houses.
+const CAVE_W = 440; // world pixels wide
+const CAVE_HILL = { x: 322, y: 140, rx: 70, ry: 58 };
+const CAVE_SHORE = { x: 238, y: 172, rx: 196, ry: 118 };
+const CAVE_PIER = { x0: 4, x1: 74, y0: 192, y1: 208 };
+const CAVE_BUILDINGS = [
+  { tab: 'dock', name: 'Dock', x: 6, y: 186, w: 70, h: 26, dx: 40 },
+  { tab: 'fight', name: 'Cave', x: 290, y: 112, w: 64, h: 58, dx: 322 },
+];
+const CAVE_ROAD = [[20, 200], [70, 200], [130, 205], [190, 201], [250, 194], [298, 186], [318, 178], [322, 172]];
+function smoothRoad(pts) {
+  const out = [], n = pts.length, at = i => pts[Math.max(0, Math.min(n - 1, i))];
   for (let i = 0; i < n - 1; i++) {
     const a = at(i - 1), b = at(i), c = at(i + 1), d = at(i + 2);
     for (let t = 0; t < 1; t += 0.05) {
@@ -44,10 +57,16 @@ const ROAD_PTS = (() => {
       out.push([0, 1].map(k => 0.5 * (2 * b[k] + (-a[k] + c[k]) * t + (2 * a[k] - 5 * b[k] + 4 * c[k] - d[k]) * t2 + (-a[k] + 3 * b[k] - 3 * c[k] + d[k]) * t3)));
     }
   }
-  out.push(ROAD[n - 1]);
+  out.push(pts[n - 1]);
   return out;
-})();
-function roadY(x) { let best = ROAD_PTS[0]; for (const p of ROAD_PTS) if (Math.abs(p[0] - x) < Math.abs(best[0] - x)) best = p; return best[1]; }
+}
+const ROAD_PTS = smoothRoad(ROAD), CAVE_ROAD_PTS = smoothRoad(CAVE_ROAD);
+function roadY(x) {
+  const pts = WORLD.scene === 'cave' ? CAVE_ROAD_PTS : ROAD_PTS;
+  let best = pts[0];
+  for (const p of pts) if (Math.abs(p[0] - x) < Math.abs(best[0] - x)) best = p;
+  return best[1];
+}
 function riverBanks(y) { return [RIVER[0] + Math.round(Math.sin(y / 17) * 4), RIVER[1] + Math.round(Math.sin(y / 13 + 2) * 4)]; }
 function mountainTop(x) { return 14 + Math.max(0, (1124 - x) * 1.75) + Math.round(Math.sin(x / 9) * 3 + Math.sin(x / 4) * 1); }
 
@@ -157,7 +176,9 @@ function paintGround(g) {
     const [w0, w1] = riverBanks(y), pe = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2;
     const pl = ((x - SPAWN.x) / 46) ** 2 + ((y - SPAWN.y) / 22) ** 2;
     let t = T.GRASS;
-    if (x >= 1030 && y >= mountainTop(x) && y < 186) t = T.ROCK;
+    const sx = seaX(y);
+    if (x >= sx) t = T.WATER;
+    else if (x >= sx - 9) t = T.SAND;
     else if (x >= w0 && x < w1) t = T.WATER;
     else if (x >= w0 - 5 && x < w1 + 5) t = T.SAND;
     else if (pe < 1) t = T.WATER;
@@ -191,8 +212,8 @@ function paintGround(g) {
       else c = pick(PAL.road, vnoise(x / 9, y / 7), cx, cy);
     } else if (t === T.WATER) {
       const [w0, w1] = riverBanks(y);
-      const inRiver = x >= w0 && x < w1;
-      const dist = inRiver ? Math.min(x - w0, w1 - x) : (1 - Math.sqrt(((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2)) * POND.ry * 1.6;
+      const inRiver = x >= w0 && x < w1, atSea = x >= seaX(y);
+      const dist = atSea ? (x - seaX(y)) * 0.8 : inRiver ? Math.min(x - w0, w1 - x) : (1 - Math.sqrt(((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2)) * POND.ry * 1.6;
       if (dist < 2.5) c = PAL.foam;
       else if (dist < 9) c = PAL.shallow;
       else c = pick(PAL.water, Math.min(0.99, 0.25 + 0.75 * vnoise(x / 30, y / 20) - (inRiver ? (dist - 9) / 120 : 0)), cx, cy);
@@ -242,8 +263,6 @@ function paintWorld() {
     if (r() < 0.6) { px(x, y, 1, 2, dk); px(x + 2, y - 1, 1, 3, dk); px(x + 1, y, 1, 2, lt); }
     else { px(x, y, 2, 1, lt); px(x + 3, y + 1, 1, 1, lt); }
   }
-  // Mountain: cracks and boulders.
-  for (let i = 0; i < 40; i++) { const x = 1050 + r() * 148, y = 40 + r() * 130; if (terrainAt(x, y) === T.ROCK && terrainAt(x, y - 6) === T.ROCK) { px(x, y, 1, 3 + r() * 4, STYLE.rockLo); px(x + 1, y, 1, 2, STYLE.rockHi); } }
   // Tall grass patches and ledges on the route east.
   for (const [x0, y0, w, h] of [[600, 230, 64, 30], [900, 222, 96, 40], [940, 96, 80, 56], [1030, 230, 56, 32]]) tallGrass(x0, y0, w, h);
   for (const [x0, y0, w] of [[900, 270, 80], [1000, 214, 60]]) ledge(x0, y0, w);
@@ -257,36 +276,132 @@ function paintWorld() {
   // Flowers in little clusters, rocks and bushes.
   const COLS = STYLE.flowers;
   for (let i = 0; i < 70; i++) {
-    const cx = 40 + r() * 1040, cy = 52 + r() * 214, c = COLS[Math.floor(r() * COLS.length)];
+    const cx = 40 + r() * 1020, cy = 52 + r() * 214, c = COLS[Math.floor(r() * COLS.length)];
     if (inRiver(cx)) continue;
     for (let k = 0; k < 4; k++) { const x = cx + (r() - 0.5) * 12, y = cy + (r() - 0.5) * 7; if (grassy(x, y, 4)) flower(x, y, c); }
   }
-  for (let i = 0; i < 22; i++) { const x = 40 + r() * 1040, y = 214 + r() * 50; if (!inRiver(x) && grassy(x, y, 6)) rock(x, y, r() < 0.5); }
+  for (let i = 0; i < 22; i++) { const x = 40 + r() * 1020, y = 214 + r() * 50; if (!inRiver(x) && grassy(x, y, 6)) rock(x, y, r() < 0.5); }
   for (const [bx, by] of [[184, 236], [296, 232], [418, 258], [566, 262], [700, 226], [726, 250], [890, 160], [1060, 262]]) bush(bx, by);
   // Bridge over the river and the pier to the boat.
-  paintBridge(); paintPier();
+  paintBridge(); paintDock(PIER);
   // Farm (crops are drawn live so the farmer can walk between them), woodpile and the forge yard.
   paintFarm(); paintWoodYard();
   // The forest along the top edge (back to front), trees between buildings, then buildings.
   const forest = [];
   const gap = STYLE.gap || 9; // palms spread wide, so the desert's tree line is sparser
-  for (let x = 0; x < 1100; x += gap) { if (inRiver(x)) continue; forest.push([x + r() * 4, 22 + r() * 6, r() < 0.3]); forest.push([x + 4 + r() * 4, 38 + r() * 6, r() < 0.3]); }
+  for (let x = 0; x < 1080; x += gap) { if (inRiver(x)) continue; forest.push([x + r() * 4, 22 + r() * 6, r() < 0.3]); forest.push([x + 4 + r() * 4, 38 + r() * 6, r() < 0.3]); }
   for (let y = 54; y < 186; y += gap + 4) { forest.push([6 + r() * 3, y, r() < 0.4]); forest.push([24 + r() * 3, y + 6, r() < 0.4]); }
   forest.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt));
   for (const x of [176, 300, 432, 568, 714, 904]) forestTree(x, 150, false);
-  for (const [x, y] of [[1100, 232], [1132, 248], [1170, 226], [1186, 258], [1150, 266]]) forestTree(x, y, true);
-  for (const [x, y] of [[1090, 194], [1176, 196], [1116, 262], [1060, 192]]) rock(x, y, true);
-  forestTree(296, 128, false); forestTree(716, 130, true); forestTree(1012, 150, true);
+  for (const [x, y] of [[1050, 240], [1066, 262]]) forestTree(x, y, true);
+  for (const [x, y] of [[1074, 182], [1082, 226]]) rock(x, y, true);
+  forestTree(296, 128, false); forestTree(716, 130, true); forestTree(1012, 150, true); forestTree(1060, 140, false); forestTree(1046, 116, true);
   if (STYLE.snow) for (const [sx, sy] of [[150, 128], [610, 262]]) snowman(sx, sy);
-  paintTownDecor(); paintTownSign(); paintBoard(); paintTrophy(); paintHouse(); paintMarket(); paintForge(); paintTemple(); paintLighthouse(); paintCave();
+  paintTownDecor(); paintTownSign(); paintBoard(); paintTrophy(); paintHouse(); paintMarket(); paintForge(); paintTemple(); paintLighthouse();
   fence(188, 182, 104, 240);
   // The forest along the bottom edge, front-most.
   const south = [];
-  for (let x = 0; x < WW; x += gap) { if (inRiver(x)) continue; south.push([x + r() * 4, 286 + r() * 3, r() < 0.3]); south.push([x + 4 + r() * 4, 300 + r() * 3, r() < 0.3]); }
+  for (let x = 0; x < 1080; x += gap) { if (inRiver(x)) continue; south.push([x + r() * 4, 286 + r() * 3, r() < 0.3]); south.push([x + 4 + r() * 4, 300 + r() * 3, r() < 0.3]); }
   for (let y = 220; y < 286; y += gap + 4) { south.push([6 + r() * 3, y, r() < 0.4]); south.push([24 + r() * 3, y + 6, r() < 0.4]); }
   south.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt));
   WORLD.ctx = prev;
   return cv;
+}
+
+// The small cave island: sea all round, a beach, ground in the island's style, a rocky hill with the
+// cave in it, a path from the dock, and trees, rocks and flowers. Painted once per visit.
+const CAVE_DX = CAVE_HILL.x - 1145; // paintCave draws the mouth at x 1145; shift it onto the hill
+function caveShore(x, y) { return ((x - CAVE_SHORE.x) / CAVE_SHORE.rx) ** 2 + ((y - CAVE_SHORE.y) / CAVE_SHORE.ry) ** 2 + 0.05 * Math.sin(x / 11) + 0.05 * Math.cos(y / 8); }
+function caveHill(x, y) { return ((x - CAVE_HILL.x) / CAVE_HILL.rx) ** 2 + ((y - CAVE_HILL.y) / CAVE_HILL.ry) ** 2 + 0.06 * Math.sin(x / 7); }
+function paintCaveIsle(i) {
+  const cv = makeCanvas(WW, WH), prev = WORLD.ctx;
+  WORLD.ctx = cv.getContext('2d');
+  useIsle(i);
+  const g = WORLD.ctx, cell = new Uint8Array(GC * GR), road = new Uint8Array(GC * GR);
+  for (const [x0, y0] of CAVE_ROAD_PTS) for (let cy = Math.floor((y0 - 8) / CELL); cy <= Math.floor((y0 + 8) / CELL); cy++) for (let cx = Math.floor((x0 - 8) / CELL); cx <= Math.floor((x0 + 8) / CELL); cx++) {
+    if (cx >= 0 && cy >= 0 && cx < GC && cy < GR && Math.hypot(cx * CELL + 1 - x0, cy * CELL + 1 - y0) <= 8) road[cy * GC + cx] = 1;
+  }
+  for (let cy = 0; cy < GR; cy++) for (let cx = 0; cx < GC; cx++) {
+    const x = cx * CELL + 1, y = cy * CELL + 1, e = caveShore(x, y);
+    let t = T.WATER;
+    if (e < 0.86) t = caveHill(x, y) < 1 && y < 182 ? T.ROCK : road[cy * GC + cx] ? T.ROAD : T.GRASS;
+    else if (e < 1) t = T.SAND;
+    cell[cy * GC + cx] = t;
+  }
+  TERRAIN = cell;
+  const at = (cx, cy) => (cx < 0 || cy < 0 || cx >= GC || cy >= GR ? T.WATER : cell[cy * GC + cx]);
+  const img = g.createImageData(WW, WH), d = img.data;
+  const pick = (pal, n, cx, cy) => pal[Math.max(0, Math.min(pal.length - 1, Math.floor(n * pal.length + BAYER[(cy & 3) * 4 + (cx & 3)] * 1.2)))];
+  for (let cy = 0; cy < GR; cy++) for (let cx = 0; cx < GC; cx++) {
+    const x = cx * CELL + 1, y = cy * CELL + 1, t = cell[cy * GC + cx], hsh = hash2(cx, cy);
+    let c;
+    if (t === T.WATER) {
+      const e = caveShore(x, y);
+      c = e < 1.06 ? PAL.foam : e < 1.3 ? PAL.shallow : pick(PAL.water, Math.min(0.99, 0.2 + 0.8 * vnoise(x / 34, y / 22)), cx, cy);
+    } else if (t === T.SAND) {
+      const wet = at(cx - 1, cy) === T.WATER || at(cx + 1, cy) === T.WATER || at(cx, cy - 1) === T.WATER || at(cx, cy + 1) === T.WATER;
+      c = wet ? PAL.wet : pick(PAL.sand, vnoise(x / 6, y / 6), cx, cy);
+    } else if (t === T.ROAD) {
+      const rim = at(cx - 1, cy) !== T.ROAD || at(cx + 1, cy) !== T.ROAD || at(cx, cy - 1) !== T.ROAD || at(cx, cy + 1) !== T.ROAD;
+      c = rim ? PAL.roadRim : hsh < 0.04 ? PAL.pebble : pick(PAL.road, vnoise(x / 9, y / 7), cx, cy);
+    } else if (t === T.ROCK) {
+      const h = caveHill(x, y), rel = Math.floor((182 - y + Math.round(Math.sin(x / 11) * 2)) / CELL) % 7;
+      c = h > 0.86 ? PAL.rockLo : rel === 0 ? PAL.rockLo : rel === 6 ? PAL.rockHi : hsh < 0.05 ? PAL.rockLo : pick(PAL.rock, 0.15 + 0.7 * vnoise(x / 9, y / 5), cx, cy);
+    } else {
+      const n = 0.62 * vnoise(x / 40, y / 30) + 0.38 * vnoise(x / 12, y / 12);
+      let k = Math.max(0, Math.min(4, Math.floor(n * 5 + BAYER[(cy & 3) * 4 + (cx & 3)] * 1.3)));
+      if (at(cx, cy - 1) === T.ROAD || at(cx, cy + 1) === T.ROAD || at(cx - 1, cy) === T.ROAD || at(cx + 1, cy) === T.ROAD) k = Math.max(0, k - 2);
+      c = PAL.grass[k];
+    }
+    for (let dy = 0; dy < CELL; dy++) for (let dx = 0; dx < CELL; dx++) {
+      const o = ((cy * CELL + dy) * WW + cx * CELL + dx) * 4;
+      d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const r = prng(31 + i * 7);
+  const grassy = (x, y, pad = 3) => [[0, 0], [pad, 0], [-pad, 0], [0, pad], [0, -pad]].every(([a, b]) => terrainAt(x + a, y + b) === T.GRASS);
+  for (let k = 0; k < 320; k++) {
+    const x = 40 + r() * 380, y = 60 + r() * 220;
+    if (!grassy(x, y)) continue;
+    const [dk, lt] = STYLE.tuft;
+    if (r() < 0.6) { px(x, y, 1, 2, dk); px(x + 2, y - 1, 1, 3, dk); px(x + 1, y, 1, 2, lt); } else { px(x, y, 2, 1, lt); px(x + 3, y + 1, 1, 1, lt); }
+  }
+  for (let k = 0; k < 22; k++) {
+    const cx = 80 + r() * 320, cy = 150 + r() * 110, c = STYLE.flowers[Math.floor(r() * STYLE.flowers.length)];
+    for (let q = 0; q < 3; q++) { const x = cx + (r() - 0.5) * 10, y = cy + (r() - 0.5) * 6; if (grassy(x, y, 4)) flower(x, y, c); }
+  }
+  // Cracks on the hill, then the cave mouth shifted onto it.
+  for (let k = 0; k < 26; k++) { const x = CAVE_HILL.x - 58 + r() * 116, y = 100 + r() * 70; if (terrainAt(x, y) === T.ROCK && terrainAt(x, y - 6) === T.ROCK) { px(x, y, 1, 3 + r() * 4, STYLE.rockLo); px(x + 1, y, 1, 2, STYLE.rockHi); } }
+  g.save(); g.translate(CAVE_DX, 0); paintCave(); g.restore();
+  paintDock(CAVE_PIER);
+  // Trees and rocks round the island, back to front.
+  const trees = [[96, 150], [128, 128], [168, 118], [210, 122], [244, 116], [398, 160], [414, 196], [392, 232], [118, 254], [168, 266], [236, 270], [300, 262], [352, 254], [84, 222],
+    [118, 96], [160, 82], [206, 74], [250, 80], [96, 120], [190, 100], [232, 98], [140, 106], [62, 176], [70, 250]];
+  trees.sort((a, b) => a[1] - b[1]).forEach(([x, y], k) => { if (caveShore(x, y) < 0.8) forestTree(x + (r() - 0.5) * 6, y, k % 3 === 0); });
+  for (const [x, y] of [[262, 160], [372, 196], [150, 226], [270, 236]]) rock(x, y, r() < 0.5);
+  if (STYLE.snow) snowman(206, 236);
+  WORLD.ctx = prev;
+  return cv;
+}
+// What moves on the cave island: sparkles on the sea, the cave's lanterns, a boss's red eyes, the
+// boat at the dock, you, the weather and the clouds.
+function drawCaveLive(g, dt, t) {
+  const wk = STYLE.waterKind;
+  for (let k = 0; k < 30; k++) {
+    const x = (k * 97.3) % CAVE_W + 4, y = (k * 53.1) % WH;
+    if (caveShore(x, y) < 1.15 || Math.sin(t * 2.1 + k * 1.9) < 0.75) continue;
+    g.fillStyle = wk === 'lava' ? '#ffd060' : wk === 'night' ? '#fff4a8' : '#ffffff'; g.fillRect(Math.round(x), Math.round(y), 2, 1);
+  }
+  if (wk === 'lava') glow(g, CAVE_SHORE.x, CAVE_SHORE.y, 230, `rgba(255,110,30,${0.08 + 0.03 * Math.sin(t * 2)})`);
+  for (const lx of [1112 + CAVE_DX, 1178 + CAVE_DX]) { g.fillStyle = Math.sin(t * 9 + lx) > -0.6 ? '#ffd860' : '#f2a028'; g.fillRect(lx - 1, 145, 3, 4); glow(g, lx, 147, 9, 'rgba(255,200,80,0.25)'); }
+  if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { const cx = CAVE_HILL.x; g.fillStyle = '#ff3040'; g.fillRect(cx - 6, 160, 2, 1); g.fillRect(cx + 4, 160, 2, 1); glow(g, cx, 162, 14, 'rgba(255,40,60,0.25)'); }
+  drawBoat(g, CAVE_PIER.x0 - 2, CAVE_PIER.y1 + 2, t);
+  drawMe(g, t);
+  drawBubbles(g, dt);
+  drawWeather(g, t);
+  g.fillStyle = 'rgba(20,40,70,0.09)';
+  for (const [off, cy, rx] of [[0, 90, 70], [300, 230, 56]]) { const cx = ((t * 5 + off) % (CAVE_W + 300)) - 150; g.beginPath(); g.ellipse(cx, cy, rx, rx * 0.36, 0, 0, Math.PI * 2); g.fill(); }
 }
 
 // ---------- scenery pieces ----------
@@ -577,12 +692,21 @@ function paintBridge() {
   for (let x = x0 + 1, k = 0; x < x1 - 1; x += 4, k++) { px(x, y0 + 1, 3, y1 - y0 - 2, k % 2 ? '#b07a46' : '#c08a52'); px(x, y0 + 1, 3, 1, '#d8a46a'); if (hash2(x, 3) < 0.4) px(x + 1, y0 + 6 + hash2(x, 7) * 10, 1, 1, '#7a4c2a'); }
   for (const yy of [y0 - 4, y1 - 1]) { px(x0, yy, x1 - x0, 3, OUT); px(x0 + 1, yy + 1, x1 - x0 - 2, 1, '#8a5a32'); for (let x = x0; x < x1; x += 16) { px(x, yy - 3, 4, 7, OUT); px(x + 1, yy - 2, 2, 5, '#a8743e'); } }
 }
-function paintPier() {
-  const x0 = 841, x1 = 856, y0 = 211, y1 = 262;
-  px(x0 - 1, y1, x1 - x0 + 2, 3, 'rgba(10,30,60,0.35)');
-  px(x0 - 1, y0, x1 - x0 + 2, y1 - y0 + 1, OUT);
-  for (let y = y0, k = 0; y < y1; y += 3, k++) { px(x0, y, x1 - x0, 2, k % 2 ? '#b07a46' : '#c08a52'); px(x0, y, x1 - x0, 1, '#d8a46a'); }
-  for (const [x, y] of [[x0 - 2, 226], [x1, 226], [x0 - 2, 258], [x1, 258]]) { px(x, y, 3, 7, OUT); px(x + 1, y, 1, 6, '#7a4c2a'); }
+// A plank dock out over the water, posts underneath.
+function paintDock(d) {
+  const { x0, x1, y0, y1 } = d;
+  px(x0, y1 + 1, x1 - x0, 3, 'rgba(10,30,60,0.35)');
+  px(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2, OUT);
+  for (let x = x0, k = 0; x < x1; x += 4, k++) { px(x, y0, 3, y1 - y0, k % 2 ? '#b07a46' : '#c08a52'); px(x, y0, 3, 1, '#d8a46a'); }
+  for (let x = x0 + 6; x < x1; x += 22) for (const y of [y0 - 3, y1]) { px(x, y, 4, 6, OUT); px(x + 1, y + 1, 2, 4, '#7a4c2a'); }
+  px(x0 - 1, y0 + 2, x1 - x0 + 2, 1, '#8a5a32'); px(x0 - 1, y1 - 3, x1 - x0 + 2, 1, '#8a5a32');
+}
+function drawBoat(g, x, y, t) {
+  const bob = Math.round(Math.sin(t * 2));
+  g.fillStyle = 'rgba(10,30,60,0.3)'; g.fillRect(x, y + 11, 24, 2);
+  g.fillStyle = OUT; g.fillRect(x - 1, y + bob, 26, 10); g.fillStyle = '#a8743e'; g.fillRect(x, y + 1 + bob, 24, 8); g.fillStyle = '#7a4c2a'; g.fillRect(x + 2, y + 3 + bob, 20, 5); g.fillStyle = '#d8a46a'; g.fillRect(x, y + 1 + bob, 24, 1);
+  g.fillStyle = OUT; g.fillRect(x + 11, y - 16 + bob, 2, 17);
+  g.fillStyle = OUT; g.fillRect(x + 13, y - 15 + bob, 9, 12); g.fillStyle = '#f6efe0'; g.fillRect(x + 13, y - 14 + bob, 8, 10); g.fillStyle = '#d84848'; g.fillRect(x + 13, y - 14 + bob, 8, 2);
 }
 function paintFarm() {
   // Wooden border posts, a scarecrow, hay bales and a water trough.
@@ -763,6 +887,7 @@ function drawBubbles(g, dt) {
 
 // ---------- each frame ----------
 function drawLive(g, dt, t) {
+  if (WORLD.scene === 'cave') { drawCaveLive(g, dt, t); return; }
   // River and pond: flowing water, still ice that glints, slow glowing lava, or stars on night water.
   const wk = STYLE.waterKind;
   if (wk === 'water' || wk === 'oasis' || wk === 'lava') {
@@ -793,7 +918,6 @@ function drawLive(g, dt, t) {
     glow(g, bx, 141, 10, 'rgba(255,170,60,0.22)');
   }
   glow(g, 638, 104, 9 + Math.sin(t * 2) * 2, 'rgba(120,220,255,0.3)');
-  for (const lx of [1112, 1178]) { g.fillStyle = Math.sin(t * 9 + lx) > -0.6 ? '#ffd860' : '#f2a028'; g.fillRect(lx - 1, 145, 3, 4); glow(g, lx, 147, 9, 'rgba(255,200,80,0.25)'); }
   const beam = Math.sin(t * 0.9);
   g.fillStyle = `rgba(255,245,180,${0.12 + 0.08 * Math.abs(beam)})`; g.beginPath(); g.moveTo(808, 88); g.lineTo(808 + beam * 70, 70); g.lineTo(808 + beam * 70, 106); g.fill();
   g.fillStyle = Math.sin(t * 3) > 0 ? '#fff8d0' : '#f2d060'; g.fillRect(803, 85, 10, 6);
@@ -802,11 +926,8 @@ function drawLive(g, dt, t) {
   for (const [sx, sy] of [[524, 60], [261, 84]]) if (Math.random() < dt * 1.6) WORLD.smoke.push({ x: sx, y: sy, t: 0 });
   for (const s of WORLD.smoke) { s.t += dt; s.y -= dt * 7; s.x += dt * (3 + s.t); g.fillStyle = `rgba(236,236,244,${Math.max(0, 0.75 - s.t * 0.19)})`; const r = 2 + Math.round(s.t * 1.2); g.fillRect(Math.round(s.x - r / 2), Math.round(s.y - r / 2), r, r); }
   WORLD.smoke = WORLD.smoke.filter(s => s.t < 4);
-  // A rowboat bobbing at the end of the pier, the windmill's sails, and the street lamps.
-  const bob = Math.round(Math.sin(t * 2)) * 1;
-  g.fillStyle = 'rgba(10,30,60,0.3)'; g.fillRect(858, 268, 20, 2);
-  g.fillStyle = OUT; g.fillRect(857, 258 + bob, 22, 9); g.fillStyle = '#a8743e'; g.fillRect(858, 259 + bob, 20, 7); g.fillStyle = '#7a4c2a'; g.fillRect(860, 261 + bob, 16, 4); g.fillStyle = '#d8a46a'; g.fillRect(858, 259 + bob, 20, 1);
-  g.fillStyle = '#5a361c'; g.fillRect(866, 261 + bob, 3, 4);
+  // The boat waiting at the end of the dock, the windmill's sails, and the street lamps.
+  drawBoat(g, PIER.x1 - 4, PIER.y1 + 2, t);
   const sa = t * 0.8;
   for (let k = 0; k < 4; k++) {
     const a = sa + (k * Math.PI) / 2, ca = Math.cos(a), sn = Math.sin(a);
@@ -831,7 +952,6 @@ function drawLive(g, dt, t) {
   }
   // The spawn pad glow, a boss waiting in the cave, and you.
   g.globalAlpha = 0.35 + 0.25 * Math.sin(t * 3); g.fillStyle = '#c8f8ff'; g.fillRect(SPAWN.x - 6, SPAWN.y + 1, 12, 4); g.globalAlpha = 1;
-  if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { g.fillStyle = '#ff3040'; g.fillRect(1139, 160, 2, 1); g.fillRect(1149, 160, 2, 1); glow(g, 1145, 162, 14, 'rgba(255,40,60,0.25)'); }
   drawDecor(g, t);
   drawMe(g, t);
   drawBubbles(g, dt);
@@ -963,7 +1083,8 @@ function walkStep(dt) {
   const me = WORLD.me;
   if (!me.held) return;
   me.dir = me.held; me.walkT += dt;
-  me.x = Math.max(24, Math.min(WW - 24, me.x + me.held * WALK_SPEED * dt));
+  const xMax = WORLD.scene === 'cave' ? CAVE_W - 30 : PIER.x1 - 16, xMin = WORLD.scene === 'cave' ? CAVE_PIER.x0 + 14 : 24;
+  me.x = Math.max(xMin, Math.min(xMax, me.x + me.held * WALK_SPEED * dt));
   const span = WORLD.vw / WORLD.z, lo = WORLD.cam.x + span * 0.35, hi = WORLD.cam.x + span * 0.65;
   if (me.x < lo) WORLD.cam.x -= lo - me.x; else if (me.x > hi) WORLD.cam.x += me.x - hi;
   WORLD.vx = 0; clampCam(); placeLayer();
@@ -986,7 +1107,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { if ((e.key === 'ArrowLeft' && WORLD.me.held < 0) || (e.key === 'ArrowRight' && WORLD.me.held > 0)) WORLD.me.held = 0; });
 
 // ---------- camera: swipe left and right only, with a little glide ----------
-function clampCam() { WORLD.cam.x = Math.max(0, Math.min(WW - WORLD.vw / WORLD.z, WORLD.cam.x)); WORLD.cam.y = Math.max(0, (WH - WORLD.vh / WORLD.z) / 2); }
+function clampCam() { WORLD.cam.x = Math.max(0, Math.min(WORLD.wmax - WORLD.vw / WORLD.z, WORLD.cam.x)); WORLD.cam.y = Math.max(0, (WH - WORLD.vh / WORLD.z) / 2); }
 function placeLayer() { const layer = $('#worldLayer'); if (layer) layer.style.transform = `translate(${-WORLD.cam.x * WORLD.z}px, ${-WORLD.cam.y * WORLD.z}px) scale(${WORLD.z})`; }
 function bindSwipe(el) {
   el.addEventListener('pointerdown', e => { WORLD.drag = { id: e.pointerId, x: e.clientX, sx: e.clientX, sy: e.clientY, t: performance.now() }; WORLD.moved = false; WORLD.vx = 0; });
@@ -1009,16 +1130,21 @@ function bindSwipe(el) {
 function centerOnSpawn() { WORLD.cam.x = 0; WORLD.vx = 0; clampCam(); placeLayer(); }
 
 // ---------- screen ----------
-function islandHtml() {
-  let h = `<div class="world" id="world"><canvas id="worldCv" aria-hidden="true"></canvas><div class="isle" id="worldLayer" style="width:${WW}px;height:${WH}px">`;
-  for (const b of BUILDINGS) {
+// The tap boxes and signs for the scene you're in: the town, or a cave island.
+function layerHtml() {
+  let h = '';
+  for (const b of WORLD.scene === 'cave' ? CAVE_BUILDINGS : BUILDINGS) {
     const act = b.tab === 'lb' ? 'data-lb="open"' : `data-go="${b.tab}"`;
     h += `<button class="bld" ${act} aria-label="${b.name}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></button>`;
     const sy = b.tab === 'dock' ? b.y + b.h + 12 : b.y - 8;
     h += `<button class="sign" ${act} aria-label="${b.name}" style="left:${b.x + b.w / 2}px;top:${sy}px">${b.name}<small id="isl-${b.tab}"></small><i class="dot"></i></button>`;
   }
 
-  for (const [id, d] of Object.entries(DECOR)) h += `<button class="bld" data-act="${id === 'stand' ? 'openStand' : 'openDoghouse'}" aria-label="${d.name}" style="left:${d.x}px;top:${d.y}px;width:${d.w}px;height:${d.h}px"></button>`;
+  if (WORLD.scene === 'home') for (const [id, d] of Object.entries(DECOR)) h += `<button class="bld" data-act="${id === 'stand' ? 'openStand' : 'openDoghouse'}" aria-label="${d.name}" style="left:${d.x}px;top:${d.y}px;width:${d.w}px;height:${d.h}px"></button>`;
+  return h;
+}
+function islandHtml() {
+  let h = `<div class="world" id="world"><canvas id="worldCv" aria-hidden="true"></canvas><div class="isle" id="worldLayer" style="width:${WW}px;height:${WH}px">${layerHtml()}`;
   h += '</div><button class="walk l" id="walkL" aria-label="Walk left">◀</button><button class="walk r" id="walkR" aria-label="Walk right">▶</button><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button><div class="islebanner" id="isleBanner"></div><button class="bossalert" id="bossAlert" data-act="worldBoss" hidden></button></div>';
   return h;
 }
@@ -1029,7 +1155,7 @@ function buildIsland() {
     sec.innerHTML = islandHtml();
     WORLD.cv = $('#worldCv');
     WORLD.ctx = WORLD.cv.getContext('2d');
-    WORLD.isle = worldIsle();
+    WORLD.isle = 0; WORLD.scene = 'home'; WORLD.wmax = WW;
     WORLD.img = paintWorld();
     updateIsleBanner(false);
     bindSwipe($('#world'));
@@ -1043,6 +1169,7 @@ function buildIsland() {
     sizeIsland();
     centerOnSpawn();
   } else sizeIsland();
+  if (WORLD.want) { const w = WORLD.want; WORLD.want = null; if (w.scene !== WORLD.scene || w.i !== WORLD.isle) setScene(w.scene, w.i); }
   updateIslandSigns();
   updateBadges();
 }
@@ -1073,7 +1200,7 @@ function updateIslandSigns() {
   set('fight', bossWaiting() ? 'Boss!' : 'B' + S.run.floor);
   set('skills', S.run.sp > 0 ? S.run.sp + ' pts' : '');
   set('cases', freeCrateReady() ? 'Free!' : '');
-  set('dock', 'Caves');
+  set('dock', '');
 }
 
 function islandLoop(now) {
@@ -1083,9 +1210,8 @@ function islandLoop(now) {
   WORLD.last = now;
   if (!WORLD.drag && Math.abs(WORLD.vx) > 0.05) { WORLD.cam.x += WORLD.vx; WORLD.vx *= 0.9; clampCam(); placeLayer(); }
   walkStep(dt);
-  // Sailed to another island's cave: repaint the world as that island.
-  const isle = worldIsle();
-  if (isle !== WORLD.isle) { WORLD.isle = isle; WORLD.img = paintWorld(); updateIsleBanner(true); showIsleTravel(isle); }
+  // On a cave island, it is always the island of the floor you're on (after Sail on, or a prestige).
+  if (WORLD.scene === 'cave' && worldIsle() !== WORLD.isle) setScene('cave', worldIsle());
   drawWorld(dt);
   if ((WORLD.signT = (WORLD.signT || 0) + dt) > 0.5) { WORLD.signT = 0; updateIslandSigns(); }
 }
@@ -1118,32 +1244,48 @@ function updateIsleBanner(big) {
   const el = $('#isleBanner');
   if (!el) return;
   const i = WORLD.isle || 0, isl = ISLANDS[i], next = ISLANDS[i + 1];
-  el.innerHTML = `<b>${isl.name}</b><small>B${isl.from}${next ? '–' + (next.from - 1) : '+'}</small>`;
+  el.innerHTML = WORLD.scene === 'home' ? '<b>Your town</b><small>Greenhollow</small>'
+    : `<b>${isl.name}</b><small>Cave B${isl.from}${next ? '–' + (next.from - 1) : '+'}</small>`;
   if (big) { el.classList.remove('big'); void el.offsetWidth; el.classList.add('big'); }
 }
-// The Harbor is the way to the caves: pick an island and the boat takes you to its cave.
+// Switch between your town and a cave island: repaint, swap the tap boxes, and put you on the dock.
+function setScene(scene, i = 0) {
+  WORLD.scene = scene; WORLD.isle = scene === 'home' ? 0 : i; WORLD.wmax = scene === 'home' ? WW : CAVE_W;
+  WORLD.img = scene === 'home' ? paintWorld() : paintCaveIsle(i);
+  const layer = $('#worldLayer');
+  if (layer) layer.innerHTML = layerHtml();
+  const me = WORLD.me;
+  me.held = 0; me.x = scene === 'home' ? PIER.x0 - 6 : CAVE_PIER.x1 + 8; me.dir = scene === 'home' ? -1 : 1;
+  WORLD.cam.x = me.x - (WORLD.vw / WORLD.z || 160) / 2; WORLD.vx = 0; clampCam(); placeLayer();
+  const ts = $('#toSpawn');
+  if (ts) ts.hidden = scene !== 'home';
+  updateIsleBanner(true); updateIslandSigns();
+}
+// The cave tab is inside a cave island: when you come back out, you're standing on that island.
+function enterCaveScene() { WORLD.want = { scene: 'cave', i: worldIsle() }; }
+// The dock: pick an island's cave to sail to, or (from a cave island) sail home.
 function openHarbor() {
-  const here = worldIsle(), open = S.run.open, found = islesReached();
-  let h = `<h2>Harbor</h2><p class="small muted" style="text-align:center">Every island has its own cave of 100 floors. Pick one to sail to its cave. Beat an island's last floor to sail on to the next.</p><div class="islelist">`;
+  const here = WORLD.scene === 'cave' ? WORLD.isle : -1, open = S.run.open, found = islesReached();
+  let h = `<h2>${here < 0 ? 'Set sail' : ISLANDS[here].name + ' dock'}</h2><p class="small muted" style="text-align:center">Every island is a cave of 100 floors. Beat an island's last floor to sail on to the next.</p><div class="islelist">`;
+  if (here >= 0) h += `<button class="isleopt" data-act="sail" data-i="-1"><span class="isleswatch" style="background:${ISLE_STYLE.green.swatch}"></span><span class="grow"><b>Home</b><small>Your town in Greenhollow</small></span></button>`;
   ISLANDS.forEach((isl, i) => {
     const ok = i <= open, end = isleEnd(i), range = `B${isl.from}${end < Infinity ? '–' + end : '+'}`;
     const sub = ok ? `${range} · ${isl.caveLook}` : `${range} · beat B${isl.from - 1}${i <= found ? ' this run' : ''} to sail here`;
-    h += `<button class="isleopt ${here === i ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="sail" data-i="${i}" ${ok ? '' : 'disabled'}>
+    h += `<button class="isleopt ${here === i ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="sail" data-i="${i}" ${ok && here !== i ? '' : 'disabled'}>
       <span class="isleswatch" style="background:${i <= Math.max(open, found) ? ISLE_STYLE[isl.id].swatch : 'var(--ink)'}"></span>
-      <span class="grow"><b>${isl.name}</b><small>${sub}</small></span>${here === i ? '<span class="isletag">Here</span>' : ''}</button>`;
+      <span class="grow"><b>${isl.name} cave</b><small>${sub}</small></span>${here === i ? '<span class="isletag">Here</span>' : ''}</button>`;
   });
   h += `</div><p class="small muted" style="text-align:center;margin:8px 0 0">Islands discovered: ${found + 1}/${ISLANDS.length} · +${Math.round(ISLE_COINS * S.isle.claimed * 100)}% coins forever</p>
     <div class="mbtns"><button class="btn" data-act="close">Close</button></div>`;
   openModal(h, { dismissable: true });
 }
-// Straight into the cave when it's this island's; after the boat trip when you sail somewhere new.
+// i is an island (its cave), or -1 for home. The boat trip plays, and you step off on the dock.
 function sailTo(i) {
   closeModal();
-  const from = worldIsle();
+  if (i < 0) { setScene('home'); showIsleTravel(-1); return; }
   if (!sailToIsle(i)) return;
-  SFX.claim();
-  const go = () => { if (UI.tab === 'island') goBuilding('fight'); };
-  if (i === from) go(); else setTimeout(go, 2000);
+  setScene('cave', i);
+  showIsleTravel(i);
 }
 // Arriving on a new island: a boat sails across and the island's name comes up.
 function showIsleTravel(i) {
@@ -1151,10 +1293,10 @@ function showIsleTravel(i) {
   if (!w) return;
   const old = $('.isletravel', w);
   if (old) old.remove();
-  const isl = ISLANDS[i], el = document.createElement('div');
+  const home = i < 0, isl = ISLANDS[Math.max(0, i)], el = document.createElement('div');
   el.className = 'isletravel';
   el.innerHTML = `<div class="itsea"><img class="itboat" src="${spriteUrl(boatSprite(), 4, 'boat')}" alt=""></div>
-    <div class="itcard"><small>Now arriving</small><b>${isl.name}</b><span>${isl.blurb}</span></div>`;
+    <div class="itcard"><small>Now arriving</small><b>${home ? 'Home' : isl.name}</b><span>${home ? 'Your town in Greenhollow' : 'The cave: ' + isl.caveLook.toLowerCase()}</span></div>`;
   w.appendChild(el);
   SFX.claim();
   setTimeout(() => el.classList.add('out'), 2600);

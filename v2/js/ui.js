@@ -128,6 +128,7 @@ function showTab(name) {
   cropStage(name);
   $('#panel').scrollTop = 0;
   if (name === 'forge') UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
+  if (name === 'fight' && typeof enterCaveScene === 'function') enterCaveScene();
   buildTab(name);
   if (typeof roomShow === 'function') roomShow(name);
 }
@@ -1729,7 +1730,7 @@ function showIslesArrived(list) {
   openModal(`<h2>${list.length > 1 ? 'New islands reached!' : 'Land ho: ' + last.name + '!'}</h2>
     <div class="islelist">${list.map(x => { const isl = ISLANDS[x.i]; return `<div class="isleopt on"><span class="isleswatch" style="background:${ISLE_STYLE[isl.id].swatch}"></span><span class="grow"><b>${isl.name}</b><small>B${isl.from}+ · ${isl.blurb}</small></span></div>`; }).join('')}</div>
     <p style="text-align:center">+${keys} keys · +${Math.round(ISLE_COINS * list.length * 100)}% coins forever</p>
-    <p class="small muted" style="text-align:center">The world turns into each island as you dig past it. Sail back to any island from the Harbor by the bridge.</p>
+    <p class="small muted" style="text-align:center">Each island is a cave of 100 floors. Sail to any island's cave from the dock at the end of the road in town.</p>
     <div class="mbtns"><button class="btn gold" data-act="close">Explore</button></div>`, { dismissable: true });
   SFX.levelup();
 }
