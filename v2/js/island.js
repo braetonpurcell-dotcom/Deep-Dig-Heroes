@@ -49,7 +49,7 @@ const CAVE_BUILDINGS = [
   { tab: 'dock', name: 'Boat', x: 0, y: 194, w: 30, h: 30, dx: 12 },
   { tab: 'fight', name: 'Cave', x: 296, y: 140, w: 52, h: 46, dx: 322 },
 ];
-const CAVE_ROAD = [[20, 200], [70, 200], [130, 205], [190, 201], [250, 194], [298, 186], [318, 178], [322, 172]];
+const CAVE_ROAD = [[20, 200], [70, 200], [130, 205], [190, 203], [250, 201], [292, 198], [314, 194], [322, 189], [322, 186]];
 function smoothRoad(pts) {
   const out = [], n = pts.length, at = i => pts[Math.max(0, Math.min(n - 1, i))];
   for (let i = 0; i < n - 1; i++) {
@@ -329,6 +329,8 @@ function paintCaveIsle(i) {
   for (const [x0, y0] of CAVE_ROAD_PTS) for (let cy = Math.floor((y0 - 8) / CELL); cy <= Math.floor((y0 + 8) / CELL); cy++) for (let cx = Math.floor((x0 - 8) / CELL); cx <= Math.floor((x0 + 8) / CELL); cx++) {
     if (cx >= 0 && cy >= 0 && cx < GC && cy < GR && Math.hypot(cx * CELL + 1 - x0, cy * CELL + 1 - y0) <= 8) road[cy * GC + cx] = 1;
   }
+  // A worn dirt patch in front of the cave mouth, as wide as the mouth, where the path ends.
+  for (let cy = 0; cy < GR; cy++) for (let cx = 0; cx < GC; cx++) { const x = cx * CELL + 1, y = cy * CELL + 1; if (((x - CAVE_MTN.mx) / 25) ** 2 + ((y - CAVE_MTN.base - 3) / 8) ** 2 < 1) road[cy * GC + cx] = 1; }
   for (let cy = 0; cy < GR; cy++) for (let cx = 0; cx < GC; cx++) {
     const x = cx * CELL + 1, y = cy * CELL + 1, e = caveShore(x, y);
     let t = T.WATER;
@@ -582,8 +584,7 @@ function paintGreenHill(r) {
     const x = mx - mw / 2 + 5 + k * 4.4 + Math.round(r() * 2), y0 = top + 2 + Math.round(Math.abs(x - mx) * 0.55), len = 3 + Math.round(r() * 6);
     for (let j = 0; j < len; j++) px(x + (j > 3 && k % 2 ? 1 : 0), y0 + j, 1, 1, k % 3 === 0 ? GREEN[3] : j === len - 1 ? EARTH[3] : EARTH[1]);
   }
-  for (let y = base - 10; y <= base; y += 3) px(mx - 7, y, 14, 1, '#4a2e1a');
-  px(mx - 5, base - 11, 1, 12, '#a0a0aa'); px(mx + 4, base - 11, 1, 12, '#a0a0aa');
+  paintCaveRails(['#3a2a1e', '#241a12', '#140e0a', '#080504']);
   // Flowers in drifts, a few bushes and stones, and trees on the crest and the back mound.
   const fl = ['#ff7aa8', '#f8e04a', '#ffffff', '#8ab8ff', '#ff9a4a', '#d07aff'];
   for (let k = 0; k < 26; k++) {
@@ -595,6 +596,24 @@ function paintGreenHill(r) {
   for (const [bx, by] of [[250, 172], [404, 170], [282, 140], [366, 150]]) if (inside(bx, by)) bush(bx, by);
   for (const [sx, sy] of [[240, 180], [420, 178], [300, 120]]) if (inside(sx, sy)) rock(sx, sy, false);
   tree(300, Math.round(greenTop(300)) + 3); tree(392, Math.round(greenTop(392)) + 3);
+}
+// Mine rails running from the dirt patch into the cave, drawn in perspective: they narrow toward a
+// vanishing point deep inside, the sleepers bunch up, and both fade into the dark.
+function paintCaveRails(dark) {
+  const { mx, base } = CAVE_MTN, deepY = base - 25, n = 11;
+  const hex = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+  const fade = (c, d) => { const a = hex(c), b = hex(dark[3]); return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * Math.min(1, d * 1.15))).join(',')})`; };
+  let prev = null;
+  for (let i = 0; i <= n; i++) {
+    const d = i / n, y = Math.round(base + 4 - (1 - (1 - d) * (1 - d)) * (base + 4 - deepY)), hw = 9 - d * 7.5;
+    const l = Math.round(mx - hw), r = Math.round(mx + hw);
+    px(l - 2, y, r - l + 5, 1, fade('#5a3a20', d)); // sleeper
+    if (prev) for (const [a, b] of [[prev.l, l], [prev.r, r]]) { // rail from the last sleeper to this one
+      const steps = Math.max(1, prev.y - y);
+      for (let k = 0; k <= steps; k++) px(Math.round(a + (b - a) * k / steps), prev.y - k, 1, 1, fade(k < steps / 2 ? '#c4c8d2' : '#a0a4ae', d));
+    }
+    prev = { l, r, y };
+  }
 }
 // Wildlife round the green hill: rabbits that hop about and stop to nibble, butterflies over the
 // flowers, and two birds that sit in the crest tree and now and then fly a loop.
