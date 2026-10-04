@@ -763,3 +763,11 @@ body.on-island #panel { overflow: hidden; }
 .world .edge.l { left: 6px; } .world .edge.r { right: 6px; }
 .world .edge.show { opacity: .85; }
 @keyframes nudge { 50% { margin-left: 3px; } }
+
+/* Version 2 building interiors: a pixel-art room behind each screen, open at the top of the page. */
+#roomCv { position: fixed; left: 0; z-index: 0; image-rendering: pixelated; pointer-events: none; }
+#roomCv[hidden] { display: none; }
+#app { position: relative; z-index: 1; }
+body.roomtab #panel::before { content: ''; display: block; height: var(--roomgap, 180px); }
+body.roomtab .card { background: rgba(30, 24, 40, .86); }
+body.roomtab #screenbar b { text-shadow: 0 2px 0 #000, 0 0 6px rgba(0,0,0,.8); }

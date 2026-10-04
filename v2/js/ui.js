@@ -129,6 +129,7 @@ function showTab(name) {
   $('#panel').scrollTop = 0;
   if (name === 'forge') UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
   buildTab(name);
+  if (typeof roomShow === 'function') roomShow(name);
 }
 
 // Off the Fight tab the mine view is cut down to its bottom half (the miner and the ground), so the
