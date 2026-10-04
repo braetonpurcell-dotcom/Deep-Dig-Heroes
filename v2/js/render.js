@@ -643,6 +643,7 @@ function drawOverlay(dt) {
   // Off the Fight tab only the bottom of the view shows, so the HUD moves down into it.
   const T = SCN.top || 0;
   drawText('B' + f, 3, T + 3, '#ffffff', 2);
+  if (typeof gateLevel === 'function' && gateLevel(f)) drawText('GATE ' + gateLevel(f) + '/' + TUNE.gateFloors, 3 + 9 * String(f).length + 14, T + 6, '#b76dff', 1);
   if (isBossFloor(f)) {
     drawText('BOSS', 3, T + 16, '#ff5d6c', 1);
   } else {

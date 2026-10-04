@@ -11,9 +11,14 @@ without a new floor) showed spamming at B25 earned more power than pushing, and 
   floors. Quick resets that never get past your strength pay nothing, and twice the depth pays 4x.
 - Each run starts at the first floor of the island (past Starfall, the 100-floor stretch) halfway
   between your strength and your record, so run length stays flat.
-- Open: the sim's "pusher" waits 5 minutes at the wall with no progress, which no depth-based reward
-  can pay for, so prestiging when progress stalls is still the fastest way. Deeper single runs do
-  pay much more. Numbers cap near B2300 (1e300 health), reached after roughly 40+ hours at this pace.
+- Each prestige needs a deeper floor: B25, then 25 + 15 x prestiges^0.8 rounded to 5 (B40, B50, B60, B70,
+  B80 ... B120 at 10, B370 at 50, B620 at 100), and never less than 25 floors past your strength. Its last
+  3 floors are Gate floors (monsters 1.3x / 1.69x / 2.2x health); reaching it shows PRESTIGE UNLOCKED and
+  pays 3 keys + 1 per 2 prestiges. Tried and dropped: a flat strength bonus per unlock and an
+  "overdrive" multiplier for floors past the gate (both made spamming or pushing run away).
+- Sims (6 h, persona C): prestige-at-unlock B648, quick B896, 2-min stall B707, 5-min stall B494; idle
+  players (no taps) still progress (B130-270) but much slower; one idle sim stalled at B41.
+  20 h: progress slows down instead of running away (B1150-1450). Numbers cap near B2300.
 
 ## Island customization (2026-10-04)
 

@@ -41,6 +41,11 @@ const TUNE = {
   // Prestige pacing (V2 dev.35, sims in tools/playtest/sim.js): power from a run = depthPay * depthPast^2,
   // and each run starts at the island halfway between your strength and your record (startShare).
   depthFree: 10, depthPay: 0.2, sailStart: 1, startMargin: 20, startShare: 0.5,
+  // The floor each prestige needs: B25, then 25 + reqScale * prestiges^reqExp rounded to 5 (B40, B50,
+  // B60, B70, B80...), and never fewer than reqAhead floors past your strength. Its last gateFloors floors
+  // are Gate floors with gateHp^k tougher monsters until it opens; opening it pays gateKeys keys (+1 per
+  // 2 prestiges) on the spot.
+  reqScale: 15, reqExp: 0.8, reqAhead: 25, gateFloors: 3, gateHp: 1.3, gateKeys: 3,
 };
 function curve() { return S && S.curve === 1 ? CURVE_OLD : TUNE; }
 // Prestige power. On the tougher mine it counts in floors of strength (1.5 x the square root of
@@ -88,6 +93,7 @@ function freshRun() {
   return {
     floor: 1, maxFloor: 1, kills: 0, auto: true,
     open: 0, // Version 2: the deepest island you may sail to this run
+    unlocked: false, // reached this run's prestige floor (prestigeReq)
     level: 1, xp: 0, sp: 0, skills: {}, upg: {}, bossDone: {}, cases: 0,
     started: Date.now(), recordAnnounced: false,
     rush: { left: 0, mult: 1 }, // Gold Rush: kills left at the boosted coin rate
@@ -269,6 +275,8 @@ function hydrate(obj) {
   s.run.rush.mult = s.run.rush.mult === 3 ? 3 : 2;
   s.run.bestCombo = nonNegInt(s.run.bestCombo);
   s.run.giftSp = nonNegInt(s.run.giftSp);
+  // Saves from before the moving prestige floor: a run already past its floor has prestige open.
+  if (typeof s.run.unlocked !== 'boolean') s.run.unlocked = (s.run.maxFloor || 1) >= reqCurve(nonNegInt(s.prestiges));
   if (s.curve !== 1) s.curve = CURVE_LATEST;
   s.nextId = nonNegInt(s.nextId, 1);
   // Run and combo numbers.
@@ -582,7 +590,7 @@ function spawnEnemy(boss = false) {
   if (boss) type = BOSS_ORDER[(f / 10) % BOSS_ORDER.length];
   else if (f >= ENEMIES.goldie.minFloor && Math.random() < TREASURE_CHANCE) type = 'goldie';
   else type = weightedPick(NORMAL_ENEMIES.filter(t => ENEMIES[t].minFloor <= f), t => ENEMIES[t].weight);
-  const hp = Math.min(BIG, hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult);
+  const hp = Math.min(BIG, hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult * gateHpMult(f));
   const name = boss ? `${biome.adj} ${BOSS_NAMES[type]}` : ENEMIES[type].name(biome);
   // With flow from tapping, the next monster arrives sooner and the first swing comes almost at once.
   const fast = boss ? 0 : flowSpeed();
@@ -715,6 +723,7 @@ function changeFloor(f) {
     }
     S.run.maxFloor = f;
     if (skillRank('compound')) recalc();
+    checkUnlock(f);
   }
   if (f > S.stats.bestFloor) {
     const prev = S.stats.bestFloor;
@@ -2023,7 +2032,20 @@ function depthPast() { return Math.max(0, S.run.maxFloor - powerFloors() - TUNE.
 function powerGain() { const d = depthPast(); return Math.round(TUNE.depthPay * d * d); }
 // The floor where a run starts paying power: your strength plus the free floors.
 function payFloor() { return Math.ceil(powerFloors() + TUNE.depthFree) + 1; }
-function canPrestige() { return S.run.maxFloor >= 25 && prestigeGain() > 0 && powerGain() > 0; }
+function reqCurve(p) { return p <= 0 ? 25 : Math.round((25 + TUNE.reqScale * Math.pow(p, TUNE.reqExp)) / 5) * 5; }
+function prestigeReq(p = S.prestiges, w = powerFloors()) { return Math.max(reqCurve(p), Math.ceil((w + TUNE.reqAhead) / 5) * 5); }
+function canPrestige() { return !!S.run.unlocked && prestigeGain() > 0; }
+// Gate floors: the last few floors before this run's prestige floor, tougher until it opens.
+function gateLevel(f) { const req = prestigeReq(), k = TUNE.gateFloors - (req - f); return S.run.unlocked || f > req || k <= 0 ? 0 : k; }
+function gateHpMult(f) { const k = gateLevel(f); return k ? Math.pow(TUNE.gateHp, k) : 1; }
+// Reaching the prestige floor opens prestige for this run and pays out on the spot.
+function checkUnlock(f) {
+  if (S.run.unlocked || f < prestigeReq()) return;
+  S.run.unlocked = true;
+  const keys = TUNE.gateKeys + Math.floor(S.prestiges / 2);
+  S.keys += keys;
+  emit('prestigeUnlocked', { floor: prestigeReq(), keys });
+}
 // Sail-out start: each run begins at the first floor of the deepest island (past the last island, the
 // deepest 100-floor stretch) at or above the point halfway (TUNE.startShare) between your strength and
 // your record, so runs don't grow longer and longer re-climbing floors you outgrew long ago.
@@ -2034,6 +2056,8 @@ function runStartFloor() {
   let f = 1;
   for (const isl of ISLANDS) if (isl.from <= safe) f = isl.from;
   if (safe >= last + ISLE_FLOORS) f = last + Math.floor((safe - last) / ISLE_FLOORS) * ISLE_FLOORS;
+  const cap = prestigeReq(S.prestiges + 1, w) - TUNE.gateFloors - 10; // always some digging before the next gate
+  while (f > 1 && f > cap) f = f > last ? f - ISLE_FLOORS : ISLANDS[Math.max(0, islandForFloor(f) - 1)].from;
   return f;
 }
 

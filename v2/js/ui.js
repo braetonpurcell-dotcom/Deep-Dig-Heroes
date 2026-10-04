@@ -248,8 +248,7 @@ function goalMessages() {
     const nb = Math.ceil(f / 10) * 10;
     out.push([`Boss at B${nb}, ${plural(nb - f, 'floor')} to go`, '']);
   }
-  if (S.prestiges === 0 && S.run.maxFloor < 25) out.push(['Reach B25 to unlock prestige', '']);
-  else if (!canPrestige() && S.run.maxFloor >= 25) out.push([`Prestige pays from B${payFloor()}: dig past it to prestige`, '']);
+  if (!S.run.unlocked) out.push([gateLevel(S.run.floor) ? `Gate floor! Break through to B${prestigeReq()} to unlock prestige` : `Reach B${prestigeReq()} to unlock prestige`, gateLevel(S.run.floor) ? 'gold' : '']);
   const toEpic = epicPityLeft();
   if (toEpic <= 3) out.push([`Epic or better guaranteed within ${plural(toEpic, 'case')}`, '']);
   out.push([`Level ${S.run.level + 1} in ${fmt(Math.max(0, xpNeed(S.run.level) - S.run.xp))} XP`, '']);
@@ -1545,14 +1544,14 @@ function buildMore() {
   let h = `<div class="card row"><div class="grow"><b>Version 2 preview</b><div class="small muted">${GAME_VERSION} · a separate save from the live game</div></div>
     <button class="btn small gold" data-act="v2Welcome">What's new</button></div>`;
   h += `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
-    <p class="small">Start a new run and keep your gear, pets, keys, scrap, cores and power. ${powerNow} A run pays power for every floor you dig past B${payFloor() - 1}, and it grows with the square of that depth: dig twice as far past it and you get four times the power. Cores buy upgrades in the Prestige tree at the Temple.</p>
+    <p class="small">Start a new run and keep your gear, pets, keys, scrap, cores and power. ${powerNow} Each prestige needs a deeper floor (this one: B${prestigeReq()}), guarded by ${TUNE.gateFloors} tough Gate floors; opening it pays keys on the spot. Power pays for every floor you dig past B${payFloor() - 1} and grows with the square of that depth, so the further you push past the gate, the bigger the reward: twice as far pays four times the power. Cores buy upgrades in the Prestige tree at the Temple.</p>
     <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
     <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (${powerText(S.power)} → ${powerText(S.power + pg, true)})</div>
     <div class="small muted">${plural(Math.floor(depthPast()), 'floor')} past your strength so far${nextStartText()}</div></div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
     ${S.prestiges < 3 ? `<div class="small">Prestige ${S.prestiges < 1 ? 1 : 3} adds a pet slot.</div>` : ''}
     ${S.prestiges < PRESTIGE_LUCK_MAX ? `<div class="small">Each of your first ${PRESTIGE_LUCK_MAX} prestiges also adds +${Math.round(PRESTIGE_LUCK * 100)}% luck (${S.prestiges}/${PRESTIGE_LUCK_MAX}).</div>` : ''}
-    <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : S.run.maxFloor < 25 ? 'Reach B25 to prestige' : `Dig past B${payFloor()} to prestige`}</button></div>`;
+    <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : `Reach B${prestigeReq()} to prestige`}</button></div>`;
 
   const st = S.stats;
   const tries = st.taps + st.escapes;
@@ -1672,13 +1671,24 @@ on('collection', ({ count }) => toast(`New index entry ${count}/${(PET_IDS.lengt
 on('bestFloor', ({ floor }) => {
   const u = UPGRADES.find(x => x.unlock === floor);
   if (u) toast('New Forge upgrade: ' + u.name, 'good', 'anvil');
-  if (floor === 25 && S.prestiges === 0) toast('Prestige unlocked! Open Settings (⚙ top right).', 'purple', 'core');
 });
 // Version 2: an island's last floor is beaten, so the next island opens.
 on('isleCleared', ({ i }) => {
   SFX.levelup();
   toast(`${ISLANDS[i - 1].name}'s cave is cleared! Sail on to ${ISLANDS[i].name} (tap ⛵ or go to the Harbor)`, 'gold');
   updateFloorBar();
+});
+// The prestige floor is reached: a big moment, and keys on the spot.
+on('prestigeUnlocked', ({ floor, keys }) => {
+  SFX.levelup();
+  banner('PRESTIGE UNLOCKED', `B${floor} - +${keys} KEYS`, '#b76dff', 2.8);
+  toast(`Prestige unlocked at B${floor}: +${keys} keys. Push deeper for more power, or prestige in Settings (⚙).`, 'purple', 'core');
+  updateFloorBar();
+});
+// Stepping onto a Gate floor (the last floors before the prestige floor).
+on('floor', ({ floor }) => {
+  const k = gateLevel(floor);
+  if (k && UI.gateToast !== floor) { UI.gateToast = floor; toast(`Gate floor ${k}/${TUNE.gateFloors}: monsters are ${Math.round((gateHpMult(floor) - 1) * 100)}% tougher until B${prestigeReq()} opens prestige`, 'bad', 'skull'); }
 });
 on('bossFail', () => setTicker('The boss escaped. Farm here, then tap Retry boss.', 'bad', 4000));
 // Version 2: a short guide to everything new, shown once to players coming from the live game.
