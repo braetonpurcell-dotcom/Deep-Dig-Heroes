@@ -2,22 +2,18 @@
 
 Ideas parked to come back to. Newest first.
 
-## Pace of new islands and prestige at high prestige counts (parked 2026-10-04)
+## Pace of new islands and prestige at high prestige counts (worked on 2026-10-04, draft `pacing-draft`)
 
-Brachell wants the mid and late game to move faster: new islands should arrive sooner, and prestiging
-at higher prestige counts should come around sooner.
-
-- Two play styles to balance for: Tropical prestiges again and again as soon as it is allowed, while
-  Brachell pushes until hitting the power wall before prestiging.
-- Look at both with the sim (`tools/playtest/sim.js`: `stallSec` for the wall-pusher, an early
-  `prestigeAt` for the spammer) and the players' telemetry.
-- Since V2 dev.26 each island is 100 floors (its own cave) and you sail between them, so island
-  pacing is now one island per 100 floors.
-- Questions to answer: how long each island takes to reach for each style, how the prestige
-  requirement grows with prestige count, and whether spamming beats pushing or the other way round.
-- Brachell's rule for the fix: the deeper you push before prestiging, the bigger the reward should be.
-  Working hard on a run should pay more than quick resets (for example, prestige rewards that grow
-  faster than linearly with the depth reached past the prestige requirement).
+Sims (`tools/playtest/sim.js`, personas A/C/E, styles: spam at B25, prestige after 30s/120s/300s
+without a new floor) showed spamming at B25 earned more power than pushing, and runs grew from about
+5 to 30+ minutes as prestiges piled up because every run re-climbed from B1. Draft fix:
+- Power from a run = 0.2 x (floors past your strength)^2. Strength is powerFloors() plus 10 free
+  floors. Quick resets that never get past your strength pay nothing, and twice the depth pays 4x.
+- Each run starts at the first floor of the island (past Starfall, the 100-floor stretch) halfway
+  between your strength and your record, so run length stays flat.
+- Open: the sim's "pusher" waits 5 minutes at the wall with no progress, which no depth-based reward
+  can pay for, so prestiging when progress stalls is still the fastest way. Deeper single runs do
+  pay much more. Numbers cap near B2300 (1e300 health), reached after roughly 40+ hours at this pace.
 
 ## Island customization (2026-10-04)
 

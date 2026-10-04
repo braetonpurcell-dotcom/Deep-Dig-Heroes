@@ -249,6 +249,7 @@ function goalMessages() {
     out.push([`Boss at B${nb}, ${plural(nb - f, 'floor')} to go`, '']);
   }
   if (S.prestiges === 0 && S.run.maxFloor < 25) out.push(['Reach B25 to unlock prestige', '']);
+  else if (!canPrestige() && S.run.maxFloor >= 25) out.push([`Prestige pays from B${payFloor()}: dig past it to prestige`, '']);
   const toEpic = epicPityLeft();
   if (toEpic <= 3) out.push([`Epic or better guaranteed within ${plural(toEpic, 'case')}`, '']);
   out.push([`Level ${S.run.level + 1} in ${fmt(Math.max(0, xpNeed(S.run.level) - S.run.xp))} XP`, '']);
@@ -1526,6 +1527,12 @@ function powerText(p, afterPrestige = false) {
   return `${fl < 10 ? fl.toFixed(1) : fmt(Math.round(fl))} floors of strength`;
 }
 
+// Where the next run begins, once your strength carries you past the first island.
+function nextStartText() {
+  const f = runStartFloor();
+  return f > 1 ? ` · Next run sails straight to ${ISLANDS[islandForFloor(f)].name}, B${f}` : '';
+}
+
 function buildMore() {
   const gain = prestigeGain();
   const can = canPrestige();
@@ -1538,13 +1545,14 @@ function buildMore() {
   let h = `<div class="card row"><div class="grow"><b>Version 2 preview</b><div class="small muted">${GAME_VERSION} · a separate save from the live game</div></div>
     <button class="btn small gold" data-act="v2Welcome">What's new</button></div>`;
   h += `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
-    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. ${powerNow} It grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree at the Temple.</p>
+    <p class="small">Start a new run and keep your gear, pets, keys, scrap, cores and power. ${powerNow} A run pays power for every floor you dig past B${payFloor() - 1}, and it grows with the square of that depth: dig twice as far past it and you get four times the power. Cores buy upgrades in the Prestige tree at the Temple.</p>
     <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
-    <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (${powerText(S.power)} → ${powerText(S.power + pg, true)})</div></div>
+    <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (${powerText(S.power)} → ${powerText(S.power + pg, true)})</div>
+    <div class="small muted">${plural(Math.floor(depthPast()), 'floor')} past your strength so far${nextStartText()}</div></div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
     ${S.prestiges < 3 ? `<div class="small">Prestige ${S.prestiges < 1 ? 1 : 3} adds a pet slot.</div>` : ''}
     ${S.prestiges < PRESTIGE_LUCK_MAX ? `<div class="small">Each of your first ${PRESTIGE_LUCK_MAX} prestiges also adds +${Math.round(PRESTIGE_LUCK * 100)}% luck (${S.prestiges}/${PRESTIGE_LUCK_MAX}).</div>` : ''}
-    <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : 'Reach B25 to prestige'}</button></div>`;
+    <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : S.run.maxFloor < 25 ? 'Reach B25 to prestige' : `Dig past B${payFloor()} to prestige`}</button></div>`;
 
   const st = S.stats;
   const tries = st.taps + st.escapes;
@@ -2070,6 +2078,7 @@ function askPrestige() {
     <div class="kv"><span>Power</span><span>+${fmt(powerGain())} (${powerText(S.power)} → ${powerText(S.power + powerGain(), true)})</span>
     <span>Cores</span><span>+${gain} to spend in the Prestige tree</span>
     <span>You keep</span><span>gear, pets, keys, scrap</span><span>Resets</span><span>coins, floor, Forge, level, skills</span></div>
+    ${nextStartText() ? `<p class="small">${nextStartText().slice(3)}.</p>` : ''}
     ${nextCase ? `<p class="small">Unlocks the ${nextCase.name}.</p>` : ''}
     ${S.prestiges === 0 || S.prestiges === 2 ? '<p class="small">Adds a pet slot.</p>' : ''}
     ${S.prestiges < PRESTIGE_LUCK_MAX ? `<p class="small">Luck +${Math.round(PRESTIGE_LUCK * 100)}% on every case.</p>` : ''}

@@ -38,7 +38,7 @@ const REACT = Number(process.argv[4] || 0.5); // mean reaction time in seconds f
     const log = [];
     const dt = 0.05;
     let nextAnswer = Math.abs(ANSWER_EVERY); let nextDuel = 4;
-    let lastMaxT = 0, lastMax = 0, bossWait = 0;
+    let lastMaxT = 0, lastMax = 0, bossWait = 0, lastMaxT0 = 0;
     const skillOrder = ['quickwit', 'momentum', 'greed', 'autodrill', 'quickwit', 'momentum', 'adrenaline', 'ironmind',
       'executioner', 'focus', 'overdrive', 'lucky', 'haggler', 'nightshift', 'deeppockets', 'oresense', 'compound', 'golddrill',
       'pity', 'scrapper', 'doubledown', 'keymaster', 'jackpot'];
@@ -174,7 +174,7 @@ const REACT = Number(process.argv[4] || 0.5); // mean reaction time in seconds f
           while (S.coins - caseCost(c) > stop && g++ < 400) { openCase(c.tier, 'coins', 1); EXPLORE.autoRolled++; } }
         if (Math.floor(t) % 10 === 0) managePets();
         if (S.run.maxFloor > lastMax) { lastMax = S.run.maxFloor; lastMaxT = t; }
-        for (const m of [25, 50, 75, 100, 150, 200]) if (EXPLORE.ms[m] == null && S.stats.bestFloor >= m) EXPLORE.ms[m] = +(t / 60).toFixed(1);
+        for (const m of [25, 50, 75, 100, 101, 150, 200, 201, 250, 301, 401]) if (EXPLORE.ms[m] == null && S.stats.bestFloor >= m) EXPLORE.ms[m] = +(t / 60).toFixed(1);
         if (!S.run.auto) { bossWait += 1; if (bossWait > 60) { bossWait = 0; retryBoss(); } }
         const PA = OVR.prestigeAt, ST_ = OVR.stallSec || 150;
         let wantP = (PA && S.run.maxFloor >= PA) || t - lastMaxT > (PA ? 600 : ST_);
@@ -185,7 +185,7 @@ const REACT = Number(process.argv[4] || 0.5); // mean reaction time in seconds f
         if (canPrestige() && wantP) {
           if (firstPrestige.t == null) firstPrestige.t = t;
           log.push({ event: 'prestige', min: +(t / 60).toFixed(1), floor: S.run.maxFloor, gain: prestigeGain() });
-          EXPLORE.presT.push(+(t / 60).toFixed(1)); EXPLORE.lvlAtPres = (EXPLORE.lvlAtPres || []).concat(S.run.level); EXPLORE.bestAtPres = (EXPLORE.bestAtPres || []).concat(S.stats.bestFloor);
+          EXPLORE.presT.push(+(t / 60).toFixed(1)); EXPLORE.lvlAtPres = (EXPLORE.lvlAtPres || []).concat(S.run.level); EXPLORE.bestAtPres = (EXPLORE.bestAtPres || []).concat(S.stats.bestFloor); if (typeof depthPast === 'function') EXPLORE.past = (EXPLORE.past || []).concat([[S.run.maxFloor, Math.round(powerFloors()), runStartFloor ? runStartFloor() : 0, Math.round((t - lastMaxT0) / 60)]]); lastMaxT0 = t;
           doPrestige(); lastMax = 0; lastMaxT = t;
           if (typeof buyPrestigeNode === 'function') {
             let g = 0;

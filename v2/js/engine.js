@@ -38,6 +38,9 @@ const TUNE = {
   xpGrowth: 1.10, xpNeedBase: 12, xpNeedGrowth: 1.25,
   sharpenPeriod: 25,
   coreScale: 1, coreExp: 1.5, coreBonus: 0.1,
+  // Prestige pacing (V2 dev.35, sims in tools/playtest/sim.js): power from a run = depthPay * depthPast^2,
+  // and each run starts at the island halfway between your strength and your record (startShare).
+  depthFree: 10, depthPay: 0.2, sailStart: 1, startMargin: 20, startShare: 0.5,
 };
 function curve() { return S && S.curve === 1 ? CURVE_OLD : TUNE; }
 // Prestige power. On the tougher mine it counts in floors of strength (1.5 x the square root of
@@ -2010,11 +2013,29 @@ function startGoldRush(kind, f) {
 }
 
 // ---------- prestige ----------
-// Prestiging pays two things. Power (+10% damage each, forever) grows with the square of the level
-// you reached, so deep runs count for much more than quick ones. Cores are spent in the prestige tree.
+// Prestiging pays two things. Power makes you stronger forever (see powerFloors) and grows with the
+// square of how far past your strength the run went (powerGain). Cores are spent in the prestige tree.
 function prestigeGain() { return coresFor(S.run.maxFloor); }
-function powerGain() { return Math.round((S.run.level * S.run.level) / 40); }
-function canPrestige() { return S.run.maxFloor >= 25 && prestigeGain() > 0; }
+// Depth past your strength: how many floors deeper this run went than your power alone carries you.
+function depthPast() { return Math.max(0, S.run.maxFloor - powerFloors() - TUNE.depthFree); }
+// Power from a run grows with the square of how far past your strength you dug, so pushing twice as
+// deep pays four times as much, and quick resets that never get past your strength pay nothing.
+function powerGain() { const d = depthPast(); return Math.round(TUNE.depthPay * d * d); }
+// The floor where a run starts paying power: your strength plus the free floors.
+function payFloor() { return Math.ceil(powerFloors() + TUNE.depthFree) + 1; }
+function canPrestige() { return S.run.maxFloor >= 25 && prestigeGain() > 0 && powerGain() > 0; }
+// Sail-out start: each run begins at the first floor of the deepest island (past the last island, the
+// deepest 100-floor stretch) at or above the point halfway (TUNE.startShare) between your strength and
+// your record, so runs don't grow longer and longer re-climbing floors you outgrew long ago.
+function runStartFloor() {
+  if (!TUNE.sailStart) return 1;
+  const w = powerFloors(), best = S.stats.bestFloor;
+  const safe = Math.min(best - TUNE.startMargin, w + (best - w) * TUNE.startShare), last = ISLANDS[ISLANDS.length - 1].from;
+  let f = 1;
+  for (const isl of ISLANDS) if (isl.from <= safe) f = isl.from;
+  if (safe >= last + ISLE_FLOORS) f = last + Math.floor((safe - last) / ISLE_FLOORS) * ISLE_FLOORS;
+  return f;
+}
 
 function doPrestige() {
   if (!canPrestige()) return null;
@@ -2029,7 +2050,9 @@ function doPrestige() {
   S.prestiges++;
   S.stats.prestiges = S.prestiges;
   S.coins = 0;
+  const start = runStartFloor();
   S.run = freshRun();
+  if (start > 1) { S.run.floor = S.run.maxFloor = start; S.run.open = islandForFloor(start); }
   S.run.skills = { ...S.locks };
   S.run.sp = 2 * ptLevel('headstart');
   S.math.streak = 0;
