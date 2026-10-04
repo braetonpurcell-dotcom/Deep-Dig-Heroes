@@ -588,8 +588,7 @@ function drawSheep(t, dt) {
   });
 }
 
-// ---------- tapping the world: animals, villagers, water and tall grass answer back ----------
-const TALL = [[600, 230, 64, 30], [900, 222, 96, 40], [940, 96, 80, 56], [1030, 230, 56, 32]];
+// ---------- tapping the world: animals and villagers answer back ----------
 const LINES = {
   farmer: ['Carrots soon!', 'Water, water...', 'Lovely day!', 'Mind the pumpkins.'],
   cutter: ['Timber!', 'Wood for the forge.', 'Hup!', 'One more log...'],
@@ -607,8 +606,6 @@ function worldTap(wx, wy) {
   if (f && near(f.x, f.y - 8, 10)) { CRITTER_SFX.talk(1); say(f.x, f.y - 22, pick('farmer')); return; }
   if (near(507, 241, 10)) { CRITTER_SFX.talk(0.8); say(507, 226, pick('cutter')); return; }
   if (near(527, 179, 10)) { CRITTER_SFX.talk(0.7); say(527, 162, pick('smith')); return; }
-  if (terrainAt(wx, wy) === T.WATER) { CRITTER_SFX.splash(); for (let i = 0; i < 8; i++) WORLD.fx.push({ x: wx, y: wy, vx: (Math.random() - 0.5) * 40, vy: -30 - Math.random() * 30, g: 140, t: 0, life: 0.5, c: i % 2 ? '#ffffff' : '#bfe3f8', s: 1 }); return; }
-  if (TALL.some(([x, y, w, h]) => wx >= x && wx < x + w && wy >= y && wy < y + h)) { CRITTER_SFX.rustle(); for (let i = 0; i < 6; i++) WORLD.fx.push({ x: wx, y: wy, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 20, g: 50, t: 0, life: 0.7, c: i % 2 ? '#7ccc58' : '#4da03a', s: 1 }); }
 }
 function drawBubbles(g, dt) {
   WORLD.bubbles = (WORLD.bubbles || []).filter(b => (b.t += dt) < 2.2);
@@ -805,8 +802,8 @@ requestAnimationFrame(islandLoop);
 // Buildings open their screen; the phone's back gesture (or the back button) returns to the world.
 function goBuilding(tab) {
   audioUnlock();
-  SFX.click();
   if (tab === 'dock') { toast('Boats to new islands are coming soon', 'gold'); return; }
+  SFX.click();
   if (UI.tab === 'island') history.pushState({ ddh: tab }, '');
   showTab(tab);
 }

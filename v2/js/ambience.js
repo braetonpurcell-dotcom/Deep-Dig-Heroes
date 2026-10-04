@@ -172,6 +172,4 @@ const CRITTER_SFX = {
     const t = AU.ctx.currentTime, n = 5 + Math.floor(Math.random() * 4);
     for (let i = 0; i < n; i++) voice(m2f(64 + MEL_SCALE[Math.floor(Math.random() * 5)]) * base, t + i * 0.075, 0.06, 'triangle', 0.22);
   },
-  splash() { noise(0.25, 0.4, 900); noise(0.15, 0.3, 2600, 0.05); tone(500, 0.12, 'sine', 0.15, 1200); },
-  rustle() { noise(0.2, 0.35, 3400); noise(0.15, 0.25, 2200, 0.08); },
 };
