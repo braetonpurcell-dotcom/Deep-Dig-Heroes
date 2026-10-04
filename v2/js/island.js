@@ -397,7 +397,8 @@ function paintCaveIsle(i) {
   props.sort((a, b) => a[0] - b[0]);
   const hidden = ([y, x]) => x > CAVE_MTN.x0 - 8 && x < CAVE_MTN.x1 + 8 && y < CAVE_MTN.base + 4;
   props.filter(hidden).forEach(([, , draw]) => draw());
-  if (ISLANDS[i].id === 'green') paintGreenHill(r); else paintCaveMountain(ISLANDS[i].id, r);
+  const id = ISLANDS[i].id;
+  if (id === 'green') paintGreenHill(r); else if (id === 'frost') paintFrostPeak(r); else paintCaveMountain(id, r);
   props.filter(q => !hidden(q)).forEach(([, , draw]) => draw());
   WORLD.ctx = prev;
   return cv;
@@ -407,7 +408,7 @@ function paintCaveIsle(i) {
 const CAVE_MTN = { x0: 236, x1: 412, base: 184, mx: 322, mw: 46, mh: 42 }; // mx, mw, mh: the mouth's centre, width, height
 const MTN_LOOK = {
   green: { rock: ['#b4aa98', '#958b7b', '#766d61', '#585149', '#3d3833'], cap: ['#7ccc52', '#58a83c', '#3e7e2a'], vines: true }, // the hill draws itself: paintGreenHill
-  frost: { rock: ['#a8bcd4', '#8298b4', '#667c98', '#4e607c', '#3a4860'], cap: ['#ffffff', '#e8f2fc', '#c4d8ee'], snow: true, icicles: true, torches: true },
+  frost: { rock: ['#a8bcd4', '#8298b4', '#667c98', '#4e607c', '#3a4860'], cap: ['#ffffff', '#e8f2fc', '#c4d8ee'], snow: true, icicles: true }, // the peak draws itself: paintFrostPeak
   sand: { rock: ['#f2c88a', '#dca86a', '#c08850', '#9a6a3a', '#744c26'], mesa: true },
   ember: { rock: ['#6e5c58', '#544644', '#3e3433', '#2c2424', '#1c1616'], volcano: true },
   star: { rock: ['#7a6ab0', '#62549a', '#4a3e7c', '#352c5e', '#241e42'], crystals: true },
@@ -622,6 +623,116 @@ function paintCaveRails(dark) {
     prev = { l, r, y };
   }
 }
+// ---------- Frostpeak: a glacier peak with an ice cave ----------
+// A tall snow mountain with dark cliffs showing through and blue shadow on its far side. The cave
+// is cut into glacier ice at its foot: bands of glowing blue ice round the mouth, icicles, and a
+// deep blue inside instead of black. Snowdrifts pile round the base. Hares, an arctic fox and a
+// snowy owl live here (drawn live, see drawFrostLife).
+const FROST_PEAKS = [[318, 18, 1.3], [272, 72, 1.05], [370, 56, 1.2], [404, 112, 0.9]];
+const SNOW = ['#ffffff', '#f0f6fc', '#dce8f4', '#bcd2ea', '#98b6d8'];
+const CLIFF = ['#6c7690', '#535c74', '#3c4458', '#2a3040'];
+const ICE = ['#e0faff', '#a8ecfc', '#6ad2f2', '#3aa6d8', '#2478b0'];
+function frostTop(x) {
+  const { base } = CAVE_MTN, x0 = 228, x1 = 424;
+  if (x < x0 || x > x1) return Infinity;
+  let y = Math.min(...FROST_PEAKS.map(([px_, py, k]) => py + Math.abs(x - px_) * k)) + Math.round(Math.sin(x / 2.7) * 1 + hash2(x, 8) * 2);
+  y = Math.max(y, base - Math.min(x - x0, x1 - x) * 2.3);
+  return Math.min(base + 1, Math.round(y));
+}
+function frostShade(x, y) { let best = null; for (const [px_, py, k] of FROST_PEAKS) if (py + Math.abs(x - px_) * k <= y + 2 && (!best || py < best[1])) best = [px_, py]; return best && x > best[0] ? 1 : 0; }
+function paintFrostPeak(r) {
+  const { base, mx, mw, mh } = CAVE_MTN, x0 = 228, x1 = 424, inside = (x, y) => y <= base && y >= frostTop(x);
+  for (let x = x0; x <= x1; x++) {
+    const top = frostTop(x);
+    if (top === Infinity) continue;
+    for (let y = top; y <= base; y++) {
+      const sh = frostShade(x, y), depth = y - top;
+      const t = Math.min(1, depth / 120), k = Math.floor((sh ? 1.6 : 0.2) + t * 1.8 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
+      let c = SNOW[Math.max(0, Math.min(4, k))];
+      if (!sh && (y + Math.round(Math.sin(x / 6) * 3)) % 17 === 0 && hash2(x >> 2, y) < 0.5) c = SNOW[2]; // wind-blown ridges
+      px(x, y, 1, 1, c);
+    }
+  }
+  for (let x = x0 - 1; x <= x1 + 1; x++) for (let y = 0; y <= base; y++) if (!inside(x, y) && (inside(x - 1, y) || inside(x + 1, y) || inside(x, y + 1))) px(x, y, 1, 1, OUT);
+  // Rock outcrops where the slope is too steep for snow: jagged dark crags with snow on their tops.
+  for (const [cx, cy, w, h] of [[288, 100, 24, 30], [350, 86, 18, 24], [404, 136, 18, 22], [262, 146, 22, 20], [376, 120, 12, 14], [306, 60, 10, 12]]) {
+    // A lumpy, lopsided crag: wide at its foot, uneven on top, its edges stepping in and out.
+    const inCrag = (x, y) => { const v = (y - (cy - h / 2)) / h; if (v < 0 || v > 1) return false; const jag = (hash2(Math.floor(y / 3), cx) - 0.5) * 6 + Math.sin(x / 3 + cx) * 2; return Math.abs(x - cx) < w / 2 * (0.45 + 0.55 * Math.sqrt(v)) + jag * 0.5 && y >= cy - h / 2 + Math.abs(Math.sin((x - cx) / 3.5)) * 4 && inside(x, y); };
+    for (let y = cy - h / 2 - 1; y <= cy + h / 2 + 1; y++) for (let x = cx - w / 2 - 4; x <= cx + w / 2 + 4; x++) {
+      if (inCrag(x, y)) {
+        const sh = x > cx + (y - cy) * 0.1, snowTop = !inCrag(x, y - 1) || !inCrag(x, y - 2);
+        px(x, y, 1, 1, snowTop ? SNOW[sh ? 2 : 0] : CLIFF[(sh ? 1 : 0) + (hash2(x >> 1, y >> 1) < 0.2 ? 1 : 0)]);
+      } else if (inCrag(x - 1, y) || inCrag(x + 1, y) || inCrag(x, y + 1) || inCrag(x, y - 1)) px(x, y, 1, 1, CLIFF[3]);
+    }
+  }
+  // The ice cave: a wide arch of glacier ice in bands, lit from inside.
+  const top = base - mh - 2;
+  for (let y = top - 12; y <= base; y++) for (let x = mx - mw / 2 - 11; x <= mx + mw / 2 + 11; x++) {
+    if (inMouth(x, y)) {
+      const edge = [[-1, 0], [1, 0], [0, -1]].some(([a, b]) => !inMouth(x + a, y + b));
+      const depth = Math.min(3, Math.floor((y - top) / 9) + (Math.abs(x - mx) < mw * 0.22 ? 1 : 0));
+      px(x, y, 1, 1, edge ? '#0a1a34' : ['#2a6aa0', '#1a4a7c', '#0f2e58', '#081a38'][depth]);
+    } else {
+      let ring = 0;
+      for (let k = 1; k <= 10 && !ring; k++) if (inMouth(x, y + k) || inMouth(x - k, y) || inMouth(x + k, y)) ring = k;
+      if (ring && y >= frostTop(x) - 1) {
+        // bands of ice: brighter toward the mouth, with facet lines
+        const b = Math.min(4, Math.floor(ring / 2.2)), facet = hash2(Math.floor(x / 3) + ring * 7, ring) < 0.18;
+        px(x, y, 1, 1, ring === 10 || (ring > 8 && hash2(x, y) < 0.5) ? OUT : facet ? ICE[0] : ICE[Math.max(0, 4 - b)]);
+      }
+    }
+  }
+  // Icicles hanging over the mouth.
+  for (let k = -5; k <= 5; k++) {
+    const x = mx + k * 4 + (k & 1), y0 = top + Math.round(Math.abs(k) * Math.abs(k) * 0.45) + 1, len = 4 + ((k * 7) & 3) * 2;
+    if (!inMouth(x, y0 + 2)) continue;
+    for (let j = 0; j < len; j++) px(x, y0 + j, j < len - 2 ? 2 : 1, 1, j < 2 ? ICE[0] : j < len - 1 ? ICE[1] : '#ffffff');
+  }
+  paintCaveRails(['#2a6aa0', '#1a4a7c', '#0f2e58', '#081a38']);
+  // Snowdrifts piled round the foot, a frozen puddle and a few rocks poking out of the snow.
+  for (const [dx, w] of [[-80, 22], [-56, 14], [42, 18], [70, 24], [92, 12]]) { const x = mx + dx; pell(x, base + 1, w / 2 + 1, 5, OUT); pell(x, base, w / 2, 4.5, SNOW[1]); pell(x - 2, base - 1, w / 2 - 3, 2.5, SNOW[0]); px(x - w / 4, base + 3, w / 2, 1, SNOW[3]); }
+  pell(mx - 64, base + 22, 14, 4, OUT); pell(mx - 64, base + 22, 13, 3.4, '#bfe8fa'); px(mx - 70, base + 21, 6, 1, '#ffffff'); px(mx - 58, base + 23, 4, 1, '#ffffff');
+  for (const [x, y] of [[mx + 60, base - 30], [mx - 74, base - 22]]) { if (!inside(x, y)) continue; pell(x, y, 4, 3, OUT); pell(x, y, 3, 2, CLIFF[1]); px(x - 2, y - 2, 4, 1, SNOW[0]); }
+}
+// Life on Frostpeak: snow hares, an arctic fox trotting about, and a snowy owl on a rock by the
+// mouth that blinks and turns its head. Glints run over the ice round the cave.
+function drawFrostLife(g, dt, t) {
+  const F = WORLD.frost || (WORLD.frost = {
+    hares: [{ x: 250, y: 204, tx: 250, wait: 2, dir: 1, hop: 0 }, { x: 396, y: 212, tx: 396, wait: 4, dir: -1, hop: 0 }],
+    fox: { x: 200, tx: 200, y: 226, wait: 1, dir: 1, step: 0 },
+  });
+  const prev = WORLD.ctx; WORLD.ctx = g;
+  for (const b of F.hares) {
+    if (b.wait > 0) { b.wait -= dt; if (b.wait <= 0) { b.tx = Math.max(232, Math.min(420, b.x + (Math.random() - 0.5) * 60)); b.dir = b.tx > b.x ? 1 : -1; } }
+    else { const step = 22 * dt; b.hop += dt * 8; if (Math.abs(b.tx - b.x) <= step) { b.x = b.tx; b.wait = 1.5 + Math.random() * 3; b.hop = 0; } else b.x += Math.sign(b.tx - b.x) * step; }
+    const lift = b.wait > 0 ? 0 : Math.round(Math.abs(Math.sin(b.hop)) * 3), x = Math.round(b.x), y = Math.round(b.y) - lift, d = b.dir;
+    const fx = (ox, w) => d > 0 ? x + ox : x - ox - w + 1;
+    groundShadow(x, b.y, 4, '60,80,110');
+    parts([[fx(-3, 6), y - 4, 6, 4, '#ffffff'], [fx(2, 4), y - 7, 4, 3, '#ffffff'], [fx(3, 1), y - 11, 1, 4, '#ffffff'], [fx(5, 1), y - 11, 1, 4, '#ffffff']]);
+    px(fx(3, 1), y - 11, 1, 1, OUT); px(fx(5, 1), y - 11, 1, 1, OUT); px(fx(4, 1), y - 6, 1, 1, OUT); px(fx(-2, 3), y - 1, 3, 1, '#dce8f4');
+  }
+  const f = F.fox;
+  if (f.wait > 0) { f.wait -= dt; if (f.wait <= 0) { f.tx = Math.max(120, Math.min(300, f.x + (Math.random() - 0.5) * 120)); f.dir = f.tx > f.x ? 1 : -1; } }
+  else { const step = 26 * dt; f.step += dt * 10; if (Math.abs(f.tx - f.x) <= step) { f.x = f.tx; f.wait = 2 + Math.random() * 4; } else f.x += Math.sign(f.tx - f.x) * step; }
+  { const x = Math.round(f.x), y = f.y, d = f.dir, leg = f.wait > 0 ? 0 : Math.floor(f.step) % 2, sit = f.wait > 0;
+    const fx = (ox, w) => d > 0 ? x + ox : x - ox - w + 1;
+    groundShadow(x, y, 6, '60,80,110');
+    parts([[fx(-5, 9), y - 6 + (sit ? 1 : 0), 9, 4, '#f4f8fc'], [fx(3, 5), y - 9, 5, 4, '#f4f8fc'], [fx(-10, 6), y - 7 - (sit ? 0 : 1), 6, 3, '#f4f8fc']]);
+    px(fx(3, 1), y - 11, 1, 2, OUT); px(fx(6, 1), y - 11, 1, 2, OUT); px(fx(6, 1), y - 8, 1, 1, OUT); px(fx(8, 1), y - 7, 1, 1, OUT);
+    if (!sit) { px(fx(-4 + leg, 1), y - 2, 1, 2, OUT); px(fx(2 - leg, 1), y - 2, 1, 2, OUT); } else px(fx(-3, 7), y - 2, 7, 1, OUT);
+    px(fx(-10, 2), y - 7 - (sit ? 0 : 1), 2, 1, '#dce8f4'); }
+  // the snowy owl on a rock by the mouth
+  const ox = CAVE_MTN.mx + 36, oy = CAVE_MTN.base - 22, blink = (t % 4) < 0.15, bob = Math.sin(t * 0.8) > 0.7 ? 1 : 0;
+  pell(ox, oy + 7, 6, 3, OUT); pell(ox, oy + 7, 5, 2, CLIFF[1]); px(ox - 4, oy + 5, 8, 1, SNOW[0]);
+  const OWL = ['.kk..kk.', 'kwwkkwwk', 'kwywwywk', 'kwwbbwwk', 'kwwwwwwk', 'kwgwwgwk', 'kwwgwwwk', '.kwwwwk.', '..kyyk..'];
+  const oc = { k: OUT, w: '#ffffff', y: blink ? OUT : '#f8c020', b: '#8a6a3a', g: '#aab8c8' };
+  OWL.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.') px(ox - 4 + i, oy - 5 + j - (j < 4 ? bob : 0), 1, 1, oc[ch]); }));
+  WORLD.ctx = prev;
+  // glints running over the ice
+  for (let k = 0; k < 6; k++) { const ph = (t * 0.7 + k * 0.37) % 1; if (ph > 0.2) continue; const a = -Math.PI + (k / 5) * Math.PI, x = CAVE_MTN.mx + Math.cos(a) * (CAVE_MTN.mw / 2 + 5), y = CAVE_MTN.base - 6 + Math.sin(a) * (CAVE_MTN.mh + 2); g.fillStyle = '#ffffff'; g.fillRect(Math.round(x), Math.round(y), 1, 1); g.fillRect(Math.round(x) - 1, Math.round(y) + 1, 3, 1); g.fillRect(Math.round(x), Math.round(y) + 2, 1, 1); }
+  glow(g, CAVE_MTN.mx, CAVE_MTN.base - 12, 26, `rgba(120,210,255,${0.12 + 0.04 * Math.sin(t * 2)})`);
+}
+
 // Wildlife round the green hill: rabbits that hop about and stop to nibble, butterflies over the
 // flowers, and two birds that sit in the crest tree and now and then fly a loop.
 function drawGreenLife(g, dt, t) {
@@ -676,6 +787,7 @@ function drawCaveLive(g, dt, t) {
   if (look.volcano) { for (const s of WORLD.smoke) { s.t += dt; s.y -= dt * 9; s.x += dt * (2 + s.t); g.fillStyle = `rgba(90,80,80,${Math.max(0, 0.6 - s.t * 0.12)})`; const rr = 3 + Math.round(s.t * 1.6); g.fillRect(Math.round(s.x - rr / 2), Math.round(s.y - rr / 2), rr, rr); } WORLD.smoke = WORLD.smoke.filter(s => s.t < 5); }
   if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { const cx = CAVE_MTN.mx, ey = CAVE_MTN.base - 16; g.fillStyle = '#ff3040'; g.fillRect(cx - 6, ey, 2, 1); g.fillRect(cx + 4, ey, 2, 1); glow(g, cx, ey + 2, 14, 'rgba(255,40,60,0.25)'); }
   if (ISLANDS[WORLD.isle].id === 'green') drawGreenLife(g, dt, t);
+  if (ISLANDS[WORLD.isle].id === 'frost') drawFrostLife(g, dt, t);
   drawBoat(g, CAVE_PIER.x0 - 2, CAVE_PIER.y1 + 2, t);
   drawMe(g, t);
   drawBubbles(g, dt);
