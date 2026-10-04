@@ -314,8 +314,13 @@ function paintWorld() {
 // The small cave island: sea all round, a beach, ground in the island's style, a rocky hill with the
 // cave in it, a path from the dock, and trees, rocks and flowers. Painted once per visit.
 const CAVE_DX = CAVE_HILL.x - 1145; // paintCave draws the mouth at x 1145; shift it onto the hill
-function caveShore(x, y) { return ((x - CAVE_SHORE.x) / CAVE_SHORE.rx) ** 2 + ((y - CAVE_SHORE.y) / CAVE_SHORE.ry) ** 2 + 0.05 * Math.sin(x / 11) + 0.05 * Math.cos(y / 8); }
 function caveHill(x, y) { return ((x - CAVE_HILL.x) / CAVE_HILL.rx) ** 2 + ((y - CAVE_HILL.y) / CAVE_HILL.ry) ** 2 + 0.06 * Math.sin(x / 7); }
+// How far out from the island a point is (under 0.86 is land, under 1 beach). The hill always has
+// land round it, so the beach never cuts into the cave's hill.
+function caveShore(x, y) {
+  const e = ((x - CAVE_SHORE.x) / CAVE_SHORE.rx) ** 2 + ((y - CAVE_SHORE.y) / CAVE_SHORE.ry) ** 2 + 0.05 * Math.sin(x / 11) + 0.05 * Math.cos(y / 8);
+  return Math.min(e, caveHill(x, y) * 0.62);
+}
 function paintCaveIsle(i) {
   const cv = makeCanvas(WW, WH), prev = WORLD.ctx;
   WORLD.ctx = cv.getContext('2d');
