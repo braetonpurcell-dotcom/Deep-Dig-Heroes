@@ -96,7 +96,7 @@ function ambTick() {
   if (!audible) grass = water = cave = 0;
   AMB.w = { grass, water, cave };
   const k = document.hidden ? 0.05 : 0.5;
-  L.grass.gain.setTargetAtTime(grass * 0.18, now, k);
+  L.grass.gain.setTargetAtTime(grass * 0.08, now, k);
   L.water.gain.setTargetAtTime(water * 0.073, now, k);
   L.cave.gain.setTargetAtTime(cave * 0.27, now, k);
   // Gusts of wind, flickering water, a slowly moving howl.
