@@ -909,3 +909,13 @@ body.roomtab #screenbar b { text-shadow: 0 2px 0 #000, 0 0 6px rgba(0,0,0,.8); }
 .outhead img { width: 60px; height: 60px; image-rendering: pixelated; flex: none; }
 .outfoot { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
 .setline { flex-wrap: wrap; }
+
+/* Version 2: the armor stand */
+.standprev { position: relative; width: 120px; height: 120px; margin: 0 auto 6px; background: radial-gradient(circle at 50% 60%, #3a2d52, #1a1424 70%); border: 2px solid var(--line); }
+.standprev img { position: absolute; left: 0; top: 0; width: 120px; image-rendering: pixelated; }
+.standprev img.standtool { left: 76px; top: 36px; width: 40px; }
+.standrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.standrow img, .standempty { width: 36px; height: 36px; image-rendering: pixelated; flex: none; }
+.standempty { display: inline-block; border: 2px dashed var(--line); }
+.standrow .grow { display: flex; flex-direction: column; min-width: 0; }
+.standlist { max-height: 52vh; overflow-y: auto; }

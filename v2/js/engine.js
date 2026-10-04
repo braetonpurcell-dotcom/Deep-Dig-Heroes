@@ -116,7 +116,7 @@ function freshState() {
     drill: { lv: 0, xp: 0, show: true }, // Version 2: the drill, levelled with parts from Drill Crates
     pityDrill: { epic: 0, leg: 0 },
     isle: { view: -1, claimed: 0 }, // Version 2: arrival rewards given (view is no longer used: the world shows the island you dig)
-    decor: { stand: null, pet: null }, // Version 2: what stands outside your house: an outfit on the armor stand, a pet at the doghouse
+    decor: { stand: { pick: null, helm: null, charm: null }, pet: null }, // Version 2: outside your house: items on the armor stand, a pet at the doghouse
     v2Seen: false, // Version 2: the welcome guide was shown
     activeClass: -1,
     pity: { epic: 0, leg: 0 },
@@ -390,7 +390,8 @@ function hydrate(obj) {
   s.look = cleanLook(s.look);
   const dc = s.decor && typeof s.decor === 'object' ? s.decor : {};
   s.decor = {
-    stand: OUTFITS[dc.stand] ? dc.stand : null,
+    // The armor stand shows any items you pick, one per slot (item ids; a missing item just leaves the slot empty).
+    stand: Object.fromEntries(SLOT_IDS.map(k => [k, dc.stand && typeof dc.stand === 'object' && Number.isInteger(dc.stand[k]) ? dc.stand[k] : null])),
     pet: dc.pet && PETS[dc.pet.sp] && Number.isInteger(dc.pet.r) && dc.pet.r >= 0 && dc.pet.r < RARITY.length ? { sp: dc.pet.sp, r: dc.pet.r } : null,
   };
   s.v2Seen = s.v2Seen === true;

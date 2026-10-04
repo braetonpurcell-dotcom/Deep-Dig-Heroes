@@ -1014,36 +1014,92 @@ function drawWorld(dt) {
 // Tap either to pick what goes there (the first step toward decorating your island).
 const DECOR = {
   stand: { name: 'Armor stand', x: 176, y: 148, w: 24, h: 24 },
-  dog: { name: 'Doghouse', x: 300, y: 152, w: 28, h: 20 },
+  dog: { name: 'Doghouse', x: 293, y: 152, w: 27, h: 20 },
 };
-function standPieces() {
-  const o = S.decor.stand;
-  if (!o) return {};
-  const best = typeof outfitBest === 'function' ? outfitBest(o) : {};
-  return { helm: best.helm || null, charm: best.charm || null };
+// The items on the stand (each may be gone if you salvaged it).
+function standItems() {
+  const out = {};
+  for (const k of SLOT_IDS) { const id = S.decor.stand[k]; const f = id != null ? findItem(id) : null; out[k] = f ? f.it : null; }
+  return out;
+}
+// The pet at the doghouse goes about its day: inside (eyes in the doorway), out for a little walk,
+// a sit, a lie-down nap, then back in. Flying pets perch on the roof instead of lying down.
+function dogStep(dt) {
+  const d = WORLD.dog || (WORLD.dog = { state: 'in', t: 2, x: 0, tx: 0, dir: 1 }), dg = DECOR.dog, door = dg.x + 13;
+  d.t -= dt;
+  const walkTo = (tx, next) => { d.state = 'walk'; d.tx = tx; d.next = next; };
+  if (d.state === 'walk') {
+    const dx = d.tx - d.x, step = 16 * dt;
+    if (Math.abs(dx) <= step) { d.x = d.tx; d.state = d.next; d.t = d.state === 'lie' ? 5 + Math.random() * 4 : d.state === 'in' ? 4 + Math.random() * 5 : 1.5 + Math.random() * 2; }
+    else { d.x += Math.sign(dx) * step; d.dir = Math.sign(dx); }
+    return;
+  }
+  if (d.t > 0) return;
+  const spot = () => door + (Math.random() < 0.5 ? -1 : 1) * (8 + Math.random() * 18);
+  if (d.state === 'in') { d.x = door; walkTo(spot(), 'sit'); }
+  else if (d.state === 'sit') { const r = Math.random(); if (r < 0.4) walkTo(spot(), 'sit'); else if (r < 0.75) d.state = 'lie', d.t = 5 + Math.random() * 4; else walkTo(door, 'in'); }
+  else if (d.state === 'lie') { d.state = 'sit'; d.t = 1 + Math.random(); }
 }
 function drawDecor(g, t) {
-  const st = DECOR.stand, dg = DECOR.dog, p = standPieces();
-  g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(st.x + 4, st.y + 23, 14, 2); g.fillRect(dg.x + 1, dg.y + 19, 28, 2);
-  g.drawImage(standSprite(p.helm, p.charm), st.x, st.y);
+  const st = DECOR.stand, dg = DECOR.dog, it = standItems();
+  g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(st.x + 4, st.y + 23, 14, 2); g.fillRect(dg.x + 1, dg.y + 19, 27, 2);
+  g.drawImage(standSprite(it.helm, it.charm), st.x, st.y);
+  if (it.pick) { const pk = gearSprite('pick', it.pick.t, it.pick.r, it.pick.st), pad = pk.fxPad || 0; g.drawImage(pk, st.x + 16 - pad, st.y + 8 - pad); }
   g.drawImage(doghouseSprite(), dg.x, dg.y);
   const pet = S.decor.pet;
-  if (pet) {
-    const def = PETS[pet.sp], spr = petSprite(pet.sp, pet.r), pad = spr.fxPad || 0;
-    const px = dg.x + 6, py = def.fly ? dg.y - 14 + Math.round(Math.sin(t * 3) * 2) : dg.y + 6 - (Math.sin(t * 2.4) > 0.7 ? 1 : 0);
-    if (!def.fly) { g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(px + 3, dg.y + 21, 10, 2); }
-    g.drawImage(spr, px - pad, py - pad);
+  if (!pet) return;
+  dogStep(Math.min(0.1, WORLD.dogLast ? t - WORLD.dogLast : 0)); WORLD.dogLast = t;
+  const d = WORLD.dog, def = PETS[pet.sp], spr = petSprite(pet.sp, pet.r), pad = spr.fxPad || 0;
+  if (d.state === 'in' || (d.state === 'walk' && d.next === 'in' && Math.abs(d.x - (dg.x + 13)) < 2)) {
+    if (Math.sin(t * 1.7) > -0.85) { g.fillStyle = '#ffffff'; g.fillRect(dg.x + 11, dg.y + 14, 1, 1); g.fillRect(dg.x + 15, dg.y + 14, 1, 1); }
+    return;
   }
+  const base = dg.y + 22, walking = d.state === 'walk', hop = walking && Math.floor(t * 8) % 2 ? 1 : 0;
+  g.save(); g.translate(Math.round(d.x), 0); if (d.dir < 0) g.scale(-1, 1);
+  if (def.fly) {
+    const perch = d.state === 'lie', y = perch ? dg.y - 12 : base - 26 + Math.round(Math.sin(t * 5) * 2);
+    g.drawImage(spr, -8 - pad, y - pad);
+  } else if (d.state === 'lie') {
+    // Lying down: the pet flattened low to the ground, breathing slowly.
+    const h = 11 + (Math.sin(t * 2) > 0 ? 1 : 0);
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(-7, base - 1, 15, 2);
+    g.drawImage(spr, 0, 0, spr.width, spr.height, -9 - pad, base - h - pad, spr.width + 2, h + pad * 2);
+  } else {
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(-5, base - 1, 10, 2);
+    g.drawImage(spr, -8 - pad, base - 16 - hop - pad);
+  }
+  g.restore();
+  if (d.state === 'lie' && !def.fly) { const zz = (t * 0.6) % 1; g.globalAlpha = 1 - zz; g.fillStyle = '#ffffff'; g.font = '6px "Jersey 10", monospace'; g.fillText('z', d.x + 6 + zz * 3, base - 14 - zz * 8); g.globalAlpha = 1; }
+}
+function standRow(slot, it) {
+  const label = slot === 'pick' ? 'Tool' : SLOTS[slot].name;
+  return `<div class="standrow">${it ? `<img src="${gearUrl(it.slot, it.t, it.r, false, it.st)}" alt="">` : '<span class="standempty"></span>'}
+    <span class="grow"><small class="muted">${label}</small><b class="${it ? 'tc' + it.r : 'muted'}">${it ? `${RARITY[it.r].name} ${itemName(it)}` : 'Empty'}</b>${it ? `<small>${WEAR[wearIndex(it.fl)].short} · float ${it.fl.toFixed(6)} · ${oddsLong(dropOdds(it.r, it.fl))}</small>` : ''}</span>
+    <button class="btn small" data-act="standSlot" data-slot="${slot}">${it ? 'Change' : 'Pick'}</button></div>`;
 }
 function openStand() {
-  let h = `<h2>Armor stand</h2><p class="small muted" style="text-align:center">Show off an outfit in front of your house. The stand wears your best helmet and armor of that outfit.</p><div class="islelist">`;
-  for (const o of OUTFIT_IDS) {
-    const best = outfitBest(o), n = (best.helm ? 1 : 0) + (best.charm ? 1 : 0);
-    h += `<button class="isleopt ${S.decor.stand === o ? 'on' : ''} ${n ? '' : 'locked'}" data-act="setStand" data-o="${o}" ${n ? '' : 'disabled'}>
-      <img src="${spriteUrl(standSprite(best.helm || null, best.charm || null), 2)}" alt="" style="width:40px;image-rendering:pixelated">
-      <span class="grow"><b style="color:${OUTFITS[o].color}">${OUTFITS[o].name}</b><small>${n ? (best.helm ? GEAR_STYLES.helm.find(x => x.set === o).name : '') + (best.helm && best.charm ? ' · ' : '') + (best.charm ? GEAR_STYLES.charm.find(x => x.set === o).name : '') : 'Get a helmet or armor of this outfit first'}</small></span>${S.decor.stand === o ? '<span class="isletag">On show</span>' : ''}</button>`;
+  const it = standItems();
+  let h = `<h2>Armor stand</h2><div class="standprev"><img src="${spriteUrl(standSprite(it.helm, it.charm), 5)}" alt="">${it.pick ? `<img class="standtool" src="${gearUrl('pick', it.pick.t, it.pick.r, false, it.pick.st)}" alt="">` : ''}</div>
+    <p class="small muted" style="text-align:center">Show off anything you own: your rarest pulls, your best floats, a whole outfit. The items stay yours to use.</p>`;
+  h += SLOT_IDS.filter(k => k !== 'pick').concat('pick').map(k => standRow(k, it[k])).join('');
+  h += '<div class="mbtns"><button class="btn" data-act="close">Done</button></div>';
+  openModal(h, { dismissable: true });
+}
+// Pick an item for one slot of the stand: rarest first, or the lowest float first.
+function openStandPicker(slot, sort) {
+  const all = SLOT_IDS.map(k => S.gear.eq[k]).filter(Boolean).concat(S.gear.bag).filter(x => x.slot === slot);
+  all.sort(sort === 'float' ? (a, b) => a.fl - b.fl : (a, b) => dropOdds(b.r, b.fl) - dropOdds(a.r, a.fl));
+  const label = slot === 'pick' ? 'tool' : SLOTS[slot].name.toLowerCase(), cur = S.decor.stand[slot];
+  let h = `<h2>${slot === 'charm' ? 'Pick armor' : 'Pick a ' + label}</h2><div class="seg" role="group" aria-label="Sort">
+    <button class="${sort !== 'float' ? 'on' : ''}" data-act="standSlot" data-slot="${slot}" data-sort="rare">Rarest</button>
+    <button class="${sort === 'float' ? 'on' : ''}" data-act="standSlot" data-slot="${slot}" data-sort="float">Best float</button></div><div class="islelist standlist">`;
+  if (!all.length) h += `<p class="small muted" style="text-align:center">You have no ${label}s yet.</p>`;
+  for (const x of all.slice(0, 120)) {
+    h += `<button class="isleopt ${cur === x.id ? 'on' : ''}" data-act="standPick" data-slot="${slot}" data-id="${x.id}">
+      <img src="${gearUrl(x.slot, x.t, x.r, false, x.st)}" alt="" style="width:36px;image-rendering:pixelated">
+      <span class="grow"><b class="tc${x.r}">${RARITY[x.r].name} ${itemName(x)}${x.lv ? ' +' + x.lv : ''}</b><small>${WEAR[wearIndex(x.fl)].short} · float ${x.fl.toFixed(6)} · ${oddsLong(dropOdds(x.r, x.fl))}</small></span>${cur === x.id ? '<span class="isletag">On show</span>' : ''}</button>`;
   }
-  h += `</div><div class="mbtns"><button class="btn" data-act="setStand" data-o="">Empty the stand</button><button class="btn" data-act="close">Close</button></div>`;
+  h += `</div><div class="mbtns"><button class="btn" data-act="standPick" data-slot="${slot}" data-id="">Leave empty</button><button class="btn" data-act="standBack">Back</button></div>`;
   openModal(h, { dismissable: true });
 }
 function openDoghouse() {

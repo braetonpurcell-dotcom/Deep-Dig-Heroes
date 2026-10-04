@@ -1114,13 +1114,15 @@ function outfitBonusLines(o) {
   if (o === 'assassin') return [`2 pieces: +${Math.round(SET_CRIT[2] * 100)}% crit chance`, `3 pieces: +${Math.round(SET_CRIT[3] * 100)}% crit chance and ${OUTFITS[o].perk.toLowerCase()}`];
   return [`2 pieces: +${Math.round(SET_BONUS[2] * 100)}% ${stat}`, `3 pieces: +${Math.round(SET_BONUS[3] * 100)}% ${stat} and ${OUTFITS[o].perk[0].toLowerCase() + OUTFITS[o].perk.slice(1)}`];
 }
-// Your best piece of an outfit in each slot, from what you wear and your bag.
+// Your best piece of an outfit in each slot, from what you wear and your bag: the most of the
+// outfit's stat in total (main stat and sub-stats together).
+function outfitScore(it, o) { const k = outfitMain(o); return itemStats(it).reduce((a, s) => a + (s.k === k ? s.v : 0), 0); }
 function outfitBest(o) {
   const out = {};
   for (const it of SLOT_IDS.map(k => S.gear.eq[k]).filter(Boolean).concat(S.gear.bag)) {
     if (gearStyle(it).set !== o) continue;
     const cur = out[it.slot];
-    if (!cur || itemStats(it)[0].v > itemStats(cur)[0].v) out[it.slot] = it;
+    if (!cur || outfitScore(it, o) > outfitScore(cur, o)) out[it.slot] = it;
   }
   return out;
 }
@@ -1775,7 +1777,9 @@ function handleAction(el) {
     case 'sail': sailTo(Number(d.i)); break;
     case 'openStand': SFX.click(); openStand(); break;
     case 'openDoghouse': SFX.click(); openDoghouse(); break;
-    case 'setStand': S.decor.stand = OUTFITS[d.o] ? d.o : null; SFX.click(); closeModal(); break;
+    case 'standSlot': SFX.click(); openStandPicker(d.slot, d.sort || 'rare'); break;
+    case 'standPick': { const id = d.id === '' ? null : Number(d.id); S.decor.stand[d.slot] = id; SFX.click(); openStand(); break; }
+    case 'standBack': SFX.click(); openStand(); break;
     case 'setDogPet': S.decor.pet = PETS[d.sp] ? { sp: d.sp, r: Number(d.r) } : null; SFX.click(); closeModal(); break;
     case 'worldBoss': if (UI.tab === 'island') history.pushState({ ddh: 'fight' }, ''); fightBoss(); break;
     case 'v2Welcome': showV2Welcome(); break;
