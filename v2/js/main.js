@@ -18,7 +18,7 @@ function showIntro() {
     <div style="text-align:center"><img src="${spriteUrl(heroSprite(false), 5, 'intro:hero')}" alt="" style="width:80px;image-rendering:pixelated"></div>
     <p>Your miner digs and fights on their own. Coins keep coming in, even while the app is closed.</p>
     <p><b>Tap the monsters on the pad before their ring closes.</b> Each tap strikes and adds to your combo, and the combo multiplies all your damage: the faster and more accurately you tap, the higher it climbs. Tap early for a PERFECT. A monster that escapes cuts your combo, and the faster you are, the faster they come.</p>
-    <p>Spend coins in the <b>Forge</b>, open <b>Cases</b> for gear and pets, and put skill points into your build. Reach B25 to prestige for permanent power.</p>
+    <p>This is your town: swipe left and right to explore, and tap a building to go in. The <b>Cave</b> on the far right is where you fight. Spend coins at the <b>Forge</b>, open chests at the <b>Market</b>, and grow your skills at the <b>Temple</b>. Reach B25 to prestige for permanent power.</p>
     <div class="mbtns"><button class="btn gold" data-act="close">Start digging</button></div>`, { dismissable: true });
 }
 
@@ -221,6 +221,8 @@ function boot(hotData) {
   if (S.bonusRound) toast(`Your double-it round is still on: ${BONUS_TAPS} taps in a row`, 'purple');
   if (offline && offline.coins > 0) queueModal(() => showWelcomeBack(offline));
   if (!S.daily.claimed) queueModal(showDailyPopup);
+  if (base && !S.v2Seen) queueModal(showV2Welcome); // first time in Version 2 with a save from the live game
+  if (!base) S.v2Seen = true;
   checkIslands(); // islands reached before this update get their arrival rewards now
 
   saveLocal();

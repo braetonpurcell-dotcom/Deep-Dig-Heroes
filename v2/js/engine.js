@@ -111,6 +111,7 @@ function freshState() {
     drill: { lv: 0, xp: 0, show: true }, // Version 2: the drill, levelled with parts from Drill Crates
     pityDrill: { epic: 0, leg: 0 },
     isle: { view: -1, claimed: 0 }, // Version 2: island shown in the world (-1 follows your depth) and arrival rewards given
+    v2Seen: false, // Version 2: the welcome guide was shown
     activeClass: -1,
     pity: { epic: 0, leg: 0 },
     pace: 0, // tap pad pace you settled at last session
@@ -379,6 +380,7 @@ function hydrate(obj) {
   st.music = st.music !== false;
   // The miner's look: any bad value goes back to the default.
   s.look = cleanLook(s.look);
+  s.v2Seen = s.v2Seen === true;
   // Islands.
   if (!s.isle || typeof s.isle !== 'object') s.isle = { view: -1, claimed: 0 };
   s.isle = { view: Number.isInteger(s.isle.view) && s.isle.view >= -1 && s.isle.view < ISLANDS.length ? s.isle.view : -1, claimed: Math.min(ISLANDS.length - 1, nonNegInt(s.isle.claimed)) };

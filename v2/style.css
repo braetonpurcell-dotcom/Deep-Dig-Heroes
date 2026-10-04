@@ -821,3 +821,7 @@ body.roomtab #screenbar b { text-shadow: 0 2px 0 #000, 0 0 6px rgba(0,0,0,.8); }
 .isleopt small { display: block; font-size: 13px; color: var(--dim); }
 .isleswatch { width: 36px; height: 36px; flex: none; border: 2px solid rgba(0,0,0,.5); }
 .isletag { font-size: 12px; padding: 0 6px; background: var(--gold); color: #120c18; }
+
+.v2row { display: grid; grid-template-columns: 52px 1fr; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.v2row:last-of-type { border-bottom: 0; }
+.v2row > img, .v2row > .isleswatch { justify-self: center; }

@@ -231,11 +231,11 @@ function setTicker(text, kind = '', ms = 1800) {
 function goalMessages() {
   const out = [];
   if (bossWaiting()) return [['A boss blocks the way. Your miner farms this floor until you tap Fight boss.', 'gold']];
-  if (canPrestige()) out.push([`Prestige ready: +${fmt(powerGain())} power and +${prestigeGain()} cores in the More tab`, 'gold']);
+  if (canPrestige()) out.push([`Prestige ready: +${fmt(powerGain())} power and +${prestigeGain()} cores in Settings (⚙ top right)`, 'gold']);
   if (S.run.sp > 0) out.push([`${plural(S.run.sp, 'skill point')} to spend in Skills`, 'gold']);
   const c = claimableCounts();
   if (c.daily + c.quests + c.bonus + c.ach > 0) out.push(['Rewards are waiting in Quests', 'gold']);
-  if (freeCrateReady()) out.push(['Your free crate is ready in Cases', 'gold']);
+  if (freeCrateReady()) out.push(['Your free crate is ready at the Market', 'gold']);
   const nextU = UPGRADES.find(u => !upgradeUnlocked(u));
   if (nextU) out.push([`A new Forge upgrade unlocks at B${nextU.unlock}`, '']);
   const f = S.run.floor;
@@ -978,7 +978,7 @@ function dropDetailHtml(d) {
     const def = PETS[d.sp];
     const inParty = petEquippedCount(d.sp, d.r) > 0;
     const full = S.pets.eq.length >= petSlots();
-    const where = inParty ? 'In your party.' : full ? 'Party full: swap pets in Bag › Pets.' : '';
+    const where = inParty ? 'In your party.' : full ? 'Party full: swap pets in the House › Pets.' : '';
     const merge = d.r < MERGE_MAX ? `Merge ${mergeCost(d.r)} into the next rarity.` : '';
     return `<div class="rname tc${d.r}">${RARITY[d.r].name} ${def.name}</div>
       ${pullOddsHtml(d)}<div class="rsub">${petBonusText(d.sp, d.r)}</div>
@@ -1498,8 +1498,10 @@ function buildMore() {
   const powerNow = S.curve === 1
     ? 'Power is permanent strength. Right now it adds +10% damage per point; from your next prestige on, every run is on the tougher mine, where it counts in floors of strength: with 10 floors of strength your miner hits as hard as if the mine were 10 floors shallower.'
     : 'Power is permanent strength, counted in floors: with 10 floors of strength your miner hits as hard as if the mine were 10 floors shallower.';
-  let h = `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
-    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. ${powerNow} It grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
+  let h = `<div class="card row"><div class="grow"><b>Version 2 preview</b><div class="small muted">${GAME_VERSION} · a separate save from the live game</div></div>
+    <button class="btn small gold" data-act="v2Welcome">What's new</button></div>`;
+  h += `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
+    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. ${powerNow} It grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree at the Temple.</p>
     <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
     <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (${powerText(S.power)} → ${powerText(S.power + pg, true)})</div></div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
@@ -1625,9 +1627,24 @@ on('collection', ({ count }) => toast(`New index entry ${count}/${(PET_IDS.lengt
 on('bestFloor', ({ floor }) => {
   const u = UPGRADES.find(x => x.unlock === floor);
   if (u) toast('New Forge upgrade: ' + u.name, 'good', 'anvil');
-  if (floor === 25 && S.prestiges === 0) toast('Prestige unlocked! See the More tab.', 'purple', 'core');
+  if (floor === 25 && S.prestiges === 0) toast('Prestige unlocked! Open Settings (⚙ top right).', 'purple', 'core');
 });
 on('bossFail', () => setTicker('The boss escaped. Farm here, then tap Retry boss.', 'bad', 4000));
+// Version 2: a short guide to everything new, shown once to players coming from the live game.
+function showV2Welcome() {
+  S.v2Seen = true;
+  const row = (img, title, text) => `<div class="v2row">${img}<div><b>${title}</b><div class="small muted">${text}</div></div></div>`;
+  const im = (src, w = 40) => `<img src="${src}" alt="" style="width:${w}px;image-rendering:pixelated">`;
+  openModal(`<h2>Welcome to Version 2</h2>
+    ${row(im(spriteUrl(heroSprite(0), 3)), 'Your town', 'Swipe left and right to explore. Tap a building to go in; ◂ World brings you back. The Cave on the far right is where you fight.')}
+    ${row(im(spriteUrl(heroSprite(0, { ...S.look, hat: 'viking', shirt: 1 }), 3)), 'Character design', 'The House has a Look tab: hats and colours for your miner. New islands unlock new hats.')}
+    ${row(im(petUrl('drake', false, 3)), 'Classes', 'At the Temple, save your skills, gear, pets and look as a class and switch in one tap.')}
+    ${row(im(drillUrl(1, 3), 52), 'The drill', "The Market's Drill tab sells Drill Crates. Every part levels your drill, which replaces your pickaxe and evolves every 10 levels.")}
+    ${row(`<span class="isleswatch" style="background:${ISLE_STYLE.frost.swatch}"></span>`, 'Islands', 'Every 50 floors is a new island with its own look. Sail between them from the Harbor by the bridge.')}
+    ${row(im(iconUrl('cog'), 32), 'Settings and feedback', 'Top right: ⚙ for settings and prestige, F to send feedback.')}
+    <div class="mbtns"><button class="btn gold" data-act="close">Let's go</button></div>`, { dismissable: true });
+}
+
 // Version 2: reaching a new island for the first time.
 on('isles', list => {
   const keys = list.reduce((a, x) => a + x.keys, 0), last = ISLANDS[list[list.length - 1].i];
@@ -1683,6 +1700,7 @@ function handleAction(el) {
     case 'goDrillCrates': if (UI.auto) stopAutoRoll(); S.caseKind = 'drill'; SFX.click(); showTab('cases'); break;
     case 'drillShow': S.drill.show = !S.drill.show; SFX.click(); buildForge(); break;
     case 'sail': sailTo(Number(d.i)); break;
+    case 'v2Welcome': showV2Welcome(); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
     case 'learnPlan': doLearnPlan(d.id); break;
