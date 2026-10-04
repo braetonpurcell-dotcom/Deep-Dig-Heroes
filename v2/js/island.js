@@ -1015,8 +1015,8 @@ function drawWorld(dt) {
 // Version 2: in front of your house, an armor stand showing an outfit and a doghouse with a pet.
 // Tap either to pick what goes there (the first step toward decorating your island).
 const DECOR = {
-  stand: { name: 'Armor stand', x: 205, y: 148, w: 24, h: 24 }, // in the front yard, left of the door
-  dog: { name: 'Doghouse', x: 253, y: 152, w: 27, h: 20 }, // and right of it
+  stand: { name: 'Armor stand', x: 205, y: 135, w: 24, h: 24 }, // in the front yard, close to the house, left of the door
+  dog: { name: 'Doghouse', x: 248, y: 139, w: 27, h: 20 }, // and right of it (placed with the yard layout tool)
 };
 // The items on the stand (each may be gone if you salvaged it).
 function standItems() {
