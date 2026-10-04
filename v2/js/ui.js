@@ -1646,6 +1646,7 @@ function showV2Welcome() {
   openModal(`<h2>Welcome to Version 2</h2>
     ${row(im(spriteUrl(heroSprite(0), 3)), 'Your town', 'Swipe left and right to explore. Tap a building to go in; ◂ World brings you back. The Cave on the far right is where you fight.')}
     ${row(im(spriteUrl(heroSprite(0, { ...S.look, hat: 'viking', shirt: 1 }), 3)), 'Character design', 'The House has a Look tab: hats and colours for your miner. New islands unlock new hats.')}
+    ${row(im(spriteUrl(heroSprite(0, { ...S.look, gearHelm: true, gearArmor: true }, { helm: { slot: 'helm', st: 'horned', t: 9, r: 3 }, charm: { slot: 'charm', st: 'plate', t: 9, r: 3 } }), 3)), 'Gear you can see', 'Tools, helmets and armor come in six styles: damage, coins, luck, XP, speed and tap strike. Swords too. Your miner wears what you equip.')}
     ${row(im(petUrl('drake', false, 3)), 'Classes', 'At the Temple, save your skills, gear, pets and look as a class and switch in one tap.')}
     ${row(im(drillUrl(1, 3), 52), 'The drill', "The Market's Drill tab sells Drill Crates. Every part levels your drill, which replaces your pickaxe and evolves every 10 levels.")}
     ${row(`<span class="isleswatch" style="background:${ISLE_STYLE.frost.swatch}"></span>`, 'Islands', 'Every 50 floors is a new island with its own look. Sail between them from the Harbor by the bridge.')}
