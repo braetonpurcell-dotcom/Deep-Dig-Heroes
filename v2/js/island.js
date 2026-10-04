@@ -17,7 +17,8 @@ const WORLD = { cv: null, ctx: null, img: null, cam: { x: 0, y: 0 }, z: 2, vx: 0
   me: { x: SPAWN.x, dir: 1, held: 0, walkT: 0 }, scene: 'home', wmax: 860 };
 const WALK_SPEED = 70; // world pixels a second
 const RIVER = [748, 872]; // the river's west and east banks
-const DOOR_Y = 168; // the bottom of every door on the north side of the road
+const DOOR_Y = 168; // the bottom of every door on the north side of the road (the house sits further back)
+const HOUSE_BACK = 22; // how far the house is set back from the others, for its front yard
 const POND = { x: 250, y: 250, rx: 30, ry: 14 };
 const FIELD = { x: 314, y: 222, w: 88, h: 32 }; // the farm's crop field, south of the road
 
@@ -25,7 +26,7 @@ const FIELD = { x: 314, y: 222, w: 88, h: 32 }; // the farm's crop field, south 
 const BUILDINGS = [
   { tab: 'quests', name: 'Quests', x: 64, y: 136, w: 44, h: 34, dx: 86 },
   { tab: 'lb', name: 'Leaderboard', x: 122, y: 134, w: 32, h: 36, dx: 137 },
-  { tab: 'bag', name: 'House', x: 200, y: 92, w: 80, h: 78, dx: 240 },
+  { tab: 'bag', name: 'House', x: 200, y: 70, w: 80, h: 78, dx: 240, doorY: 146 }, // set back behind a front yard
   { tab: 'cases', name: 'Market', x: 320, y: 104, w: 92, h: 66, dx: 366 },
   { tab: 'forge', name: 'Forge', x: 462, y: 90, w: 84, h: 80, dx: 502 },
   { tab: 'skills', name: 'Temple', x: 590, y: 84, w: 96, h: 86, dx: 638 },
@@ -170,7 +171,7 @@ function paintGround(g) {
     }
   };
   for (const [x, y] of ROAD_PTS) mark(x, y, 11);
-  for (const b of BUILDINGS) if (b.tab !== 'dock' && b.tab !== 'fight') for (let y = roadY(b.dx); y >= DOOR_Y + 5; y -= 1) mark(b.dx, y, 6);
+  for (const b of BUILDINGS) if (b.tab !== 'dock' && b.tab !== 'fight') for (let y = roadY(b.dx); y >= (b.doorY || DOOR_Y) + 5; y -= 1) mark(b.dx, y, 6);
   // Classify every cell.
   for (let cy = 0; cy < GR; cy++) for (let cx = 0; cx < GC; cx++) {
     const x = cx * CELL + 1, y = cy * CELL + 1, i = cy * GC + cx;
@@ -296,8 +297,10 @@ function paintWorld() {
   for (const [x, y] of [[728, 232], [734, 168]]) rock(x, y, true);
   forestTree(296, 128, false); forestTree(716, 130, true); forestTree(722, 252, true);
   if (STYLE.snow) for (const [sx, sy] of [[150, 128], [610, 262]]) snowman(sx, sy);
-  paintTownDecor(); paintTownSign(); paintBoard(); paintTrophy(); paintHouse(); paintMarket(); paintForge(); paintTemple();
-  fence(188, 182, 104, 240);
+  paintTownDecor(); paintTownSign(); paintBoard(); paintTrophy();
+  WORLD.ctx.save(); WORLD.ctx.translate(0, -HOUSE_BACK); paintHouse(); WORLD.ctx.restore();
+  paintMarket(); paintForge(); paintTemple();
+  fence(188, 182, 104, 240); paintMailbox();
   // The forest along the bottom edge, front-most.
   const south = [];
   for (let x = 0; x < SEA_X - 16; x += gap) { if (inRiver(x)) continue; south.push([x + r() * 4, 286 + r() * 3, r() < 0.3]); south.push([x + 4 + r() * 4, 300 + r() * 3, r() < 0.3]); }
@@ -520,7 +523,7 @@ function paintWaterDetail() {
   }
 }
 function fence(x0, y, w, gapX) {
-  px(x0, y - 6, w, 2, OUT); px(x0, y - 2, w, 2, OUT);
+  for (let x = x0; x < x0 + w; x += 1) if (Math.abs(x - gapX) > 8) { px(x, y - 6, 1, 2, OUT); px(x, y - 2, 1, 2, OUT); } // rails stop at the gate
   for (let x = x0; x < x0 + w; x += 7) { if (Math.abs(x + 1 - gapX) < 9) continue; px(x - 1, y - 10, 5, 12, OUT); px(x, y - 9, 3, 10, '#f4efe4'); px(x + 2, y - 8, 1, 9, '#c9c0b0'); px(x + 1, y - 10, 1, 1, OUT); }
   for (let x = x0; x < x0 + w; x += 1) if (Math.abs(x - gapX) > 8) { px(x, y - 5, 1, 1, '#e6dece'); px(x, y - 1, 1, 1, '#e6dece'); }
 }
@@ -615,7 +618,10 @@ function paintHouse() {
   px(204, 146, 72, 3, '#7a4a2a');
   win(212, 135, 11, 9); win(255, 135, 11, 9);
   door(240, 12, 20, '#a86838');
-  px(285, 165, 3, 10, OUT); px(286, 166, 1, 9, '#7a4c2a'); parts([[282, 160, 9, 6, '#d84848']]); px(283, 161, 7, 1, '#f07a6a'); px(290, 158, 1, 3, '#f8e04a'); // mailbox
+}
+// The mailbox stands at the gate, where the house's path meets the road.
+function paintMailbox() {
+  px(253, 183, 3, 11, OUT); px(254, 184, 1, 10, '#7a4c2a'); parts([[250, 177, 9, 6, '#d84848']]); px(251, 178, 7, 1, '#f07a6a'); px(258, 175, 1, 3, '#f8e04a');
 }
 function paintMarket() {
   shadow(324, 128, 84, 42);
@@ -919,7 +925,7 @@ function drawLive(g, dt, t) {
   glow(g, 638, 104, 9 + Math.sin(t * 2) * 2, 'rgba(120,220,255,0.3)');
   if (Math.sin(t * 1.3) > 0.93) { g.fillStyle = '#ffffff'; g.fillRect(134, 133, 1, 5); g.fillRect(132, 135, 5, 1); } // glint on the cup
   // Chimney smoke.
-  for (const [sx, sy] of [[524, 60], [261, 84]]) if (Math.random() < dt * 1.6) WORLD.smoke.push({ x: sx, y: sy, t: 0 });
+  for (const [sx, sy] of [[524, 60], [261, 84 - HOUSE_BACK]]) if (Math.random() < dt * 1.6) WORLD.smoke.push({ x: sx, y: sy, t: 0 });
   for (const s of WORLD.smoke) { s.t += dt; s.y -= dt * 7; s.x += dt * (3 + s.t); g.fillStyle = `rgba(236,236,244,${Math.max(0, 0.75 - s.t * 0.19)})`; const r = 2 + Math.round(s.t * 1.2); g.fillRect(Math.round(s.x - r / 2), Math.round(s.y - r / 2), r, r); }
   WORLD.smoke = WORLD.smoke.filter(s => s.t < 4);
   // The boat waiting at the end of the dock, the windmill's sails, and the street lamps.
@@ -1009,8 +1015,8 @@ function drawWorld(dt) {
 // Version 2: in front of your house, an armor stand showing an outfit and a doghouse with a pet.
 // Tap either to pick what goes there (the first step toward decorating your island).
 const DECOR = {
-  stand: { name: 'Armor stand', x: 176, y: 148, w: 24, h: 24 },
-  dog: { name: 'Doghouse', x: 293, y: 152, w: 27, h: 20 },
+  stand: { name: 'Armor stand', x: 205, y: 148, w: 24, h: 24 }, // in the front yard, left of the door
+  dog: { name: 'Doghouse', x: 253, y: 152, w: 27, h: 20 }, // and right of it
 };
 // The items on the stand (each may be gone if you salvaged it).
 function standItems() {
