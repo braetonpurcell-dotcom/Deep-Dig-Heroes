@@ -1278,12 +1278,35 @@ function drawWorld(dt) {
   g.imageSmoothingEnabled = false;
   g.drawImage(WORLD.img, 0, 0);
   if (STYLE.tint) { g.fillStyle = STYLE.tint; g.fillRect(0, 0, WW, WH); } // night or the ember glow; what moves is drawn over it, lit
+  if (WORLD.depth) drawDepthBack(g);
   drawLive(g, dt, WORLD.t);
+  if (WORLD.depth) drawDepthFront(g);
   // A soft shade at the top and bottom of the screen pulls the eye to the road.
   g.setTransform(1, 0, 0, 1, 0, 0);
   const H = WORLD.cv.height, vg = g.createLinearGradient(0, 0, 0, H);
-  vg.addColorStop(0, 'rgba(10,20,30,0.28)'); vg.addColorStop(0.18, 'rgba(10,20,30,0)'); vg.addColorStop(0.85, 'rgba(10,20,30,0)'); vg.addColorStop(1, 'rgba(10,20,30,0.3)');
+  vg.addColorStop(0, `rgba(10,20,30,${WORLD.depth ? 0.08 : 0.28})`); vg.addColorStop(0.18, 'rgba(10,20,30,0)'); vg.addColorStop(0.85, 'rgba(10,20,30,0)'); vg.addColorStop(1, 'rgba(10,20,30,0.3)');
   g.fillStyle = vg; g.fillRect(0, 0, WORLD.cv.width, H);
+}
+
+// ---------- depth (draft) ----------
+// Cheap ways to make the flat world feel deep: haze over what is far away (the top of the screen),
+// soft contact shadows where things meet the ground, and a darker, richer foreground.
+const HAZE = { green: '214,236,255', frost: '236,246,255', sand: '255,240,210', ember: '255,150,80', star: '120,140,230' };
+function band(g, x, y0, y1, w, rgb, a0, a1) { const gr = g.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, `rgba(${rgb},${a0})`); gr.addColorStop(1, `rgba(${rgb},${a1})`); g.fillStyle = gr; g.fillRect(x, y0, w, y1 - y0); }
+function drawDepthBack(g) {
+  const rgb = HAZE[ISLANDS[WORLD.isle || 0].id] || HAZE.green, W = WORLD.wmax || WW;
+  band(g, 0, 0, 92, W, rgb, 0.42, 0);              // the far tree line and the far sea fade into the air
+  if (WORLD.scene === 'home') {
+    for (const b of BUILDINGS) { if (b.tab === 'dock') continue; const y = (b.doorY || DOOR_Y) + 2; band(g, b.x - 3, y - 7, y + 1, b.w + 6, '20,30,12', 0, 0.22); band(g, b.x - 3, y + 1, y + 5, b.w + 6, '20,30,12', 0.22, 0); }
+    band(g, 186, 176, 186, 108, '20,30,12', 0, 0.16);  // under the fence
+  } else {
+    const M = CAVE_MTN; band(g, 226, M.base - 10, M.base + 1, 208, '20,30,12', 0, 0.2); band(g, 226, M.base + 1, M.base + 6, 208, '20,30,12', 0.2, 0);
+    band(g, M.mx - M.mw / 2, M.base - M.mh, M.base - M.mh + 14, M.mw, '0,0,0', 0.45, 0); // the cave's ceiling in shadow
+  }
+}
+function drawDepthFront(g) {
+  const W = WORLD.wmax || WW;
+  band(g, 0, 238, WH, W, '10,24,14', 0, 0.34);        // the nearest trees and grass, darker and richer
 }
 
 // Version 2: in front of your house, an armor stand showing an outfit and a doghouse with a pet.
