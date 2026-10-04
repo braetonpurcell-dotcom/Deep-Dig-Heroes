@@ -153,76 +153,112 @@ const PX = {
     'kkkkkkkkk',
   ],
   mole: [
-    '..........',
-    '..........',
-    '...kkkk...',
-    '..kmmmmk..',
-    '.kmmmmmmk.',
-    '.kmmmkmmpk',
-    '.kmlmmmmk.',
-    '.kllmmmk..',
-    '..kmmmmk..',
-    '..kwk.kwk.',
+    '................',
+    '................',
+    '................',
+    '................',
+    '.....kkkkkk.....',
+    '...kkmmmmmmkk...',
+    '..kmllmmmmmmmk..',
+    '.kmllmmmmmmekmk.',
+    '.kmlmmmmmmmmmmpk',
+    '.kmmmmmmmmmmmmkk',
+    '.kmmmmmmmmmmmdk.',
+    '..kdmmmmmmmmdk..',
+    '..kwkkdddddkwk..',
+    '..kwwk.....kwwk.',
+    '...kk.......kk..',
+    '................',
   ],
   petbat: [
-    '..........',
-    'k........k',
-    'kk..kk..kk',
-    'kmk.kk.kmk',
-    'kmmkmmkmmk',
-    'kmmrmmrmmk',
-    '.kmmmmmmk.',
-    '..kmwwmk..',
-    '...kkkk...',
-    '..........',
+    '................',
+    '................',
+    '................',
+    '................',
+    'k..............k',
+    'kk....k..k....kk',
+    'kmk..kmkkmk..kmk',
+    'kmlkkmmmmmmkklmk',
+    'kmllmmrmmrmmllmk',
+    'kmmmmmmmmmmmmmmk',
+    '.kmkdmmwwmmdkmk.',
+    '..k.kdmmmmdk.k..',
+    '.....kkmmkk.....',
+    '.......kk.......',
+    '................',
+    '................',
   ],
   petslime: [
-    '..........',
-    '..........',
-    '..........',
-    '...kkkk...',
-    '..kmllmk..',
-    '.kmlmmmmk.',
-    '.kmkmmkmk.',
-    '.kmmmmmmk.',
-    '.kdmmmmdk.',
-    '..kkkkkk..',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '......kkkk......',
+    '....kkllmmkk....',
+    '...kllwmmmmmk...',
+    '..kllmmmmmmmmk..',
+    '..klmmmmmmmmmk..',
+    '.kmmmmmmekmekmk.',
+    '.kmmmmmmmmmmmmk.',
+    '.kdmmmmmmmmmmdk.',
+    '..kddddddddddk..',
+    '...kkkkkkkkkk...',
+    '................',
   ],
   owl: [
-    '.k......k.',
-    '.kk....kk.',
-    '.kmkkkkmk.',
-    'kmwwmmwwmk',
-    'kmwkmmkwmk',
-    'kmmmyymmmk',
-    'kmlmmmmlmk',
-    '.kllmmllk.',
-    '..kmmmmk..',
-    '...y..y...',
+    '................',
+    '...k........k...',
+    '...kmk....kmk...',
+    '...kmmkkkkmmk...',
+    '..kmmmmmmmmmmk..',
+    '..kmwwwmmwwwmk..',
+    '..kwwekwwwekwk..',
+    '..kmwwwyywwwmk..',
+    '.kmmmmmyymmmmmk.',
+    '.kdmllllllllmdk.',
+    '.kdmlmlmlmlmmdk.',
+    '..kdllllllllmk..',
+    '..kdmmmmmmmmdk..',
+    '...kykk..kkyk...',
+    '....k......k....',
+    '................',
   ],
   fox: [
-    'k........k',
-    'kk......kk',
-    'kmk....kmk',
-    'kmmkkkkmmk',
-    'kmmmmmmmmk',
-    'kmkmmmmkmk',
-    '.kwmmmmwk.',
-    '..kwwwwk..',
-    '...kwnk...',
-    '....kk....',
+    '................',
+    '.........k..k...',
+    '........kfkkfk..',
+    '........kCffCk..',
+    '.kk.....kffffk..',
+    'kWWk...kFfffefk.',
+    'kWuk...kFffffWWk',
+    'kFfk...kkFfWWWek',
+    'kFffk.kffkkkkkk.',
+    '.kFfkkFFFffWWk..',
+    '..kffFFFfffWuk..',
+    '...kffffffffk...',
+    '...kcCkkkkcCk...',
+    '...kCk....kCk...',
+    '...kk.....kk....',
+    '................',
   ],
   drake: [
-    '......k...',
-    '.....kmk..',
-    '..k.kmmmk.',
-    '.kmkkmemmk',
-    '.kmmkmmmmk',
-    'kmmmmmmkk.',
-    'kmlmmmmk..',
-    '.kllmmmk..',
-    '..kmkkmk..',
-    '..kk..kk..',
+    '................',
+    '....k...........',
+    '...klk......kk..',
+    '..kllk.....kmmk.',
+    '..kllmk...kmmmmk',
+    '..kllmmk.kmmewmk',
+    '...kmmmmkmmmmmyk',
+    '....kmmmmmmmkkk.',
+    '.k..kmmlllmmk...',
+    'kmkkmmllllmmk...',
+    '.kmmmmllllmdk...',
+    '..kkdmmmmmdk....',
+    '....kmk.kmk.....',
+    '....kyk.kyk.....',
+    '....kk..kk......',
+    '................',
   ],
   helm: [
     '....kkkk....',
@@ -446,12 +482,12 @@ const PX = {
 };
 
 const PET_PALETTES = {
-  mole: { m: '#8a5a3a', l: '#b07a52', p: '#ff8fa3', w: '#f2e6d0' },
-  bat: { m: '#7a5aa8', r: '#ff5a6a', w: '#ffffff' },
-  slime: { m: '#6ad36a', l: '#b8f5b0', d: '#3f8f45' },
-  owl: { m: '#9a7048', l: '#d9b98a', w: '#ffffff', y: '#ffcc4d' },
-  fox: { m: '#f08a3a', w: '#fff3e0', n: '#2a1a14' },
-  drake: { m: '#3fbf9a', l: '#9af0d6', e: '#ffcc4d' },
+  fox: { F: '#ffb46a', f: '#f2852e', c: '#b85a1c', C: '#7d3a10', W: '#fffaf0', u: '#e8d9c2', e: '#14101c' },
+  mole: { m: '#8a5a3a', l: '#b07a52', d: '#5e3a22', p: '#ff8fa3', w: '#f2e6d0', e: '#14101c' },
+  slime: { m: '#6ad36a', l: '#b8f5b0', d: '#3f8f45', e: '#14101c', w: '#ffffff' },
+  bat: { m: '#7a5aa8', l: '#a88ad8', d: '#4e3878', r: '#ff5a6a', w: '#ffffff' },
+  owl: { m: '#9a7048', l: '#d9b98a', d: '#6a4a2a', w: '#ffffff', y: '#ffcc4d', e: '#14101c' },
+  drake: { m: '#3fbf9a', l: '#9af0d6', d: '#25806a', y: '#ffcc4d', e: '#14101c', w: '#ffffff' },
 };
 const PET_SPRITE = { mole: 'mole', bat: 'petbat', slime: 'petslime', owl: 'owl', fox: 'fox', drake: 'drake' };
 
@@ -534,42 +570,88 @@ function materialPalette(tier) {
   return { m: base, M: shade(base, 0.45), n: shade(base, -0.35), w: '#9a6a3a', W: '#6e4520' };
 }
 
-// Version 2: the hero is built from your look: a hat (the top seven rows) on the body, with your colours.
-const HAT_ROWS = {
-  helmet: PX.hero.slice(0, 7),
-  cap: ['................', '................', '................', '.....kkkkkk.....', '....kyyyywyk....', '...kyyyyyyyykkk.', '...khkkkkkkYYYYk'],
-  none: ['................', '................', '................', '................', '.....kkkkkk.....', '....khhwhhhk....', '....khhhhHHk....'],
-  beanie: ['................', '.......kk.......', '......kwwk......', '.....kkkkkk.....', '....kyyyyyyk....', '...kyyyyyyyyk...', '...kYYYYYYYYk...'],
-  bandana: ['................', '................', '................', '................', '.....kkkkkk.....', '....kyyywyyk....', '.kkkYYYYYYYk....'],
-  viking: ['................', '.k............k.', '.kwk.kkkkkk.kwk.', '..kwkyyyyyykwk..', '...kyyyyyyyyk...', '...kYYYYYYYYk...', '...kkkkkkkkkk...'],
-  crown: ['................', '....k..kk..k....', '....kykyykyk....', '....kyyyyyyk....', '....kywyywyk....', '....kkkkkkkk....', '....khhhhhhk....'],
+// Version 2: your miner, 24 pixels tall in the Game Boy Color style. Skin and hair come from your
+// look; everything else is the outfit you wear (your helmet and armor), drawn over the base miner.
+const HERO24 = {
+  base: [
+    '........................',
+    '........................',
+    '........................',
+    '........................',
+    '.......kkkkkk...........',
+    '....kkhhhhhhhHk.........',
+    '...khhhhhhhhhHHk........',
+    '...khhhhhhhhhhHk........',
+    '...khhhhsshhshHk........',
+    '...khhssssssshHk........',
+    '...khhsewsewshHk........',
+    '...khhssssssShHk........',
+    '....kkkSSssSkkk.........',
+    '..kkbbbkSSSSkbbbkk......',
+    '.kbbbbbbbbbbbbbbbbk.....',
+    '.kbBkbbbbbbbbbbkBbk.....',
+    '.kbBkbbbbbbbbbbkBbk.....',
+    '.kbBkbbbbbbbbbbkBbk.....',
+    '.ksSkllllylllllksSk.....',
+    '..kk.kdddddddddk.kk.....',
+    '.....kddDkkddDk.........',
+    '.....kddDkkddDk.........',
+    '....kooookkooook........',
+    '....kkkkkk.kkkkkk.......',
+  ],
+  step: [
+    '........................',
+    '........................',
+    '........................',
+    '........................',
+    '.......kkkkkk...........',
+    '....kkhhhhhhhHk.........',
+    '...khhhhhhhhhHHk........',
+    '...khhhhhhhhhhHk........',
+    '...khhhhsshhshHk........',
+    '...khhssssssshHk........',
+    '...khhsewsewshHk........',
+    '...khhssssssShHk........',
+    '....kkkSSssSkkk.........',
+    '..kkbbbkSSSSkbbbkk......',
+    '.kbbbbbbbbbbbbbbbbk.....',
+    '.kbBkbbbbbbbbbbkBbk.....',
+    '.kbBkbbbbbbbbbbkBbk.....',
+    '.kbBkbbbbbbbbbbkBbk.....',
+    '.ksSkllllylllllksSk.....',
+    '..kk.kdddddddddk.kk.....',
+    '....kddDk..kddDk........',
+    '...kddDk....kddDk.......',
+    '..kooook....kooook......',
+    '..kkkkkk....kkkkkk......',
+  ],
 };
 function lookOf(look) { return look || (typeof S !== 'undefined' && S && S.look) || DEFAULT_LOOK; }
-function lookKey(L) { return [L.hat, L.hatC, L.hair, L.skin, L.shirt, L.pants, L.boots, L.gearHelm === false ? 0 : 1, L.gearArmor === false ? 0 : 1].join('.'); }
+function lookKey(L) { return [L.hair, L.skin].join('.'); }
 function heroPalette(L) {
-  const hat = L.hat === 'crown' ? '#ffcc4d' : LOOK_CLOTH[L.hatC], skin = LOOK_SKIN[L.skin], shirt = LOOK_CLOTH[L.shirt], pants = LOOK_CLOTH[L.pants], hair = LOOK_HAIR[L.hair];
-  return { ...HERO_PALETTE, y: hat, Y: shade(hat, -0.28), w: L.hat === 'crown' ? '#ff4d6d' : '#ffffff', s: skin[0], S: skin[1], b: shirt, B: shade(shirt, -0.3),
-    d: pants, D: shade(pants, -0.3), o: LOOK_BOOTS[L.boots], h: hair, H: shade(hair, -0.3) };
+  const skin = LOOK_SKIN[L.skin] || LOOK_SKIN[0], hair = LOOK_HAIR[L.hair] || LOOK_HAIR[1];
+  return { h: hair, H: shade(hair, -0.3), s: skin[0], S: skin[1], e: OUTLINE, w: '#ffffff', b: '#3e7bd6', B: '#2a569c',
+    d: '#4a4170', D: '#332c55', o: '#7a4a26', O: '#4f2e17', l: '#5e3a1e', y: '#f5c242' };
 }
 function heroBody(step, L) {
-  const base = step ? 'heroStep' : 'hero', name = base + ':' + L.hat;
-  if (!PX[name]) PX[name] = (HAT_ROWS[L.hat] || HAT_ROWS.helmet).concat(PX[base].slice(7));
-  return sprite(name, heroPalette(L), lookKey(L));
+  const key = `hero24|${step ? 1 : 0}|${lookKey(L)}`;
+  let c = spriteCache.get(key);
+  if (!c) { c = buildSprite(step ? HERO24.step : HERO24.base, heroPalette(L)); spriteCache.set(key, c); }
+  return c;
 }
-// Your miner: the body in your look, wearing your equipped armor and helmet (unless the wardrobe
-// says to show the outfit instead). gear defaults to what you have equipped.
+// Your miner in the helmet and armor you wear. gear defaults to what you have equipped.
 function heroSprite(step, look = null, gear = null) {
   const L = lookOf(look);
   const eq = gear || (typeof S !== 'undefined' && S && S.gear ? S.gear.eq : {});
-  const helm = L.gearHelm !== false ? eq.helm : null, armor = L.gearArmor !== false ? eq.charm : null;
+  const helm = eq.helm, armor = eq.charm;
   if (!helm && !armor) return heroBody(step, L);
   const tag = it => (it ? `${it.st || ''}.${it.t}.${it.r}` : '-');
-  const key = `heroC|${step ? 1 : 0}|${lookKey(L)}|${tag(helm)}|${tag(armor)}`;
+  const key = `hero24C|${step ? 1 : 0}|${lookKey(L)}|${tag(helm)}|${tag(armor)}`;
   let c = spriteCache.get(key);
   if (c) return c;
-  c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  c = document.createElement('canvas'); c.width = 24; c.height = 24;
   const g = c.getContext('2d');
-  g.drawImage(heroBody(step, helm ? { ...L, hat: 'none' } : L), 0, 0);
+  g.drawImage(heroBody(step, L), 0, 0);
   if (armor) g.drawImage(wornSprite('charm', armor), 0, 0);
   if (helm) g.drawImage(wornSprite('helm', helm), 0, 0);
   spriteCache.set(key, c);
@@ -629,20 +711,22 @@ function gradientAt(colors, t) {
 const sym = rows => rows.map(r => r + r.split('').reverse().join(''));
 const GEAR_ICON = {
   pick: {
-    war: ['kk.kkkkk.kk', 'kmkkMMMkkmk', 'kmMmmmmmmnk', '.kmmkwknmk.', '..kkkwkkk..', '....kwk....', '....kak....', '....kak....', '....kwk....', '....kWk....', '....kwk....', '....kkk....'],
+    war: ['.kk.....kk.', 'kMmk.k.kmnk', 'kMmmkwkmmnk', 'kMmmmwmmmnk', 'kMmmkwkmmnk', 'kmk.kwk.knk', '.k..kak..k.', '....kak....', '....kwk....', '....kWk....', '....kwk....', '....kkk....'],
     gilded: ['..kkkkkkk..', '.kyyyyyyyk.', 'kmmkkkkknmk', 'kmk.kwk.knk', 'kk..kwk..kk', '....kwk....', '...kkwkk...', '...kyYyk...', '...kkwkk...', '....kWk....', '....kwk....', '....kkk....'],
     clover: ['..kkkakkk..', '.kMMaAammk.', 'kmmkkakknmk', 'kmk.kwk.knk', 'kk..kwk..kk', '....kwk....', '....kak....', '....kwk....', '....kak....', '....kWk....', '....kwk....', '....kkk....'],
-    rune: ['..kkkkkkk..', '.kMaMmamak.', 'kmmkkkkknmk', 'kak.kwk.kak', 'kk..kwk..kk', '....kak....', '....kwk....', '....kak....', '....kwk....', '....kWk....', '....kwk....', '....kkk....'],
+    rune: ['....kkk....', '...kaAak...', '..kaAAAak..', '..kaAAaak..', '...kaaak...', '..kmkwkmk..', '...kmwmk...', '....kwk....', '....kak....', '....kwk....', '....kWk....', '....kkk....'],
     swift: ['......kk...', '.kkkkkMmk..', 'kmmmmmmmmkk', '.kkkkwkkknk', '....kwk..kk', '....kwk....', '....kak....', '....kwk....', '....kak....', '....kwk....', '....kWk....', '....kkk....'],
+    daggers: ['..k.....k..', '.kMk...kMk.', '.kMk...kMk.', '.kmk...kmk.', '.kmk...kmk.', '.knk...knk.', 'kyyyk.kyyyk', '.kak...kak.', '.kak...kak.', '.kyk...kyk.', '..k.....k..', '...........'],
     sword: ['.....k.....', '....kMk....', '....kMk....', '....kmk....', '....kmk....', '....kmk....', '....knk....', '.kyyyyyyyk.', '..kkkakkk..', '....kak....', '....kgk....', '....kkk....'],
   },
   helm: {
-    prospector: ['............', '............', '....kkkk....', '..kkmmmmkk..', '.kmmMmmmmmk.', '.kmMmmmmmkLk', 'kmmmmmmmmkLk', 'kmmmmmmmmmkk', 'kddddddddddk', 'kkkkkkkkkkkk'],
+    prospector: ['........kk..', '.......kAak.', '...kkkkkaak.', '..kcccccakk.', '..kcCCCCCck.', '..kccccccck.', '..kyyyyyyyk.', 'kkcccccccckk', 'kCCCCCCCCCCk', '.kkkkkkkkkk.'],
     horned: sym(['k.....', 'kok...', 'kok.kk', '.kokMm', '..kmMm', '.kmmmm', 'kmmmmm', 'kddddd', 'kkkkkk', '......']),
-    lucky: sym(['......', '......', '...kkk', '..kccc', '.kccca', '.kcaAA', '.kccca', 'kkkkkk', 'kCCCCC', '.kkkkk']),
+    lucky: ['............', '...kkkkkk...', '..kccccccck.', '.kcccaAcccck', '.kccaAacccck', '.kcccaaccCck', '.kkkkkkkkkkk', '......kCCCCk', '.......kkkk.', '............'],
     scholar: ['.....kk.....', '....kcck....', '....kcck....', '...kccyck...', '...kcccck...', '..kccccyck..', '..kccccccck.', 'kkkkkkkkkkkk', 'kCCCCCCCCCCk', 'kkkkkkkkkkkk'],
     aviator: sym(['....kk', '..kkcc', '.kcccc', 'kmmmkc', 'kmaAmk', 'kkmmkc', '.kcccc', '.kckkk', '.kk...', '......']),
-    storm: ['............', '............', '..kkkkkkkkk.', '.kccccccaAck', 'kccccccaAcck', 'kcccccaacck.', '.kkkkkaakk..', '..kk..kak...', '.kck...kk...', '.kk.........'],
+    storm: ['...kkkk.....', '..kAAaakk...', '..kaaaaaak..', '...kkkkkkkk.', '..kMMmmmmnk.', '.kMmmmmmmmnk', '.kmmkkkkkmnk', '.kmknnnnnknk', '.kmknnnnnknk', '.kkkkkkkkkkk'],
+    hood: ['....kkkk....', '..kkccccck..', '.kccccccCck.', '.kcCcccCCck.', 'kcCkkkkkkCck', 'kcCkkLkLkCck', 'kcCkcccccCck', 'kcCkcCcCcCck', '.kCCkkkkkCk.', '..kkk...kk..'],
   },
   charm: {
     cloak: sym(['...kkk', '..kccc', '.kcCCC', '.kcCkk', 'kcckaA', 'kcccka', 'kccccc', 'kcCccc', 'kccCcc', 'kcccCc', 'kCcccc', '.kkkkk']),
@@ -650,38 +734,180 @@ const GEAR_ICON = {
     vest: sym(['......', '.kkk..', 'kccckk', 'kccckw', 'kcyckw', '.kcckw', '.kyckw', '.kcckw', '.kdddd', '.kcckk', '..kkk.', '......']),
     robe: sym(['......', '.kkk..', 'kccckk', 'kccckY', 'kcccky', '.kccka', '.kcccy', '.kcccy', '.kcccy', '.kcccy', '.kcccc', '.kkkkk']),
     jerkin: sym(['......', '..kk..', '.kcckk', 'kccccc', 'kcaccc', '.kaccc', '.kcacc', '.kccac', '.kdddy', '.kcccc', '.kcckk', '.kkk..']),
-    mail: sym(['......', '.kkk..', 'kmnmkk', 'knmnmn', 'kmnmna', '.knmaa', '.kmnmA', '.knmnm', '.kmnmn', '.kdddd', '..kmnm', '...kkk']),
+    mail: sym(['......', '.kkk..', 'kmnmkk', 'knmnka', 'kmnmka', '.knmka', '.kmnka', '.knmka', '.kmnka', '.kddka', '..kmka', '...kkk']),
+    shadow: ['....kkkk....', '..kkccCCkk..', '.kcccccccCk.', 'kccwccccwcCk', 'kcccwccwccCk', 'kccccwwcccCk', 'kCcccyycccCk', 'kCccccccccCk', 'kCCcccccccCk', 'kCCcccccCCCk', '.kCCCcCCCCk.', '..kkkkkkkk..'],
   },
 };
-// What your miner wears: a helmet over the head (rows 0-6) and armor over the body (rows 10-13).
-const BLANK16 = '................';
-const wornRows = (top, rows) => { const out = Array(16).fill(BLANK16); rows.forEach((r, i) => { out[top + i] = r; }); return out; };
-const torso = (sh, mid1, mid2, hem = null) => wornRows(10, [sh.length === 16 ? sh : '...kk' + sh + 'kk...', '..k' + mid1 + '....', '..k' + mid2 + '....'].concat(hem ? [hem] : [])); // the hand (column 12) stays bare
+// What your miner wears, as layers over the 24-pixel miner: a helmet over the head and armor over
+// the body. '.' keeps the miner underneath. Armor stops above the legs so both walk frames fit.
+const BLANK24 = '........................';
+const worn24 = (top, rows) => { const out = Array(24).fill(BLANK24); rows.forEach((r, i) => { out[top + i] = (r + BLANK24).slice(0, 24); }); return out; };
 const GEAR_WORN = {
   helm: {
-    prospector: wornRows(0, [BLANK16, '.....kkkkk......', '....kmmmmmkk....', '...kmmMmmmmmkk..', '...kmmmmmmmmkLk.', '..knnnnnnnnnkLk.', '..kkkkkkkkkkkk..']),
-    horned: wornRows(0, [BLANK16, '.k............k.', '.kok.kkkkkk.kok.', '..kokmmmmmmkok..', '...kmMmmmmmmk...', '...knnnnnnnnk...', '...kkkkkkkkkk...']),
-    lucky: wornRows(3, ['.....kkkkkk.....', '....kcccaAck....', '...kccccaaackkk.', '...k.kkkkkkCCCCk']),
-    scholar: wornRows(0, ['...kk...........', '..kcck..........', '...kcyk.........', '...kccckk.......', '....kccccck.....', '..kkkkkkkkkkkk..', '.kCCCCCCCCCCCCk.']),
-    aviator: wornRows(3, ['.....kkkkkk.....', '....kccccccck...', '...kccckmaAmk...', '..kckkkkkmmkk...']),
-    storm: wornRows(6, ['.kcccccccaAk....']),
+    storm: worn24(1, [
+      '....kkkk',
+      '...kAAAakk',
+      '...kaaaaaak',
+      '....kaakkkkkk',
+      '....kkMMMmmmmnk',
+      '...kMMMmmmmmmnnk',
+      '...kMmmmmmmmmmnk',
+      '...kmmkkkkkkkmnk',
+      '...kmk.......knk',
+      '...kmk.......knk',
+      '...knk.......kdk',
+    ]),
+    horned: worn24(1, [
+      'kk...............kk',
+      'kok.............kok',
+      'kook...........kook',
+      '.koook.kkkkkk.koook',
+      '..kooMMMMmmmmmmook',
+      '...kkMMmmmmmmnkk',
+      '...kMMmmmmmmmmnk',
+      '...kddddddddddnk',
+      '...knk...mk...kdk',
+      '...kdk...nk...kdk',
+    ]),
+    hood: worn24(3, [
+      '......kkkkkk',
+      '....kkcccccckk',
+      '...kcccccccccCk',
+      '..kccccccccccCk',
+      '..kcCcCcccccCCk',
+      '..kcCk.......kCk',
+      '..kcCk.......kCk',
+      '..kcCk.......kCk',
+      '..kcCkcccccccCCk',
+      '...kCkCcCcCcCkk',
+      '....kkkkkkkkk',
+    ]),
+    aviator: worn24(3, [
+      '.......kkkkk',
+      '.....kkcccccck',
+      '....kcccccccccCk',
+      '...kcccccccccccCk',
+      '...kkkkkkkkkkkkkk',
+      '...kmkAakmkAakmk',
+      '...kkkaakkkaakkk',
+      '...kCk.......kCk',
+    ]),
+    prospector: worn24(1, [
+      '..........kk',
+      '.........kAak',
+      '....kkkkkkaak',
+      '...kcccccckak',
+      '...kcCCCCCcakk',
+      '...kcccccccccck',
+      '...kyyyyyyyyyyk',
+      '.kkcccccccccccckk',
+      'kCCCCCCCCCCCCCCCCk',
+      '.kkkkkkkkkkkkkkkk',
+    ]),
+    lucky: worn24(3, [
+      '.....kkkkkkk',
+      '....kcccccccck',
+      '...kcccccaAccCk',
+      '...kccccaAacccCk',
+      '...kcccccaacccCk',
+      '...kkkkkkkkkkkkkkk',
+      '..........kCCCCCCk',
+      '...........kkkkkk',
+    ]),
+    scholar: worn24(0, [
+      '............kk',
+      '...........kcCk',
+      '..........kccCk',
+      '.........kcAcCk',
+      '........kccccCk',
+      '.......kcccccCk',
+      '......kccAcccCCk',
+      '.....kcccccccCCk',
+      '..kkkyyyyyyyyyyykk',
+      '.kcccccccccccccccck',
+      '..kkkkkkkkkkkkkkkk',
+    ]),
   },
   charm: {
-    cloak: torso('ccaAcc', 'Ccccccccc', 'CccccccCc'),
-    plate: torso('..kMMmmmmmmMMk..', 'nmmmMmmmm', 'nmmmmmmmm', '...kddddddddk...'),
-    vest: torso('cwwwwc', 'Cccwwwwcc', 'Ccywwwwyc'),
-    robe: torso('cyyyyc', 'Cccyayccc', 'Ccccycccc', '...kCccccccCk...'),
-    jerkin: torso('caccac', 'Ccaccacca', 'Cddddyddd'),
-    mail: torso('nmnmnm', 'mnmnaamnm', 'nmnaamnmn'),
+    plate: worn24(13, [
+      '.kkkMMMkkkkkkkMMkk',
+      'kMMMmmmMmmmmmMmmmnk',
+      'kmmnkmMmmmmmmmknnmk',
+      'kmnnkmmmMmmmmmknnmk',
+      '.kkkkmmmmmmmmnk.kk',
+      '.....kdddyddddk',
+    ]),
+    mail: worn24(13, [
+      '.kkkMMmkkkkkkMMmkk',
+      'kMMMmmnkaaAaakmmmnk',
+      'kmmnkmmkaayaakknnmk',
+      'kmnnkmmkayyyakknnmk',
+      '.kkkkmmkaayaakk.kk',
+      '.....kdkaaaaakk',
+      '.......kaaaaak',
+      '.......kkkkkkk',
+    ]),
+    shadow: worn24(13, [
+      '..kkCccCkkkkCccCkk',
+      '.kCccccCcccccCcccCk',
+      '.kCCkcwccccccwckCCk',
+      '.kCCkccwccccwcckCCk',
+      '.kCCkcccwccwccckCCk',
+      '..kCkdddddyddddkCk',
+      '..kCCk.........kCCk',
+      '...kk...........kk',
+    ]),
+    jerkin: worn24(13, [
+      '..kkaAAakkkkkkcckk',
+      '.kaaaAaacccccccccck',
+      '.kcCkaacwccccccCkcCk',
+      '.kcCkcccwcccccckcCk',
+      '.kcCkccccwccccckcCk',
+      '.....kddddyddddk',
+    ]),
+    vest: worn24(13, [
+      '..kkbbbkoooookbbkk',
+      '.kcccccoooooocccccck',
+      '.kcCkcckoyookcckCck',
+      '.kcCkcckooyokcckCck',
+      '.kcCkcckoyookcckCck',
+      '.....kdddyddddkyk',
+      '..............kYk',
+    ]),
+    cloak: worn24(12, [
+      '..kkk.........kkk',
+      '.kccckkkAkkkkccck',
+      'kCcccccaAacccccCCk',
+      'kCcckbbbabbbbkccCk',
+      'kCcckbbbbbbbbkccCk',
+      'kCcckbbbbbbbbkccCk',
+      'kCCckddddyddddkcCk',
+      'kCCCk.........kCCk',
+      '.kkk...........kkk',
+    ]),
+    robe: worn24(13, [
+      '..kkcccykkkkycckk',
+      '.kcccccyccccyccccck',
+      '.kcCkccyccccycckCck',
+      '.kcCkccyyyyyycckCck',
+      '.kcCkccccaccccckCck',
+      '..kkkccccccccccckk',
+      '....kcccccccccccck',
+      '....kyyyyyyyyyyyyk',
+    ]),
   },
 };
+
 // Each style's own colours: accent (a), cloth (c). Metal comes from the material, gems from rarity.
 const STYLE_ART = {
   war: { a: '#a83a3a' }, gilded: {}, clover: { a: '#3eaa4a', A: '#8ae070' }, rune: { a: '#3ac8ff', A: '#c8f6ff' }, swift: { a: '#7ad0ff', A: '#e8f8ff' }, sword: { a: '#6e4428', A: '#9a6a3a' },
-  prospector: {}, horned: {}, lucky: { c: '#f2ece0', C: '#c8bea8', a: '#3eaa4a', A: '#8ae070' }, scholar: { c: '#3a3a8a', C: '#26265e' },
-  aviator: { c: '#8a5a32', C: '#5e3a1e', a: '#7ad0ff', A: '#e8f8ff' }, storm: { c: '#2e3a6a', C: '#1e2648', a: '#ffd23f', A: '#fff3a0' },
+  daggers: { a: '#3a3550' },
+  prospector: { c: '#6a3a8a', C: '#4a2462', a: '#ff5a6a', A: '#ffc0c8' }, horned: {}, lucky: { c: '#2e7a46', C: '#1e5230', a: '#7ae070', A: '#c8ffb0' },
+  scholar: { c: '#3a4ab8', C: '#26307e', A: '#ffe066' }, aviator: { c: '#8a5a32', C: '#5e3a1e', a: '#7ad0ff', A: '#e8f8ff' },
+  storm: { a: '#d63447', A: '#ff6a78' }, hood: { c: '#3a3550', C: '#24203a' },
   cloak: { c: '#2e7a46', C: '#1e5230', a: '#7ae070', A: '#c8ffb0' }, plate: {}, vest: { c: '#6a3a8a', C: '#4a2462' },
-  robe: { c: '#2e3a8a', C: '#1e2660', a: '#5ad8ff' }, jerkin: { c: '#8a5a32', C: '#5e3a1e', a: '#7ad0ff' }, mail: { a: '#ffd23f', A: '#fff3a0' },
+  robe: { c: '#3a4ab8', C: '#26307e', a: '#ffe066' }, jerkin: { c: '#9a6a3a', C: '#6e4520', a: '#3e8ad6', A: '#8ac8ff', w: '#5e3a1e' },
+  mail: { a: '#d63447', A: '#ff6a78' }, shadow: { c: '#3a3550', C: '#24203a', w: '#7a5a3a' },
 };
 function gearPalette(slot, tier, r, style) {
   const mat = MATERIALS[tier].color, rc = RARITY[r].color, art = STYLE_ART[style] || {};
@@ -693,6 +919,7 @@ function gearPalette(slot, tier, r, style) {
     w: slot === 'charm' ? '#f2ece0' : trim, W: r >= 2 ? shade(rc, -0.2) : '#6e4520', L: r >= 2 ? shade(rc, 0.5) : '#fff7c2',
     g: rc, G: shade(rc, 0.6), y: '#ffcc4d', Y: '#c8901e', o: '#efe6d2',
     a: acc, A: art.A || shade(acc, 0.45), c: cloth, C: art.C ? (r >= 3 ? mix(art.C, rc, 0.2) : art.C) : shade(cloth, -0.3),
+    b: '#3e7bd6', ...(art.w ? { w: art.w } : {}),
   };
 }
 function wornSprite(slot, it) {

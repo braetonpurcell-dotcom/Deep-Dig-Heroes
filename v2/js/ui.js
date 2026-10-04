@@ -1089,7 +1089,7 @@ function showMulti(drops, ctx) {
 
 // ---------- bag ----------
 function buildBag() {
-  let h = `<div class="seg">${[['gear', 'Gear'], ['pets', 'Pets'], ['look', 'Look'], ['index', 'Index']].map(([k, l]) =>
+  let h = `<div class="seg">${[['gear', 'Gear'], ['pets', 'Pets'], ['look', 'Outfits'], ['index', 'Index']].map(([k, l]) =>
     `<button data-act="bagView" data-v="${k}" class="${UI.bagView === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (UI.bagView === 'gear') h += gearViewHtml();
   else if (UI.bagView === 'pets') h += petsViewHtml();
@@ -1100,35 +1100,55 @@ function buildBag() {
   if (q) q.addEventListener('input', onBagSearch);
 }
 
-// ---------- Version 2: the wardrobe ----------
-function hatUnlocked(h) { return !h.isle || islandForFloor(S.stats.bestFloor) >= h.isle; }
-function lookViewHtml() {
-  const L = S.look;
-  const sw = (k, list, cur) => `<div class="swrow">${list.map((c, i) => `<button class="sw ${i === cur ? 'on' : ''}" style="--c:${Array.isArray(c) ? c[0] : c}" data-act="look" data-k="${k}" data-v="${i}" aria-label="${k} colour ${i + 1}"></button>`).join('')}</div>`;
-  let h = `<div class="card lookcard"><div class="lookprev"><img class="f1" src="${spriteUrl(heroSprite(0), 6)}" alt="Your miner"><img class="f2" src="${spriteUrl(heroSprite(1), 6)}" alt=""></div>
-    <div><h3>Your miner</h3><p class="small muted">Pick a hat and colours. Your miner looks like this in the world and in the cave. New islands unlock new hats.</p>
-    <div class="mbtns"><button class="btn small" data-act="lookRandom">Random</button><button class="btn small" data-act="lookReset">Reset</button></div></div></div>`;
-  // Gear or outfit: your equipped helmet and armor show on your miner unless you pick the outfit.
-  const eqH = S.gear.eq.helm, eqA = S.gear.eq.charm;
-  const wearBtns = (k, it) => `<div class="seg wearseg"><button data-act="lookWear" data-k="${k}" data-v="1" class="${L[k] !== false ? 'on' : ''}">${it ? gearStyle(it).name : 'Gear'}</button><button data-act="lookWear" data-k="${k}" data-v="0" class="${L[k] === false ? 'on' : ''}">Outfit</button></div>`;
-  h += `<div class="card"><h3>Wear</h3>
-    <div class="lookrow"><span class="small muted">Head</span>${wearBtns('gearHelm', eqH)}</div>
-    <div class="lookrow"><span class="small muted">Body</span>${wearBtns('gearArmor', eqA)}</div>
-    <p class="small muted" style="margin:6px 0 0">Gear shows the helmet and armor you have equipped${!eqH || !eqA ? ' (equip one in the Gear tab)' : ''}; Outfit shows the hat and shirt you pick below.</p></div>`;
-  h += '<div class="card"><h3>Hat</h3><div class="hatgrid">';
-  for (const hat of LOOK_HATS) {
-    const ok = hatUnlocked(hat), img = spriteUrl(heroSprite(0, { ...L, hat: hat.id, gearHelm: false, gearArmor: false }), 3);
-    h += `<button class="hatbtn ${L.hat === hat.id ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="look" data-k="hat" data-v="${hat.id}">
-      <img src="${img}" alt="" ${ok ? '' : 'style="filter:brightness(0) opacity(.5)"'}><span>${ok ? hat.name : ISLANDS[hat.isle].name}</span></button>`;
+// ---------- Version 2: outfits ----------
+// Each outfit is a class you wear: a tool, a helmet and armor of one style.
+function outfitMain(o) { return GEAR_STYLES.pick.find(x => x.set === o).main; }
+function outfitStyles(o) { const r = {}; for (const slot of SLOT_IDS) r[slot] = GEAR_STYLES[slot].find(x => x.set === o); return r; }
+function outfitBonusLines(o) {
+  const nm = STATS[outfitMain(o)].name, stat = nm === nm.toUpperCase() ? nm : nm.toLowerCase();
+  if (o === 'assassin') return [`2 pieces: +${Math.round(SET_CRIT[2] * 100)}% crit chance`, `3 pieces: +${Math.round(SET_CRIT[3] * 100)}% crit chance and ${OUTFITS[o].perk.toLowerCase()}`];
+  return [`2 pieces: +${Math.round(SET_BONUS[2] * 100)}% ${stat}`, `3 pieces: +${Math.round(SET_BONUS[3] * 100)}% ${stat} and ${OUTFITS[o].perk[0].toLowerCase() + OUTFITS[o].perk.slice(1)}`];
+}
+// Your best piece of an outfit in each slot, from what you wear and your bag.
+function outfitBest(o) {
+  const out = {};
+  for (const it of SLOT_IDS.map(k => S.gear.eq[k]).filter(Boolean).concat(S.gear.bag)) {
+    if (gearStyle(it).set !== o) continue;
+    const cur = out[it.slot];
+    if (!cur || itemStats(it)[0].v > itemStats(cur)[0].v) out[it.slot] = it;
   }
-  h += '</div></div>';
-  h += `<div class="card"><h3>Colours</h3>
-    ${L.hat === 'crown' || L.hat === 'none' ? '' : `<div class="lookrow"><span class="small muted">Hat</span>${sw('hatC', LOOK_CLOTH, L.hatC)}</div>`}
+  return out;
+}
+function outfitLine() {
+  const w = outfitWorn();
+  if (!w) return '<span class="muted">No set bonus: wear two pieces of one outfit.</span>';
+  const o = OUTFITS[w.id], lines = outfitBonusLines(w.id);
+  return `<b style="color:${o.color}">${o.name} ${w.n}/3</b> · ${lines[w.n - 2].replace(/^\d pieces: /, '')}`;
+}
+function lookViewHtml() {
+  const L = S.look, counts = outfitCounts();
+  const sw = (k, list, cur) => `<div class="swrow">${list.map((c, i) => `<button class="sw ${i === cur ? 'on' : ''}" style="--c:${Array.isArray(c) ? c[0] : c}" data-act="look" data-k="${k}" data-v="${i}" aria-label="${k} colour ${i + 1}"></button>`).join('')}</div>`;
+  let h = `<div class="card lookcard"><div class="lookprev"><img class="f1" src="${spriteUrl(heroSprite(0), 5)}" alt="Your miner"><img class="f2" src="${spriteUrl(heroSprite(1), 5)}" alt=""></div>
+    <div><h3>Your outfit</h3><p class="small muted">Your miner wears the helmet and armor you equip. Wear two or three pieces of one outfit for its set bonus. Each outfit has its own job.</p>
+    <div class="small">${outfitLine()}</div></div></div>`;
+  h += '<div class="outfitgrid">';
+  for (const o of OUTFIT_IDS) {
+    const def = OUTFITS[o], best = outfitBest(o), sty = outfitStyles(o), have = SLOT_IDS.filter(k => best[k]).length, wearing = counts[o] || 0;
+    const sample = slot => best[slot] || { slot, st: sty[slot].id, t: 5, r: 2 };
+    const img = spriteUrl(heroSprite(0, L, { helm: sample('helm'), charm: sample('charm') }), 3);
+    const lines = outfitBonusLines(o);
+    h += `<div class="card outfit ${wearing >= 2 ? 'on' : ''}" style="--oc:${def.color}">
+      <div class="outhead"><img src="${img}" alt=""><div class="grow"><b style="color:var(--oc)">${def.name}</b><div class="small">${def.job}</div>
+        <div class="small muted">${sty.pick.name} · ${sty.helm.name} · ${sty.charm.name}</div></div></div>
+      <div class="small">${lines[0]}</div><div class="small">${lines[1]}</div>
+      <div class="outfoot"><span class="small ${have ? '' : 'muted'}">${wearing ? `Wearing ${wearing}/3` : `You own ${have}/3`}</span>
+        <button class="btn small ${wearing === 3 || !have ? '' : 'gold'}" data-act="wearOutfit" data-o="${o}" ${have && wearing < have ? '' : 'disabled'}>${wearing && wearing >= have ? 'Worn' : 'Wear best'}</button></div></div>`;
+  }
+  h += '</div>';
+  h += `<div class="card"><h3>Your miner</h3>
     <div class="lookrow"><span class="small muted">Hair</span>${sw('hair', LOOK_HAIR, L.hair)}</div>
     <div class="lookrow"><span class="small muted">Skin</span>${sw('skin', LOOK_SKIN, L.skin)}</div>
-    <div class="lookrow"><span class="small muted">Shirt</span>${sw('shirt', LOOK_CLOTH, L.shirt)}</div>
-    <div class="lookrow"><span class="small muted">Pants</span>${sw('pants', LOOK_CLOTH, L.pants)}</div>
-    <div class="lookrow"><span class="small muted">Boots</span>${sw('boots', LOOK_BOOTS, L.boots)}</div></div>`;
+    <div class="mbtns"><button class="btn small" data-act="lookRandom">Random</button><button class="btn small" data-act="lookReset">Reset</button></div></div>`;
   return h;
 }
 
@@ -1145,6 +1165,7 @@ function gearViewHtml() {
       <span class="sn">${gearStyle(it).name}${it.lv ? ' +' + it.lv : ''}</span><span class="sv">${statText(main.k, main.v)}</span></button>`;
   }
   h += '</div>';
+  h += `<div class="row small setline">${outfitLine()}</div>`;
   h += `<div class="row small">${icon('scrap', '')}<span><b>${fmt(S.scrap)}</b> scrap · bag ${S.gear.bag.length}/${BAG_SIZE}</span></div>
     <div class="bagtools">
       <button class="btn small" data-act="bulkPick">${salvageLabel(bulkR())} ▸</button>
@@ -1383,7 +1404,8 @@ function showItem(id) {
   openModal(`<button class="lockbtn ${it.locked ? 'on' : ''}" data-act="lockItem" data-id="${it.id}" aria-pressed="${it.locked}" aria-label="${it.locked ? 'Unlock item' : 'Lock item'}">${icon(it.locked ? 'lock' : 'unlock', '')}<small>${it.locked ? 'Locked' : 'Lock'}</small></button>
     <div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r, false, it.st)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}${it.lv ? ' +' + it.lv : ''}</div>
-    <div class="rsub">${it.slot === 'pick' ? 'Tool' : SLOTS[it.slot].name} · ${STATS[gearStyle(it).main].name.toLowerCase()} style${it.slot !== 'pick' ? ', worn on your miner' : ', held in the cave'}</div>
+    <div class="rsub"><b style="color:${OUTFITS[gearStyle(it).set].color}">${OUTFITS[gearStyle(it).set].name} outfit</b> · ${it.slot === 'pick' ? 'Tool' : SLOTS[it.slot].name} · ${OUTFITS[gearStyle(it).set].job.toLowerCase()}</div>
+    <div class="rsub small">${outfitBonusLines(gearStyle(it).set).join(' · ')}</div>
     <div class="rsub">${MATERIALS[it.t].name} (B${(it.t - 1) * MATERIAL_FLOORS + 1}+ material) · ${wearHtml(it)}</div>
     <div class="rsub">${RARITY[it.r].name} ${WEAR[wearIndex(it.fl)].short} pulls are ${oddsLong(dropOdds(it.r, it.fl))}</div>
     ${lines}<div class="rsub">Reforging adds +10% to every stat (max +${MAX_ITEM_LEVEL}).</div></div>${cmp}
@@ -1644,9 +1666,8 @@ function showV2Welcome() {
   const row = (img, title, text) => `<div class="v2row">${img}<div><b>${title}</b><div class="small muted">${text}</div></div></div>`;
   const im = (src, w = 40) => `<img src="${src}" alt="" style="width:${w}px;image-rendering:pixelated">`;
   openModal(`<h2>Welcome to Version 2</h2>
-    ${row(im(spriteUrl(heroSprite(0), 3)), 'Your town', 'Swipe left and right to explore. Tap a building to go in; ◂ World brings you back. The Cave on the far right is where you fight.')}
-    ${row(im(spriteUrl(heroSprite(0, { ...S.look, hat: 'viking', shirt: 1 }), 3)), 'Character design', 'The House has a Look tab: hats and colours for your miner. New islands unlock new hats.')}
-    ${row(im(spriteUrl(heroSprite(0, { ...S.look, gearHelm: true, gearArmor: true }, { helm: { slot: 'helm', st: 'horned', t: 9, r: 3 }, charm: { slot: 'charm', st: 'plate', t: 9, r: 3 } }), 3)), 'Gear you can see', 'Tools, helmets and armor come in six styles: damage, coins, luck, XP, speed and tap strike. Swords too. Your miner wears what you equip.')}
+    ${row(im(spriteUrl(heroSprite(0), 3)), 'Your town', 'Hold ◀ or ▶ to walk, or swipe to look around. Tap a building to go in; ◂ World brings you back. The Cave on the far right is where you fight.')}
+    ${row(im(spriteUrl(heroSprite(0, S.look, { helm: { slot: 'helm', st: 'storm', t: 9, r: 3 }, charm: { slot: 'charm', st: 'mail', t: 9, r: 3 } }), 3)), 'Outfits', 'Gear comes in seven outfits: Warrior, Knight, Assassin, Scout, Merchant, Gambler and Wizard. Your miner wears them, and two or three pieces of one outfit give a set bonus for its job.')}
     ${row(im(petUrl('drake', false, 3)), 'Classes', 'At the Temple, save your skills, gear, pets and look as a class and switch in one tap.')}
     ${row(im(drillUrl(1, 3), 52), 'The drill', "The Market's Drill tab sells Drill Crates. Every part levels your drill, which replaces your pickaxe and evolves every 10 levels.")}
     ${row(`<span class="isleswatch" style="background:${ISLE_STYLE.frost.swatch}"></span>`, 'Islands', 'Every 50 floors is a new island with its own look. Sail between them from the Harbor by the bridge.')}
@@ -1695,10 +1716,9 @@ on('isles', list => {
 });
 function showIslesArrived(list) {
   const keys = list.reduce((a, x) => a + x.keys, 0), last = ISLANDS[list[list.length - 1].i];
-  const hats = LOOK_HATS.filter(h => h.isle && list.some(x => x.i === h.isle));
   openModal(`<h2>${list.length > 1 ? 'New islands reached!' : 'Land ho: ' + last.name + '!'}</h2>
     <div class="islelist">${list.map(x => { const isl = ISLANDS[x.i]; return `<div class="isleopt on"><span class="isleswatch" style="background:${ISLE_STYLE[isl.id].swatch}"></span><span class="grow"><b>${isl.name}</b><small>B${isl.from}+ · ${isl.blurb}</small></span></div>`; }).join('')}</div>
-    <p style="text-align:center">+${keys} keys · +${Math.round(ISLE_COINS * list.length * 100)}% coins forever${hats.length ? `<br>New ${hats.length > 1 ? 'hats' : 'hat'} in the House: ${hats.map(h => h.name).join(', ')}` : ''}</p>
+    <p style="text-align:center">+${keys} keys · +${Math.round(ISLE_COINS * list.length * 100)}% coins forever</p>
     <p class="small muted" style="text-align:center">The world turns into each island as you dig past it. Sail back to any island from the Harbor by the bridge.</p>
     <div class="mbtns"><button class="btn gold" data-act="close">Explore</button></div>`, { dismissable: true });
   SFX.levelup();
@@ -1873,24 +1893,25 @@ function handleAction(el) {
       break;
     }
     case 'bagView': if (UI.bagView === 'gear') markItemsSeen(); UI.bagView = d.v; buildBag(); break;
-    case 'look': {
-      if (d.k === 'hat') {
-        const hat = LOOK_HATS.find(x => x.id === d.v);
-        if (!hat) break;
-        if (!hatUnlocked(hat)) { toast(`Reach ${ISLANDS[hat.isle].name} (B${ISLANDS[hat.isle].from}) to unlock the ${hat.name}`, 'gold'); break; }
-        S.look.hat = hat.id;
-      } else S.look[d.k] = Number(d.v);
-      SFX.click(); buildBag();
-      break;
-    }
+    case 'look': if (d.k === 'hair' || d.k === 'skin') { S.look[d.k] = Number(d.v); SFX.click(); buildBag(); } break;
     case 'lookRandom': {
-      const pick = n => Math.floor(Math.random() * n), hats = LOOK_HATS.filter(hatUnlocked);
-      S.look = { ...S.look, hat: hats[pick(hats.length)].id, hatC: pick(LOOK_CLOTH.length), hair: pick(LOOK_HAIR.length), skin: pick(LOOK_SKIN.length), shirt: pick(LOOK_CLOTH.length), pants: pick(LOOK_CLOTH.length), boots: pick(LOOK_BOOTS.length) };
+      const pick = n => Math.floor(Math.random() * n);
+      S.look = { ...S.look, hair: pick(LOOK_HAIR.length), skin: pick(LOOK_SKIN.length) };
       SFX.click(); buildBag();
       break;
     }
     case 'lookReset': S.look = { ...DEFAULT_LOOK }; SFX.click(); buildBag(); break;
-    case 'lookWear': S.look[d.k] = d.v === '1'; SFX.click(); buildBag(); break;
+    case 'wearOutfit': {
+      const o = d.o, best = outfitBest(o);
+      let n = 0;
+      for (const slot of SLOT_IDS) { const it = best[slot]; if (it && S.gear.eq[slot] !== it && equipItem(it.id)) n++; }
+      if (!n) break;
+      SFX.equip ? SFX.equip() : SFX.click();
+      const w = outfitWorn();
+      toast(`${OUTFITS[o].name} on${w && w.id === o ? ` (${w.n}/3)` : ''}`, 'gold');
+      buildBag();
+      break;
+    }
     case 'item': showItem(Number(d.id)); break;
     case 'equipItem':
       if (equipItem(Number(d.id))) { SFX.buy(); toast('Equipped', 'good'); }

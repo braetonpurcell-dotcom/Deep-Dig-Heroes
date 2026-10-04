@@ -450,17 +450,28 @@ function computeStats() {
   const sk = skillRank;
   const up = upgradeLevel;
   const add = { dmg: 0, coin: 0, luck: 0, aps: 0, crit: 0, critdmg: 0, xp: 0, strike: 0 };
+  let coinMain = 0; // coins from Merchant pieces' main stat: half of it while you push new floors
+  const sets = outfitCounts();
   for (const slot of SLOT_IDS) {
     const it = S.gear.eq[slot];
-    if (it) for (const s of itemStats(it)) add[s.k] += s.v;
+    if (!it) continue;
+    const o = gearStyle(it).set, setMult = o === 'assassin' ? 1 : 1 + SET_BONUS[sets[o]];
+    for (const s of itemStats(it)) {
+      const v = s.main ? s.v * setMult : s.v;
+      add[s.k] += v;
+      if (s.main && s.k === 'coin') coinMain += v;
+    }
   }
+  add.crit += SET_CRIT[sets.assassin || 0];
   for (const p of S.pets.eq) {
     const def = PETS[p.sp];
     for (const k in def.stats) add[k] += def.stats[k] * petPower(k, p.r);
   }
   const trophy = 1 + TROPHY_BONUS * S.trophies;
   const coll = 1 + COLLECTION_BONUS * collectionCount();
-  const st = { add };
+  const st = { add, outfit: outfitWorn() };
+  const perk = o => st.outfit && st.outfit.id === o && st.outfit.n >= 3 ? OUTFIT_PERK[o] : 0;
+  st.perk = perk;
   const fx = treeFx();
   st.fx = fx;
   st.deepDiver = sk('deepdiver') > 0;
@@ -485,7 +496,7 @@ function computeStats() {
   // The tap pad's own difficulty is the real limit on the combo.
   st.comboCap = paceComboCap();
   st.comboKeep = Math.min(0.96, TAP_KEEP + 0.02 * sk('ironmind'));
-  st.decay = 6 + 2 * sk('focus');
+  st.decay = (6 + 2 * sk('focus')) * (1 + perk('knight'));
   st.bossMult = 1 + 0.3 * sk('executioner');
   st.overdrive = sk('overdrive') > 0;
   st.goldDrill = sk('golddrill') > 0 ? GOLD_DRILL : 1;
@@ -495,14 +506,15 @@ function computeStats() {
     * (1 + 0.02 * branchPoints('tycoon')) * (1 + 0.003 * sk('compound') * S.run.maxFloor)
     * trophy * coll * st.boost * (1 + (fx.coin || 0)) * (1 + 0.25 * ptLevel('fortune')) * (st.deepDiver ? 1.6 : 1) * (sk('m-coins') ? 1.5 : 1)
     * (1 + ISLE_COINS * (S.isle ? S.isle.claimed : 0));
+  st.coinPushMult = st.coinMult * (1 + add.coin - coinMain * (1 - MERCHANT_PUSH.keep)) / (1 + add.coin);
   st.xpMult = (1 + 0.1 * up('scholar')) * (1 + add.xp) * (1 + (fx.xp || 0)) * (1 + 0.25 * ptLevel('wisdom')) * (st.deepDiver ? 1.6 : 1)
-    * (1 + 0.1 * sk('insight')) * (sk('m-xp') ? 1.5 : 1);
+    * (1 + 0.1 * sk('insight')) * (sk('m-xp') ? 1.5 : 1) * (1 + perk('wizard'));
   // The Gambler's luck multiplies all your luck (gear, prestige), so a luck build really is the luckiest.
   const treeLuck = 0.1 * sk('lucky') + 0.02 * branchPoints('gambler') + (fx.luck || 0);
   st.luck = (add.luck + PRESTIGE_LUCK * Math.min(S.prestiges, PRESTIGE_LUCK_MAX) + 0.1 * ptLevel('favor')) * (1 + treeLuck)
     * (sk('allin') ? 2.5 : 1) * (sk('m-luck') ? 1.5 : 1) + treeLuck;
   st.rareBoost = sk('m-luck') ? 1.5 : 1; // Luck Mastery: Legendary and up 1.5x more likely, on top of luck
-  st.caseCostMult = sk('allin') ? 1.5 : 1;
+  st.caseCostMult = (sk('allin') ? 1.5 : 1) * (1 - perk('gambler'));
   st.caseDiscount = Math.min(0.6, 0.06 * sk('haggler') + (fx.disc || 0));
   st.epicPity = EPIC_PITY - 2 * sk('pity');
   st.scrapMult = 1 + 0.25 * sk('scrapper') + (fx.scrap || 0);
@@ -510,7 +522,7 @@ function computeStats() {
   st.bonusKey = 0.25 * sk('keymaster');
   st.bossKeys = sk('m-loot') ? 1 : 0;
   st.jackpot = sk('jackpot') > 0 ? 2 : 1;
-  st.offlineRate = 0.4 + 0.1 * sk('nightshift') + (sk('ledger') ? 0.4 : 0);
+  st.offlineRate = (0.4 + 0.1 * sk('nightshift') + (sk('ledger') ? 0.4 : 0)) * (1 + perk('scout'));
   st.offlineCap = (4 + 2 * sk('deeppockets')) * 3600;
   st.oreRate = 1 + 0.2 * sk('oresense') + (fx.ore || 0);
   return st;
@@ -588,7 +600,8 @@ function flowSpeed() { return 0.7 * clamp(R.flow || 0, 0, 1); }
 function situational(e) {
   let m = 1;
   if (R.frenzyT > 0) m *= 3;
-  if (e.boss) m *= ST.bossMult;
+  if (e.boss) m *= ST.bossMult * (1 + ST.perk('assassin'));
+  if (!farming()) m *= 1 + ST.perk('warrior');
   if (S.math.streak === 0) m *= ST.goldDrill;
   return m;
 }
@@ -611,7 +624,7 @@ function dealDamage(e, d, kind) {
 function killEnemy(e) {
   const f = S.run.floor;
   const def = ENEMIES[e.type];
-  let coins = coinUnit(f) * def.coin * ST.coinMult;
+  let coins = coinUnit(f) * def.coin * (farming() ? ST.coinMult * (1 + ST.perk('merchant')) : ST.coinPushMult);
   let xp = xpUnit(f) * def.xp * ST.xpMult;
   if (e.boss) { coins *= 10; xp *= 8; }
   const rush = S.run.rush;
@@ -1604,11 +1617,25 @@ function itemStats(it) {
   const lv = 1 + 0.1 * it.lv;
   const q = quality(it.fl);
   const main = gearStyle(it).main;
-  const boost = MAIN_SUBLIKE[main];
-  const out = [{ k: main, v: boost ? statValue(main, it.r, it.t, q * lv * boost, true) : statValue(main, it.r, it.t, q * lv), main: true }];
+  const boost = MAIN_SUBLIKE[main], mm = MAIN_MULT[main] || 1;
+  const out = [{ k: main, v: boost ? statValue(main, it.r, it.t, q * lv * boost, true) : statValue(main, it.r, it.t, q * lv * mm), main: true }];
   for (const s of it.subs) out.push({ k: s.k, v: statValue(s.k, it.r, it.t, q * s.roll * lv, true) * 0.5 });
   return out;
 }
+// Outfit pieces you wear, counted per outfit, and the outfit with a set bonus (two or more pieces).
+function outfitCounts(eq = S.gear.eq) {
+  const n = {};
+  for (const slot of SLOT_IDS) if (eq[slot]) { const o = gearStyle(eq[slot]).set; n[o] = (n[o] || 0) + 1; }
+  return n;
+}
+function outfitWorn(eq = S.gear.eq) {
+  const n = outfitCounts(eq);
+  let best = null;
+  for (const o in n) if (n[o] >= 2 && (!best || n[o] > n[best])) best = o;
+  return best ? { id: best, n: n[best] } : null;
+}
+function hasPerk(o) { return !!(ST && ST.outfit && ST.outfit.id === o && ST.outfit.n >= 3); }
+function farming() { return S.run.floor < S.run.maxFloor; }
 function itemName(it) { return `${MATERIALS[it.t].name} ${gearStyle(it).name}`; }
 function scrapValue(it) {
   const st = ST || { scrapMult: 1 };

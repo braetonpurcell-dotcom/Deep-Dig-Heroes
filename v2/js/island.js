@@ -11,8 +11,11 @@
 // animals, fire, water, smoke, clouds) is drawn on top each frame (drawLive).
 
 const WW = 1200, WH = 300; // world size in world pixels
-const WORLD = { cv: null, ctx: null, img: null, cam: { x: 0, y: 0 }, z: 2, vx: 0, drag: null, moved: false, t: 0, smoke: [], fx: [], dpr: 1, vw: 0, vh: 0 };
 const SPAWN = { x: 110, y: 200 };
+// me: your miner walking the road (hold the arrow buttons); held is -1, 0 or 1.
+const WORLD = { cv: null, ctx: null, img: null, cam: { x: 0, y: 0 }, z: 2, vx: 0, drag: null, moved: false, t: 0, smoke: [], fx: [], dpr: 1, vw: 0, vh: 0,
+  me: { x: SPAWN.x, dir: 1, held: 0, walkT: 0 } };
+const WALK_SPEED = 70; // world pixels a second
 const RIVER = [748, 872]; // the river's west and east banks
 const DOOR_Y = 168; // the bottom of every door on the north side of the road
 const POND = { x: 250, y: 250, rx: 30, ry: 14 };
@@ -829,7 +832,7 @@ function drawLive(g, dt, t) {
   // The spawn pad glow, a boss waiting in the cave, and you.
   g.globalAlpha = 0.35 + 0.25 * Math.sin(t * 3); g.fillStyle = '#c8f8ff'; g.fillRect(SPAWN.x - 6, SPAWN.y + 1, 12, 4); g.globalAlpha = 1;
   if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { g.fillStyle = '#ff3040'; g.fillRect(1139, 160, 2, 1); g.fillRect(1149, 160, 2, 1); glow(g, 1145, 162, 14, 'rgba(255,40,60,0.25)'); }
-  g.drawImage(heroSprite(0), SPAWN.x - 8, SPAWN.y - 13 + (Math.floor(t * 2) % 2), 16, 16);
+  drawMe(g, t);
   drawBubbles(g, dt);
   drawWeather(g, t);
   // Birds crossing high up (not at night or over the lava), and slow cloud shadows over everything.
@@ -884,11 +887,50 @@ function drawWorld(dt) {
   const H = WORLD.cv.height, vg = g.createLinearGradient(0, 0, 0, H);
   vg.addColorStop(0, 'rgba(10,20,30,0.28)'); vg.addColorStop(0.18, 'rgba(10,20,30,0)'); vg.addColorStop(0.85, 'rgba(10,20,30,0)'); vg.addColorStop(1, 'rgba(10,20,30,0.3)');
   g.fillStyle = vg; g.fillRect(0, 0, WORLD.cv.width, H);
-  // Arrows at the edges while there's more to see that way.
-  const l = $('#edgeL'), rgt = $('#edgeR');
-  if (l) l.classList.toggle('show', WORLD.cam.x > 4);
-  if (rgt) rgt.classList.toggle('show', WORLD.cam.x < WW - WORLD.vw / z - 4);
 }
+
+// You and your first pet on the road. Walking swaps the leg frames; facing left mirrors the sprite.
+function drawMe(g, t) {
+  const me = WORLD.me, x = Math.round(me.x), y = roadY(me.x);
+  const step = me.held ? Math.floor(me.walkT * 8) % 2 : 0, bob = me.held ? 0 : Math.floor(t * 2) % 2;
+  const pet = S.pets.eq[0];
+  if (pet) {
+    const def = PETS[pet.sp], spr = petSprite(pet.sp, pet.r), pad = spr.fxPad || 0, px = x - me.dir * 20;
+    const py = def.fly ? y - 30 + Math.round(Math.sin(t * 5) * 2) : y - 12 - (me.held && Math.floor(me.walkT * 8) % 2 ? 1 : 0);
+    if (!def.fly) { g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(px - 5, y + 2, 10, 2); }
+    g.save(); g.translate(px, 0); if (me.dir < 0) g.scale(-1, 1); g.drawImage(spr, -8 - pad, py - pad); g.restore();
+  }
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x - 7, y + 2, 14, 2);
+  g.save(); g.translate(x, 0); if (me.dir < 0) g.scale(-1, 1);
+  g.drawImage(heroSprite(step), -10, y - 21 + bob, 24, 24);
+  g.restore();
+}
+// Hold an arrow to walk; the camera keeps you inside the middle of the screen.
+function walkStep(dt) {
+  const me = WORLD.me;
+  if (!me.held) return;
+  me.dir = me.held; me.walkT += dt;
+  me.x = Math.max(24, Math.min(WW - 24, me.x + me.held * WALK_SPEED * dt));
+  const span = WORLD.vw / WORLD.z, lo = WORLD.cam.x + span * 0.35, hi = WORLD.cam.x + span * 0.65;
+  if (me.x < lo) WORLD.cam.x -= lo - me.x; else if (me.x > hi) WORLD.cam.x += me.x - hi;
+  WORLD.vx = 0; clampCam(); placeLayer();
+}
+function bindWalk(btn, dir) {
+  const stop = () => { if (WORLD.me.held === dir) WORLD.me.held = 0; btn.classList.remove('on'); };
+  btn.addEventListener('pointerdown', e => {
+    e.stopPropagation(); e.preventDefault(); audioUnlock();
+    try { btn.setPointerCapture(e.pointerId); } catch (_) { /* fine without capture */ }
+    WORLD.me.held = dir; btn.classList.add('on');
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) btn.addEventListener(ev, stop);
+  btn.addEventListener('click', e => e.stopPropagation());
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+}
+document.addEventListener('keydown', e => {
+  if (UI.tab !== 'island' || UI.modalOpen || e.repeat) return;
+  if (e.key === 'ArrowLeft') WORLD.me.held = -1; else if (e.key === 'ArrowRight') WORLD.me.held = 1;
+});
+document.addEventListener('keyup', e => { if ((e.key === 'ArrowLeft' && WORLD.me.held < 0) || (e.key === 'ArrowRight' && WORLD.me.held > 0)) WORLD.me.held = 0; });
 
 // ---------- camera: swipe left and right only, with a little glide ----------
 function clampCam() { WORLD.cam.x = Math.max(0, Math.min(WW - WORLD.vw / WORLD.z, WORLD.cam.x)); WORLD.cam.y = Math.max(0, (WH - WORLD.vh / WORLD.z) / 2); }
@@ -923,7 +965,7 @@ function islandHtml() {
     h += `<button class="sign" ${act} aria-label="${b.name}" style="left:${b.x + b.w / 2}px;top:${sy}px">${b.name}<small id="isl-${b.tab}"></small><i class="dot"></i></button>`;
   }
 
-  h += '</div><div class="edge l" id="edgeL">◀</div><div class="edge r" id="edgeR">▶</div><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button><div class="islebanner" id="isleBanner"></div><button class="bossalert" id="bossAlert" data-act="worldBoss" hidden></button></div>';
+  h += '</div><button class="walk l" id="walkL" aria-label="Walk left">◀</button><button class="walk r" id="walkR" aria-label="Walk right">▶</button><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button><div class="islebanner" id="isleBanner"></div><button class="bossalert" id="bossAlert" data-act="worldBoss" hidden></button></div>';
   return h;
 }
 
@@ -942,7 +984,8 @@ function buildIsland() {
       const r = $('#world').getBoundingClientRect();
       worldTap(WORLD.cam.x + (e.clientX - r.left) / WORLD.z, WORLD.cam.y + (e.clientY - r.top) / WORLD.z);
     });
-    $('#toSpawn').addEventListener('click', e => { e.stopPropagation(); centerOnSpawn(); SFX.click(); });
+    $('#toSpawn').addEventListener('click', e => { e.stopPropagation(); WORLD.me.x = SPAWN.x; WORLD.me.dir = 1; centerOnSpawn(); SFX.click(); });
+    bindWalk($('#walkL'), -1); bindWalk($('#walkR'), 1);
     sizeIsland();
     centerOnSpawn();
   } else sizeIsland();
@@ -985,6 +1028,7 @@ function islandLoop(now) {
   const dt = Math.min(0.1, (now - (WORLD.last || now)) / 1000);
   WORLD.last = now;
   if (!WORLD.drag && Math.abs(WORLD.vx) > 0.05) { WORLD.cam.x += WORLD.vx; WORLD.vx *= 0.9; clampCam(); placeLayer(); }
+  walkStep(dt);
   // Dug past the next 50 floors, or sailed somewhere: repaint the world as that island.
   const isle = worldIsle();
   if (isle !== WORLD.isle) { WORLD.isle = isle; WORLD.img = paintWorld(); updateIsleBanner(true); showIsleTravel(isle); }

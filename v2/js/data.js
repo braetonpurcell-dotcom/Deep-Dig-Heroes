@@ -323,13 +323,13 @@ const PRESTIGE_TREE = [
 // Gear stats. Values are fractions (0.30 = +30%) except crit, which is flat percentage points.
 const STATS = {
   dmg: { name: 'Damage', base: 0.15, tier: 2.5 },
-  coin: { name: 'Coins', base: 0.15, tier: 2.5 },
+  coin: { name: 'Coins', base: 0.15, tier: 2.3 },
   luck: { name: 'Luck', base: 0.10, tier: 1.45 },
   aps: { name: 'Attack speed', base: 0.05, tier: 1.35 },
   crit: { name: 'Crit chance', base: 0.015, tier: 1.15 },
   critdmg: { name: 'Crit damage', base: 0.20, tier: 1.8 },
   xp: { name: 'XP', base: 0.10, tier: 1.7 },
-  strike: { name: 'Tap strike', base: 0.25, tier: 2.2 },
+  strike: { name: 'Tap strike', base: 0.5, tier: 3.0 },
 };
 const SLOTS = {
   pick: { name: 'Pickaxe', main: 'dmg', weight: 40 },
@@ -485,7 +485,7 @@ const LOOK_HATS = [
   { id: 'viking', name: 'Viking helmet', isle: 3 },
   { id: 'crown', name: 'Crown', isle: 4 },
 ];
-const DEFAULT_LOOK = { hat: 'helmet', hatC: 7, hair: 0, skin: 0, shirt: 0, pants: 11, boots: 0, gearHelm: true, gearArmor: true };
+const DEFAULT_LOOK = { hat: 'helmet', hatC: 7, hair: 1, skin: 0, shirt: 0, pants: 11, boots: 0, gearHelm: true, gearArmor: true };
 
 // Version 2: the drill (Jackson's idea). Drill parts come from the Drill Crate in the Market. Each
 // part adds XP to your drill by its rarity; the drill levels up (more damage and speed) and every
@@ -517,36 +517,62 @@ const DRILL_CRATE_MULT = 2; // a Drill Crate costs twice a Copper Crate
 function drillNeed(lv) { return Math.round(10 * Math.pow(1.12, lv)); } // XP to go from lv to lv + 1
 function drillModelIndex(lv) { let m = -1; DRILL_MODELS.forEach((d, i) => { if (lv >= d.lv) m = i; }); return m; }
 
-// Version 2: gear styles. Every slot comes in six styles, one per main stat, and the style decides
-// how the item looks, both as an icon and on your miner. Items from before styles existed have none
-// and read as the slot's first style, which has the main stat they always had.
+// Version 2: gear styles. Every slot comes in seven styles, one per outfit, and the style decides
+// the main stat and how the item looks, both as an icon and on your miner. Items from before styles
+// existed have none and read as the slot's first style, which has the main stat they always had.
+// Style ids stay as they were first saved; only the names changed when the styles became outfits.
 const GEAR_STYLES = {
   pick: [
-    { id: 'war', main: 'dmg', name: 'War Pick', weight: 40 },
-    { id: 'gilded', main: 'coin', name: 'Gilded Pick', weight: 12 },
-    { id: 'clover', main: 'luck', name: 'Clover Pick', weight: 11 },
-    { id: 'rune', main: 'xp', name: 'Rune Pick', weight: 11 },
-    { id: 'swift', main: 'aps', name: 'Swift Pick', weight: 12 },
-    { id: 'sword', main: 'strike', name: 'Sword', weight: 14 },
+    { id: 'war', main: 'dmg', name: 'Battle Axe', set: 'warrior', weight: 40 },
+    { id: 'gilded', main: 'coin', name: 'Gilded Pick', set: 'merchant', weight: 12 },
+    { id: 'clover', main: 'luck', name: 'Clover Pick', set: 'gambler', weight: 11 },
+    { id: 'rune', main: 'xp', name: 'Rune Staff', set: 'wizard', weight: 11 },
+    { id: 'swift', main: 'aps', name: 'Swift Pick', set: 'scout', weight: 12 },
+    { id: 'sword', main: 'strike', name: 'Sword', set: 'knight', weight: 14 },
+    { id: 'daggers', main: 'critdmg', name: 'Twin Daggers', set: 'assassin', weight: 12 },
   ],
   helm: [
-    { id: 'prospector', main: 'coin', name: 'Prospector Helmet', weight: 36 },
-    { id: 'horned', main: 'dmg', name: 'Horned Helm', weight: 14 },
-    { id: 'lucky', main: 'luck', name: 'Lucky Cap', weight: 13 },
-    { id: 'scholar', main: 'xp', name: "Scholar's Hat", weight: 12 },
-    { id: 'aviator', main: 'aps', name: 'Aviator Goggles', weight: 12 },
-    { id: 'storm', main: 'strike', name: 'Storm Band', weight: 13 },
+    { id: 'prospector', main: 'coin', name: "Merchant's Hat", set: 'merchant', weight: 36 },
+    { id: 'horned', main: 'dmg', name: 'Horned Helm', set: 'warrior', weight: 14 },
+    { id: 'lucky', main: 'luck', name: "Dealer's Cap", set: 'gambler', weight: 13 },
+    { id: 'scholar', main: 'xp', name: 'Wizard Hat', set: 'wizard', weight: 12 },
+    { id: 'aviator', main: 'aps', name: 'Scout Goggles', set: 'scout', weight: 12 },
+    { id: 'storm', main: 'strike', name: "Knight's Helm", set: 'knight', weight: 13 },
+    { id: 'hood', main: 'critdmg', name: 'Assassin Hood', set: 'assassin', weight: 12 },
   ],
   charm: [
-    { id: 'cloak', main: 'luck', name: 'Lucky Cloak', weight: 36 },
-    { id: 'plate', main: 'dmg', name: 'Plate Armor', weight: 14 },
-    { id: 'vest', main: 'coin', name: 'Merchant Vest', weight: 13 },
-    { id: 'robe', main: 'xp', name: 'Scholar Robe', weight: 12 },
-    { id: 'jerkin', main: 'aps', name: 'Runner Jerkin', weight: 12 },
-    { id: 'mail', main: 'strike', name: 'Storm Mail', weight: 13 },
+    { id: 'cloak', main: 'luck', name: 'Lucky Cloak', set: 'gambler', weight: 36 },
+    { id: 'plate', main: 'dmg', name: 'Plate Armor', set: 'warrior', weight: 14 },
+    { id: 'vest', main: 'coin', name: 'Merchant Vest', set: 'merchant', weight: 13 },
+    { id: 'robe', main: 'xp', name: 'Wizard Robe', set: 'wizard', weight: 12 },
+    { id: 'jerkin', main: 'aps', name: 'Scout Jerkin', set: 'scout', weight: 12 },
+    { id: 'mail', main: 'strike', name: "Knight's Mail", set: 'knight', weight: 13 },
+    { id: 'shadow', main: 'critdmg', name: 'Shadow Cloak', set: 'assassin', weight: 12 },
   ],
 };
-// Speed as a main stat grows like a sub-stat (times 2); grown like damage, a top item would make
-// the miner swing fifty times as fast.
-const MAIN_SUBLIKE = { aps: 2 };
+// Outfits: wear two or three pieces of one outfit for its set bonus. Each outfit has a job it is
+// best at, so the right one depends on what you are doing: pushing, tapping, bosses, sleeping,
+// farming coins, opening cases or levelling up.
+//   two pieces: the outfit's main stat +10% (Assassin: +15% crit chance)
+//   three pieces: the main stat +25% (Assassin: +35% crit chance) and the outfit's perk
+const OUTFITS = {
+  warrior: { name: 'Warrior', color: '#c8503a', job: 'Pushing deeper', perk: '+25% damage on floors you have not cleared yet' },
+  knight: { name: 'Knight', color: '#d63447', job: 'Active tapping', perk: 'Your combo drains 30% slower' },
+  assassin: { name: 'Assassin', color: '#7a6aa8', job: 'Boss hunting', perk: '+50% damage to bosses' },
+  scout: { name: 'Scout', color: '#3e8ad6', job: 'AFK and overnight', perk: '+50% offline earnings' },
+  merchant: { name: 'Merchant', color: '#a05ad0', job: 'Farming coins', perk: '+50% coins on floors you already cleared' },
+  gambler: { name: 'Gambler', color: '#3eaa4a', job: 'Opening cases', perk: 'Cases cost 15% less' },
+  wizard: { name: 'Wizard', color: '#4a6ae8', job: 'Levelling up', perk: 'An extra +50% XP from every kill' },
+};
+const OUTFIT_IDS = Object.keys(OUTFITS);
+const SET_BONUS = [0, 0, 0.10, 0.25];
+const SET_CRIT = [0, 0, 0.15, 0.35];
+const OUTFIT_PERK = { warrior: 0.25, knight: 0.3, assassin: 0.5, scout: 0.5, merchant: 0.5, gambler: 0.15, wizard: 0.5 };
+// While you push floors you have not cleared, Merchant pieces pay only this share of their coin bonus.
+const MERCHANT_PUSH = { keep: 0.25 };
+// Speed and crit damage as main stats don't grow like damage: speed would make the miner swing
+// fifty times as fast, and crit damage only counts when you crit. Speed grows like a sub-stat
+// (times 3); crit damage grows like damage, half again as much.
+const MAIN_SUBLIKE = { aps: 3 };
+const MAIN_MULT = { critdmg: 1.5 };
 function gearStyle(it) { const list = GEAR_STYLES[it.slot]; return list.find(s => s.id === it.st) || list[0]; }

@@ -416,18 +416,18 @@ function drawPets() {
     const spr = petSprite(p.sp, p.r);
     const pad = spr.fxPad || 0;
     // Four party slots (after prestige 3) must all fit between the miner and the left edge.
-    const x = HERO_X - 12 - i * 9;
+    const x = HERO_X - 13 - i * 10;
     const phase = R.time * (def.fly ? 5 : 3) + i * 1.7;
-    let y = def.fly ? GROUND_Y - 30 + Math.round(Math.sin(phase) * 2) : GROUND_Y - 10 - (Math.sin(phase) > 0.75 ? 1 : 0);
+    let y = def.fly ? GROUND_Y - 38 + Math.round(Math.sin(phase) * 2) : GROUND_Y - 15 - (Math.sin(phase) > 0.75 ? 1 : 0);
     if (!R.enemy || R.enemy.enter > 0) y -= SCN.step && !def.fly ? 1 : 0;
     if (!def.fly) {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(x + 2, GROUND_Y, 6, 1);
+      ctx.fillRect(x + 3, GROUND_Y, 10, 1);
     }
     ctx.drawImage(spr, Math.round(x) - pad, Math.round(y) - pad);
     if (p.r >= 2 && Math.sin(R.time * 4 + i) > 0.85) {
       ctx.fillStyle = RARITY[p.r].color;
-      ctx.fillRect(Math.round(x + rand(0, 10)), Math.round(y + rand(0, 10)), 1, 1);
+      ctx.fillRect(Math.round(x + rand(0, 16)), Math.round(y + rand(0, 16)), 1, 1);
     }
   });
 }
@@ -437,9 +437,9 @@ function drawHero() {
   const walking = !R.enemy || R.enemy.enter > 0;
   const bob = walking ? (SCN.step ? 1 : 0) : Math.sin(R.time * 3) > 0.6 ? 1 : 0;
   const hx = HERO_X;
-  const hy = GROUND_Y - 16 + bob;
+  const hy = GROUND_Y - 24 + bob;
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(hx + 3, GROUND_Y, 10, 1);
+  ctx.fillRect(hx + 3, GROUND_Y, 15, 1);
   ctx.drawImage(heroSprite(walking && SCN.step), hx, hy);
   const p = R.swingT > 0 ? 1 - R.swingT / 0.22 : -1;
   let a = 0.35;
@@ -454,11 +454,11 @@ function drawHero() {
     // Version 2: the drill thrusts forward on each swing, its bit spinning fast, then pulls back.
     const thrust = p >= 0 ? Math.round(Math.sin(Math.PI * Math.min(1, p)) * 4) : 0;
     const frame = p >= 0 ? Math.floor(R.time * 30) : Math.floor(R.time * 3);
-    ctx.drawImage(drillSprite(mi, frame), hx + 10 + thrust, hy + 6);
-    if (p >= 0 && p > 0.3 && p < 0.7 && Math.random() < 0.5) { ctx.fillStyle = Math.random() < 0.5 ? '#ffd860' : '#ffffff'; ctx.fillRect(hx + 32 + thrust + Math.round(Math.random() * 3), hy + 8 + Math.round(Math.random() * 3), 1, 1); }
+    ctx.drawImage(drillSprite(mi, frame), hx + 15 + thrust, hy + 13);
+    if (p >= 0 && p > 0.3 && p < 0.7 && Math.random() < 0.5) { ctx.fillStyle = Math.random() < 0.5 ? '#ffd860' : '#ffffff'; ctx.fillRect(hx + 37 + thrust + Math.round(Math.random() * 3), hy + 15 + Math.round(Math.random() * 3), 1, 1); }
   } else {
     ctx.save();
-    ctx.translate(hx + 12.5, hy + 11.5);
+    ctx.translate(hx + 17.5, hy + 18.5);
     ctx.rotate(a);
     const pk = gearSprite('pick', it ? it.t : 0, it ? it.r : 0, it ? it.st : null);
     const pad = pk.fxPad || 0;
@@ -468,7 +468,7 @@ function drawHero() {
   if (S.math.streak > 0) {
     if (S.math.streak > SCN.lastStreak) SCN.comboPop = 0.15;
     const lift = SCN.comboPop > 0 ? 2 : 0;
-    drawText('×' + comboMult().toFixed(2), hx + 8, hy - 9 - lift, '#ffcc4d', 1, 'center');
+    drawText('×' + comboMult().toFixed(2), hx + 10, hy - 4 - lift, '#ffcc4d', 1, 'center');
   }
   SCN.lastStreak = S.math.streak;
   heroAura(hx, hy);
@@ -489,7 +489,7 @@ function heroAura(hx, hy) {
   SCN.auraT = R.time;
   const colors = RARITY_FX[r] || [RARITY[r].color, shade(RARITY[r].color, 0.6)];
   SCN.parts.push({
-    x: hx + rand(1, 15), y: hy + rand(4, 17), vx: rand(-3, 3), vy: rand(-14, -6),
+    x: hx + rand(2, 19), y: hy + rand(5, 23), vx: rand(-3, 3), vy: rand(-14, -6),
     t: 0, life: rand(0.6, 1.1), color: pick(colors), g: -4, size: 1,
   });
 }

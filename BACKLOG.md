@@ -13,11 +13,12 @@ at higher prestige counts should come around sooner.
   `prestigeAt` for the spammer) and the players' telemetry.
 - Questions to answer: how long each island takes to reach for each style, how the prestige
   requirement grows with prestige count, and whether spamming beats pushing or the other way round.
+- Brachell's rule for the fix: the deeper you push before prestiging, the bigger the reward should be.
+  Working hard on a run should pay more than quick resets (for example, prestige rewards that grow
+  faster than linearly with the depth reached past the prestige requirement).
 
-## Waiting on a decision (2026-10-04)
+## Next art pass: the rest of the game at the 24px look (2026-10-04)
 
-- Pixel size for the whole game: 16, 24, 32 or 48 (Claude recommends 32).
-- Outfits as classes with set bonuses, including the Assassin (crit) set. Sims done; speed gear needs
-  its scaling fixed.
-- Pets redrawn with full bodies at the chosen size.
-- Walking on the island: hold-to-walk left and right first, with up to enter a door.
+The miner, the outfits and the pets are drawn at 24px (Game Boy Color style) as of V2 dev.25. Still at
+the old size: monsters and bosses, rocks and ores, gear and UI icons, the cave scenery, and the
+island buildings. Bring them up to match so the whole game shares one look.
