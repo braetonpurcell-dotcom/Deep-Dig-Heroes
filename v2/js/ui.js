@@ -996,14 +996,40 @@ function showMulti(drops, ctx) {
 
 // ---------- bag ----------
 function buildBag() {
-  let h = `<div class="seg">${[['gear', 'Gear'], ['pets', 'Pets'], ['index', 'Index']].map(([k, l]) =>
+  let h = `<div class="seg">${[['gear', 'Gear'], ['pets', 'Pets'], ['look', 'Look'], ['index', 'Index']].map(([k, l]) =>
     `<button data-act="bagView" data-v="${k}" class="${UI.bagView === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (UI.bagView === 'gear') h += gearViewHtml();
   else if (UI.bagView === 'pets') h += petsViewHtml();
+  else if (UI.bagView === 'look') h += lookViewHtml();
   else h += indexViewHtml();
   $('#tab-bag').innerHTML = h;
   const q = $('#bagSearch');
   if (q) q.addEventListener('input', onBagSearch);
+}
+
+// ---------- Version 2: the wardrobe ----------
+function hatUnlocked(h) { return !h.isle || islandForFloor(S.stats.bestFloor) >= h.isle; }
+function lookViewHtml() {
+  const L = S.look;
+  const sw = (k, list, cur) => `<div class="swrow">${list.map((c, i) => `<button class="sw ${i === cur ? 'on' : ''}" style="--c:${Array.isArray(c) ? c[0] : c}" data-act="look" data-k="${k}" data-v="${i}" aria-label="${k} colour ${i + 1}"></button>`).join('')}</div>`;
+  let h = `<div class="card lookcard"><div class="lookprev"><img class="f1" src="${spriteUrl(heroSprite(0), 6)}" alt="Your miner"><img class="f2" src="${spriteUrl(heroSprite(1), 6)}" alt=""></div>
+    <div><h3>Your miner</h3><p class="small muted">Pick a hat and colours. Your miner looks like this in the world and in the cave. New islands unlock new hats.</p>
+    <div class="mbtns"><button class="btn small" data-act="lookRandom">Random</button><button class="btn small" data-act="lookReset">Reset</button></div></div></div>`;
+  h += '<div class="card"><h3>Hat</h3><div class="hatgrid">';
+  for (const hat of LOOK_HATS) {
+    const ok = hatUnlocked(hat), img = spriteUrl(heroSprite(0, { ...L, hat: hat.id }), 3);
+    h += `<button class="hatbtn ${L.hat === hat.id ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="look" data-k="hat" data-v="${hat.id}">
+      <img src="${img}" alt="" ${ok ? '' : 'style="filter:brightness(0) opacity(.5)"'}><span>${ok ? hat.name : ISLANDS[hat.isle].name}</span></button>`;
+  }
+  h += '</div></div>';
+  h += `<div class="card"><h3>Colours</h3>
+    ${L.hat === 'crown' || L.hat === 'none' ? '' : `<div class="lookrow"><span class="small muted">Hat</span>${sw('hatC', LOOK_CLOTH, L.hatC)}</div>`}
+    <div class="lookrow"><span class="small muted">Hair</span>${sw('hair', LOOK_HAIR, L.hair)}</div>
+    <div class="lookrow"><span class="small muted">Skin</span>${sw('skin', LOOK_SKIN, L.skin)}</div>
+    <div class="lookrow"><span class="small muted">Shirt</span>${sw('shirt', LOOK_CLOTH, L.shirt)}</div>
+    <div class="lookrow"><span class="small muted">Pants</span>${sw('pants', LOOK_CLOTH, L.pants)}</div>
+    <div class="lookrow"><span class="small muted">Boots</span>${sw('boots', LOOK_BOOTS, L.boots)}</div></div>`;
+  return h;
 }
 
 function gearViewHtml() {
@@ -1614,6 +1640,23 @@ function handleAction(el) {
       break;
     }
     case 'bagView': if (UI.bagView === 'gear') markItemsSeen(); UI.bagView = d.v; buildBag(); break;
+    case 'look': {
+      if (d.k === 'hat') {
+        const hat = LOOK_HATS.find(x => x.id === d.v);
+        if (!hat) break;
+        if (!hatUnlocked(hat)) { toast(`Reach ${ISLANDS[hat.isle].name} (B${ISLANDS[hat.isle].from}) to unlock the ${hat.name}`, 'gold'); break; }
+        S.look.hat = hat.id;
+      } else S.look[d.k] = Number(d.v);
+      SFX.click(); buildBag();
+      break;
+    }
+    case 'lookRandom': {
+      const pick = n => Math.floor(Math.random() * n), hats = LOOK_HATS.filter(hatUnlocked);
+      S.look = { hat: hats[pick(hats.length)].id, hatC: pick(LOOK_CLOTH.length), hair: pick(LOOK_HAIR.length), skin: pick(LOOK_SKIN.length), shirt: pick(LOOK_CLOTH.length), pants: pick(LOOK_CLOTH.length), boots: pick(LOOK_BOOTS.length) };
+      SFX.click(); buildBag();
+      break;
+    }
+    case 'lookReset': S.look = { ...DEFAULT_LOOK }; SFX.click(); buildBag(); break;
     case 'item': showItem(Number(d.id)); break;
     case 'equipItem':
       if (equipItem(Number(d.id))) { SFX.buy(); toast('Equipped', 'good'); }

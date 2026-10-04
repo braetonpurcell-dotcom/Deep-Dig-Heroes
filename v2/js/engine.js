@@ -106,6 +106,7 @@ function freshState() {
     math: { streak: 0 }, // the tap combo (the key name is kept so old saves load)
     gear: { eq: { pick: null, helm: null, charm: null }, bag: [] },
     pets: { inv, eq: [] },
+    look: { ...DEFAULT_LOOK }, // Version 2: the miner's wardrobe
     pity: { epic: 0, leg: 0 },
     pace: 0, // tap pad pace you settled at last session
     profile: { name: '', pid: '' },
@@ -371,6 +372,12 @@ function hydrate(obj) {
   if (!['low', 'med', 'high'].includes(st.juice)) st.juice = 'high';
   st.shake = st.shake !== false;
   st.music = st.music !== false;
+  // The miner's look: any bad value goes back to the default.
+  if (!s.look || typeof s.look !== 'object') s.look = { ...DEFAULT_LOOK };
+  if (!LOOK_HATS.some(h => h.id === s.look.hat)) s.look.hat = DEFAULT_LOOK.hat;
+  for (const [k, list] of [['hatC', LOOK_CLOTH], ['hair', LOOK_HAIR], ['skin', LOOK_SKIN], ['shirt', LOOK_CLOTH], ['pants', LOOK_CLOTH], ['boots', LOOK_BOOTS]]) {
+    if (!Number.isInteger(s.look[k]) || s.look[k] < 0 || s.look[k] >= list.length) s.look[k] = DEFAULT_LOOK[k];
+  }
   st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, TOP_RARITY) : 0;
   if (!['new', 'rarity', 'best', 'tier', 'lv', 'fn', ...Object.keys(STATS)].includes(st.bagSort)) st.bagSort = 'new';
   if (!['all', 'pick', 'helm', 'charm'].includes(st.bagShow)) st.bagShow = 'all';

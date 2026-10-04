@@ -534,8 +534,27 @@ function materialPalette(tier) {
   return { m: base, M: shade(base, 0.45), n: shade(base, -0.35), w: '#9a6a3a', W: '#6e4520' };
 }
 
-function heroSprite(step) {
-  return sprite(step ? 'heroStep' : 'hero', HERO_PALETTE, 'hero');
+// Version 2: the hero is built from your look: a hat (the top seven rows) on the body, with your colours.
+const HAT_ROWS = {
+  helmet: PX.hero.slice(0, 7),
+  cap: ['................', '................', '................', '.....kkkkkk.....', '....kyyyywyk....', '...kyyyyyyyykkk.', '...khkkkkkkYYYYk'],
+  none: ['................', '................', '................', '................', '.....kkkkkk.....', '....khhwhhhk....', '....khhhhHHk....'],
+  beanie: ['................', '.......kk.......', '......kwwk......', '.....kkkkkk.....', '....kyyyyyyk....', '...kyyyyyyyyk...', '...kYYYYYYYYk...'],
+  bandana: ['................', '................', '................', '................', '.....kkkkkk.....', '....kyyywyyk....', '.kkkYYYYYYYk....'],
+  viking: ['................', '.k............k.', '.kwk.kkkkkk.kwk.', '..kwkyyyyyykwk..', '...kyyyyyyyyk...', '...kYYYYYYYYk...', '...kkkkkkkkkk...'],
+  crown: ['................', '....k..kk..k....', '....kykyykyk....', '....kyyyyyyk....', '....kywyywyk....', '....kkkkkkkk....', '....khhhhhhk....'],
+};
+function lookOf(look) { return look || (typeof S !== 'undefined' && S && S.look) || DEFAULT_LOOK; }
+function lookKey(L) { return [L.hat, L.hatC, L.hair, L.skin, L.shirt, L.pants, L.boots].join('.'); }
+function heroPalette(L) {
+  const hat = L.hat === 'crown' ? '#ffcc4d' : LOOK_CLOTH[L.hatC], skin = LOOK_SKIN[L.skin], shirt = LOOK_CLOTH[L.shirt], pants = LOOK_CLOTH[L.pants], hair = LOOK_HAIR[L.hair];
+  return { ...HERO_PALETTE, y: hat, Y: shade(hat, -0.28), w: L.hat === 'crown' ? '#ff4d6d' : '#ffffff', s: skin[0], S: skin[1], b: shirt, B: shade(shirt, -0.3),
+    d: pants, D: shade(pants, -0.3), o: LOOK_BOOTS[L.boots], h: hair, H: shade(hair, -0.3) };
+}
+function heroSprite(step, look = null) {
+  const L = lookOf(look), base = step ? 'heroStep' : 'hero', name = base + ':' + L.hat;
+  if (!PX[name]) PX[name] = (HAT_ROWS[L.hat] || HAT_ROWS.helmet).concat(PX[base].slice(7));
+  return sprite(name, heroPalette(L), lookKey(L));
 }
 
 function pickSprite(tier) {

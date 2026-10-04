@@ -771,3 +771,19 @@ body.on-island #panel { overflow: hidden; }
 body.roomtab #panel::before { content: ''; display: block; height: var(--roomgap, 180px); }
 body.roomtab .card { background: rgba(30, 24, 40, .86); }
 body.roomtab #screenbar b { text-shadow: 0 2px 0 #000, 0 0 6px rgba(0,0,0,.8); }
+
+/* Version 2 wardrobe */
+.lookcard { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: center; }
+.lookprev { position: relative; width: 104px; height: 104px; display: grid; place-items: center; background: radial-gradient(circle at 50% 60%, #3a2d52, #1a1424 70%); border: 2px solid var(--line); }
+.lookprev img { position: absolute; width: 96px; image-rendering: pixelated; }
+.lookprev img.f2 { animation: lookStep 1s steps(1) infinite; }
+@keyframes lookStep { 0% { opacity: 0; } 50% { opacity: 1; } }
+.hatgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.hatbtn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; background: var(--raise); border: 2px solid var(--line); color: var(--fg); font: inherit; font-size: 12px; line-height: 1.1; text-align: center; min-height: 72px; }
+.hatbtn img { width: 48px; image-rendering: pixelated; }
+.hatbtn.on { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--raise)); }
+.hatbtn.locked { color: var(--dim); }
+.lookrow { display: grid; grid-template-columns: 44px 1fr; gap: 6px; align-items: center; margin-top: 6px; }
+.swrow { display: flex; flex-wrap: wrap; gap: 5px; }
+.sw { width: 28px; height: 28px; padding: 0; background: var(--c); border: 2px solid rgba(0,0,0,.5); box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); }
+.sw.on { outline: 2px solid var(--gold); outline-offset: 1px; }

@@ -459,3 +459,30 @@ const ACHIEVEMENTS = [
 ];
 const TROPHY_BONUS = 0.02;
 const COLLECTION_BONUS = 0.01;
+
+// Version 2: islands. Every 50 floors down the mine is a new island with its own look. Reaching one
+// for the first time (your best floor ever) gives a reward and unlocks a hat in the wardrobe.
+const ISLANDS = [
+  { id: 'green', name: 'Greenhollow', from: 1, blurb: 'Meadows, a farm and a windmill' },
+  { id: 'frost', name: 'Frostpeak', from: 51, blurb: 'Snowfields and a frozen river' },
+  { id: 'sand', name: 'Sunscorch', from: 101, blurb: 'Dunes, palms and an oasis' },
+  { id: 'ember', name: 'Emberfall', from: 151, blurb: 'Ash plains and a river of lava' },
+  { id: 'star', name: 'Starfall', from: 201, blurb: 'A crystal island under the night sky' },
+];
+function islandForFloor(f) { let i = 0; ISLANDS.forEach((s, k) => { if (f >= s.from) i = k; }); return i; }
+
+// Version 2: the miner's look, picked in the House.
+const LOOK_SKIN = [['#f4c393', '#d39a6a'], ['#ffdcbc', '#e8b48c'], ['#d9a066', '#b07a46'], ['#a86a3e', '#7e4a26'], ['#6e4224', '#4e2c16']];
+const LOOK_HAIR = ['#3a2418', '#7a4a26', '#c8862a', '#f2d27a', '#c84828', '#1e1e26', '#e8e8f0', '#5a7ae8', '#e05aa0', '#4aa86a'];
+const LOOK_CLOTH = ['#3e7bd6', '#d84848', '#4a9a48', '#8a5ab0', '#f08a28', '#2aa8a0', '#f06aa8', '#f2c14e', '#e8e8f0', '#3a3a46', '#8a5a32', '#3b3155'];
+const LOOK_BOOTS = ['#6a4122', '#2a2a34', '#8a5a32', '#d84848', '#e8e8f0', '#3e7bd6'];
+const LOOK_HATS = [
+  { id: 'helmet', name: 'Miner helmet' },
+  { id: 'cap', name: 'Cap' },
+  { id: 'none', name: 'No hat' },
+  { id: 'beanie', name: 'Beanie', isle: 1 },
+  { id: 'bandana', name: 'Bandana', isle: 2 },
+  { id: 'viking', name: 'Viking helmet', isle: 3 },
+  { id: 'crown', name: 'Crown', isle: 4 },
+];
+const DEFAULT_LOOK = { hat: 'helmet', hatC: 7, hair: 0, skin: 0, shirt: 0, pants: 11, boots: 0 };

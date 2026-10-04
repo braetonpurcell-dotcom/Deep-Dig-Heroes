@@ -148,6 +148,9 @@ function liveHouse(g, t, dt, x0) {
     px(60, 76 - (flick ? 2 : 0), 4, 2, '#f0a040'); px(60, 76 - (flick ? 2 : 0), 1, 2, OUT);
   });
   WORLD.ctx = prev;
+  // You, at home on the rug, in the look picked in the wardrobe.
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x0 + 31, 82, 11, 1);
+  g.drawImage(heroSprite(0), x0 + 28, 66 + (Math.sin(t * 2.2) > 0.6 ? 1 : 0));
   const zz = (t * 0.6) % 1; g.globalAlpha = 1 - zz; g.fillStyle = '#ffffff'; g.font = '6px "Jersey 10", monospace'; g.fillText('z', x0 + 80 + zz * 4, 68 - zz * 10); g.globalAlpha = 1;
 }
 
