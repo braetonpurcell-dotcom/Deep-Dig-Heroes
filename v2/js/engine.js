@@ -110,6 +110,7 @@ function freshState() {
     classes: [], // Version 2: saved builds (skills, gear, pets and look), up to CLASS_SLOTS
     drill: { lv: 0, xp: 0, show: true }, // Version 2: the drill, levelled with parts from Drill Crates
     pityDrill: { epic: 0, leg: 0 },
+    isle: { view: -1, claimed: 0 }, // Version 2: island shown in the world (-1 follows your depth) and arrival rewards given
     activeClass: -1,
     pity: { epic: 0, leg: 0 },
     pace: 0, // tap pad pace you settled at last session
@@ -378,6 +379,9 @@ function hydrate(obj) {
   st.music = st.music !== false;
   // The miner's look: any bad value goes back to the default.
   s.look = cleanLook(s.look);
+  // Islands.
+  if (!s.isle || typeof s.isle !== 'object') s.isle = { view: -1, claimed: 0 };
+  s.isle = { view: Number.isInteger(s.isle.view) && s.isle.view >= -1 && s.isle.view < ISLANDS.length ? s.isle.view : -1, claimed: Math.min(ISLANDS.length - 1, nonNegInt(s.isle.claimed)) };
   // The drill.
   if (!s.drill || typeof s.drill !== 'object') s.drill = { lv: 0, xp: 0, show: true };
   s.drill = { lv: Math.min(DRILL_MAX, nonNegInt(s.drill.lv)), xp: nonNeg(s.drill.xp), show: s.drill.show !== false };
@@ -486,7 +490,8 @@ function computeStats() {
   st.boost = Date.now() < S.boostUntil || freshActive() ? 2 : 1;
   st.coinMult = (1 + 0.1 * up('magnet')) * (1 + add.coin) * (1 + 0.15 * sk('greed'))
     * (1 + 0.02 * branchPoints('tycoon')) * (1 + 0.003 * sk('compound') * S.run.maxFloor)
-    * trophy * coll * st.boost * (1 + (fx.coin || 0)) * (1 + 0.25 * ptLevel('fortune')) * (st.deepDiver ? 1.6 : 1) * (sk('m-coins') ? 1.5 : 1);
+    * trophy * coll * st.boost * (1 + (fx.coin || 0)) * (1 + 0.25 * ptLevel('fortune')) * (st.deepDiver ? 1.6 : 1) * (sk('m-coins') ? 1.5 : 1)
+    * (1 + ISLE_COINS * (S.isle ? S.isle.claimed : 0));
   st.xpMult = (1 + 0.1 * up('scholar')) * (1 + add.xp) * (1 + (fx.xp || 0)) * (1 + 0.25 * ptLevel('wisdom')) * (st.deepDiver ? 1.6 : 1)
     * (1 + 0.1 * sk('insight')) * (sk('m-xp') ? 1.5 : 1);
   // The Gambler's luck multiplies all your luck (gear, prestige), so a luck build really is the luckiest.
@@ -678,6 +683,7 @@ function changeFloor(f) {
     const prev = S.stats.bestFloor;
     S.stats.bestFloor = f;
     emit('bestFloor', { floor: f, prev });
+    checkIslands();
     if (!S.run.recordAnnounced && prev >= 10 && S.prestiges > 0) {
       S.run.recordAnnounced = true;
       emit('record', { floor: f });
@@ -1252,6 +1258,24 @@ function learnSkill(id) {
   recalc();
   return true;
 }
+
+// ---------- Version 2: islands ----------
+const ISLE_KEYS = 10; // reaching island i for the first time gives 10 × i keys
+const ISLE_COINS = 0.05; // and +5% coins forever
+function islesReached() { return islandForFloor(S.stats.bestFloor); }
+function checkIslands() {
+  const out = [];
+  while (S.isle.claimed < islesReached()) {
+    S.isle.claimed++;
+    const keys = ISLE_KEYS * S.isle.claimed;
+    S.keys += keys;
+    out.push({ i: S.isle.claimed, keys });
+  }
+  if (out.length) { recalc(); emit('isles', out); }
+  return out;
+}
+// The island the world shows: the one you picked at the harbor, or the one for your depth this run.
+function worldIsle() { const v = S.isle.view; return v >= 0 && v <= islesReached() ? v : islandForFloor(S.run.maxFloor); }
 
 // ---------- Version 2: the drill ----------
 function addDrillXp(x) {

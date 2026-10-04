@@ -1,5 +1,6 @@
 'use strict';
-// Version 2 home screen: a side-scrolling route in the spirit of the old Pokemon games. The world is
+// Version 2 home screen: a side-scrolling route in the spirit of the old Pokemon games. Every 50
+// floors of depth the world becomes a new island (ISLANDS in data.js, styles in ISLE_STYLE below). The world is
 // one long strip that fills the screen top to bottom; you swipe left and right only. You start at
 // the far left in town on the spawn plaza (quest board, trophy statue, your miner, your house), then
 // the road heads east past the farm, the market, the forge and its woodcutter, the temple, over a
@@ -25,7 +26,7 @@ const BUILDINGS = [
   { tab: 'cases', name: 'Market', x: 320, y: 104, w: 92, h: 66, dx: 366 },
   { tab: 'forge', name: 'Forge', x: 462, y: 90, w: 84, h: 80, dx: 502 },
   { tab: 'skills', name: 'Temple', x: 590, y: 84, w: 96, h: 86, dx: 638 },
-  { tab: 'dock', name: 'Dock', x: 834, y: 214, w: 28, h: 56, dx: 848 },
+  { tab: 'dock', name: 'Harbor', x: 834, y: 214, w: 28, h: 56, dx: 848 },
   { tab: 'fight', name: 'Cave', x: 1110, y: 112, w: 70, h: 58, dx: 1145 },
 ];
 // The road: a gentle winding curve from town to the cave.
@@ -72,15 +73,70 @@ const CELL = 2, GC = WW / CELL, GR = WH / CELL;
 const T = { GRASS: 0, ROAD: 1, WATER: 2, SAND: 3, PLAZA: 4, FIELD: 5, ROCK: 6 };
 let TERRAIN = null;
 function terrainAt(x, y) { const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL); return cx < 0 || cy < 0 || cx >= GC || cy >= GR ? T.GRASS : TERRAIN[cy * GC + cx]; }
-const PAL = {
-  grass: ['#4c9638', '#58a541', '#64b24a', '#71bf53', '#80cb5e'].map(rgb),
-  road: ['#cfa76c', '#d9b37a', '#e3c088'].map(rgb), roadRim: rgb('#9f7646'), roadIn: rgb('#c09660'), pebble: rgb('#b08a56'), pebbleHi: rgb('#efd6a2'),
-  water: ['#2c6db8', '#3480cc', '#3f8fda'].map(rgb), shallow: rgb('#5aa6e6'), foam: rgb('#bfe3f8'),
-  sand: ['#d8bd80', '#e4cc92', '#eed9a2'].map(rgb), wet: rgb('#c4a76a'),
-  plaza: ['#cdc3ae', '#d6cdb9', '#ded6c4'].map(rgb), mortar: rgb('#a69c88'), plazaRim: rgb('#958b77'),
-  furrow: rgb('#5b381f'), ridge: ['#83532f', '#8e5d37', '#996841'].map(rgb), fieldRim: rgb('#6a4327'),
-  rock: ['#7f6a55', '#8f7962', '#9f8970'].map(rgb), rockHi: rgb('#bba387'), rockLo: rgb('#5a4737'),
+// Version 2: every island has its own colours, trees, water and weather (see ISLANDS in data.js).
+const ISLE_STYLE = {
+  green: {
+    grass: ['#4c9638', '#58a541', '#64b24a', '#71bf53', '#80cb5e'], road: ['#cfa76c', '#d9b37a', '#e3c088'], roadRim: '#9f7646', roadIn: '#c09660', pebble: '#b08a56', pebbleHi: '#efd6a2',
+    water: ['#2c6db8', '#3480cc', '#3f8fda'], shallow: '#5aa6e6', foam: '#bfe3f8', sand: ['#d8bd80', '#e4cc92', '#eed9a2'], wet: '#c4a76a',
+    plaza: ['#cdc3ae', '#d6cdb9', '#ded6c4'], mortar: '#a69c88', plazaRim: '#958b77', furrow: '#5b381f', ridge: ['#83532f', '#8e5d37', '#996841'], fieldRim: '#6a4327',
+    rock: ['#7f6a55', '#8f7962', '#9f8970'], rockHi: '#bba387', rockLo: '#5a4737',
+    tuft: ['#3e8430', '#94d86c'], tall: ['#2f6e26', '#3f8a30', '#4da03a', '#9ee070', '#7ccc58'], ledge: ['#86cc5e', '#4c8a34', '#2f5e22', '#3a7028'],
+    bush: ['#1f4720', '#3a7e34', '#55a046', '#86c862', '#f25d5d'], flowers: ['#f25d5d', '#f8e04a', '#ffffff', '#b77df0', '#6fb2ff', '#ff9ad0'], stem: '#2f7228',
+    leaf: ['#1f4720', '#2c6229', '#33702f', '#45903b', '#62b04c', '#8ad064'], pine: ['#173a1e', '#24582a', '#2d6a32', '#3f8a40'], trunk: ['#7a4c2a', '#5a361c'],
+    tree: 'green', waterKind: 'water', lily: true, reeds: true, bg: '#1f4720', swatch: 'linear-gradient(135deg,#64b24a 55%,#3480cc 55%)',
+  },
+  frost: {
+    grass: ['#c4d4e6', '#d0deee', '#dce7f4', '#e8f0f9', '#f4f8fd'], road: ['#b6a58c', '#c2b198', '#cdbda4'], roadRim: '#8a7b66', roadIn: '#a8987f', pebble: '#9a8a72', pebbleHi: '#e8dcc8',
+    water: ['#8ec4e8', '#9acded', '#a6d6f1'], shallow: '#bfe4f8', foam: '#eef8ff', sand: ['#dfe8f2', '#e8eff7', '#f0f5fa'], wet: '#b8cadc',
+    plaza: ['#c6ccd6', '#d0d6e0', '#dae0e8'], mortar: '#9ea6b2', plazaRim: '#8a92a0', furrow: '#8a9cb2', ridge: ['#d8e2ee', '#e2eaf4', '#ecf2f8'], fieldRim: '#9fb0c4',
+    rock: ['#7c8796', '#8b97a6', '#9aa6b4'], rockHi: '#ffffff', rockLo: '#5a6472',
+    tuft: ['#a4b6cc', '#ffffff'], tall: ['#9fb2c8', '#b8c8da', '#d0dcea', '#ffffff', '#eef4fa'], ledge: ['#ffffff', '#b8c8da', '#8a9cb2', '#a4b6cc'],
+    bush: ['#1a3a30', '#2e5a48', '#e8f0f8', '#ffffff', '#d84848'], flowers: ['#9ad0f0', '#ffffff', '#bfe3f8', '#d8c8ff'], stem: '#7a9ab8',
+    leaf: ['#1a3a30', '#24503e', '#2a5c48', '#3a7458', '#e8f0f8', '#ffffff'], pine: ['#14302a', '#1e4a3a', '#265a46', '#3a7a5a'], trunk: ['#6a4a34', '#4a3022'],
+    tree: 'snow', snow: true, waterKind: 'ice', bg: '#2a4a3a', weather: 'snow', swatch: 'linear-gradient(135deg,#e8f0f9 55%,#9acded 55%)',
+  },
+  sand: {
+    grass: ['#d6b06a', '#deba78', '#e6c486', '#edce94', '#f2d8a4'], road: ['#b88e58', '#c29862', '#cca26c'], roadRim: '#8a6236', roadIn: '#a67e4c', pebble: '#9a7444', pebbleHi: '#e8cc98',
+    water: ['#1a8aa8', '#2298b6', '#2ca6c4'], shallow: '#52c2d4', foam: '#d2f4f2', sand: ['#7ab05a', '#86bc64', '#92c86e'], wet: '#5e9a48',
+    plaza: ['#e0cca4', '#e8d6b0', '#efdfbc'], mortar: '#b8a07a', plazaRim: '#a68c66', furrow: '#8a5a2c', ridge: ['#b4844c', '#be8e56', '#c89860'], fieldRim: '#8a6236',
+    rock: ['#b0603a', '#c06e44', '#cc7c4e'], rockHi: '#eeaa78', rockLo: '#7a3a20',
+    tuft: ['#a8843c', '#fbe8b8'], tall: ['#a8843c', '#c09a4a', '#d4ae5a', '#f2d890', '#e6c470'], ledge: ['#f6e2b0', '#c8a060', '#9a7440', '#b08850'],
+    bush: ['#3a4a22', '#5a6a30', '#7a8a40', '#a8b660', '#f2a028'], flowers: ['#f25d5d', '#ff9ad0', '#f8e04a', '#ffffff'], stem: '#6a8a38',
+    leaf: ['#1f4720', '#2c6229', '#33702f', '#45903b', '#62b04c', '#8ad064'], pine: ['#173a1e', '#24582a', '#2d6a32', '#3f8a40'], trunk: ['#9a6a3a', '#7a4c2a'],
+    tree: 'palm', gap: 17, waterKind: 'oasis', lily: true, reeds: true, bg: '#6a5a30', weather: 'dust', swatch: 'linear-gradient(135deg,#e6c486 55%,#2298b6 55%)',
+  },
+  ember: {
+    grass: ['#2e2628', '#372e30', '#40363a', '#4a3f42', '#54484a'], road: ['#5c4c48', '#665652', '#70605c'], roadRim: '#2a2222', roadIn: '#4e403c', pebble: '#3a2e2c', pebbleHi: '#8a7470',
+    water: ['#c8361a', '#dc461e', '#ec5a24'], shallow: '#ff8a2a', foam: '#ffd060', sand: ['#241c1e', '#2c2224', '#34282a'], wet: '#5a2a1a',
+    plaza: ['#5a5054', '#645a5e', '#6e6468'], mortar: '#3a3236', plazaRim: '#2e282c', furrow: '#1e1618', ridge: ['#4a3a36', '#54423e', '#5e4a46'], fieldRim: '#2a2022',
+    rock: ['#3c3236', '#463b3f', '#504448'], rockHi: '#7a5c50', rockLo: '#221a1c',
+    tuft: ['#221c1e', '#6a5a5a'], tall: ['#2a2224', '#3a3032', '#4a3e40', '#ff7a2a', '#8a6a5a'], ledge: ['#6a5a5a', '#3a3032', '#221a1c', '#ff6a2a'],
+    bush: ['#1a1214', '#3a2a2a', '#5a3a32', '#ff8a3a', '#ffd060'], flowers: ['#ff7a2a', '#ffd060', '#ff4a2a'], stem: '#4a3a36',
+    leaf: ['#120c0e', '#2a2224', '#3a3032', '#4a3e40', '#5a4a4a', '#ff7a2a'], pine: ['#120c0e', '#2a2224', '#3a3032', '#4a3e40'], trunk: ['#2a2224', '#120c0e'],
+    tree: 'dead', waterKind: 'lava', bg: '#1a1214', weather: 'embers', tint: 'rgba(255,80,30,0.08)', swatch: 'linear-gradient(135deg,#4a3f42 55%,#ec5a24 55%)',
+  },
+  star: {
+    grass: ['#1c3c48', '#204452', '#264c5c', '#2c5666', '#346070'], road: ['#6e6e90', '#7a7a9c', '#8686a8'], roadRim: '#46466a', roadIn: '#5e5e80', pebble: '#56567a', pebbleHi: '#c8c8f0',
+    water: ['#10183a', '#162046', '#1c2852'], shallow: '#24346a', foam: '#7a9ae8', sand: ['#3a4a6a', '#425274', '#4a5a7e'], wet: '#2c3a5a',
+    plaza: ['#6a6a8a', '#747494', '#7e7e9e'], mortar: '#4a4a6a', plazaRim: '#3e3e5e', furrow: '#1a2236', ridge: ['#2e3a52', '#34405a', '#3a4662'], fieldRim: '#222a40',
+    rock: ['#3a3058', '#463a68', '#524478'], rockHi: '#b8a6ff', rockLo: '#241c3a',
+    tuft: ['#163038', '#5aa0b0'], tall: ['#163038', '#1e4450', '#2a5866', '#7af0ff', '#5ad0e0'], ledge: ['#5ad0e0', '#264c5c', '#122830', '#7af0ff'],
+    bush: ['#0e2028', '#1e3e48', '#2e5a66', '#7af0ff', '#ff8af0'], flowers: ['#8ab4ff', '#d8a6ff', '#fff4a8', '#7af0ff'], stem: '#1e4450',
+    leaf: ['#0e2028', '#163038', '#1e4450', '#2a5866', '#5ad0e0', '#7af0ff'], pine: ['#0e2028', '#163038', '#1e4450', '#2a5866'], trunk: ['#3a3058', '#241c3a'],
+    tree: 'crystal', waterKind: 'night', lily: true, bg: '#0e1626', weather: 'stars', tint: 'rgba(14,12,48,0.30)', swatch: 'linear-gradient(135deg,#264c5c 55%,#162046 55%)',
+  },
 };
+function buildPal(st) {
+  const one = ['roadRim', 'roadIn', 'pebble', 'pebbleHi', 'shallow', 'foam', 'wet', 'mortar', 'plazaRim', 'furrow', 'fieldRim', 'rockHi', 'rockLo'];
+  const many = ['grass', 'road', 'water', 'sand', 'plaza', 'ridge', 'rock'];
+  const out = {};
+  for (const k of one) out[k] = rgb(st[k]);
+  for (const k of many) out[k] = st[k].map(rgb);
+  return out;
+}
+let STYLE = ISLE_STYLE.green;
+let PAL = buildPal(STYLE);
+function useIsle(i) { STYLE = ISLE_STYLE[(ISLANDS[i] || ISLANDS[0]).id]; PAL = buildPal(STYLE); }
 
 function paintGround(g) {
   const cell = new Uint8Array(GC * GR), road = new Uint8Array(GC * GR);
@@ -170,27 +226,33 @@ function paintGround(g) {
 function paintWorld() {
   const cv = makeCanvas(WW, WH), prev = WORLD.ctx;
   WORLD.ctx = cv.getContext('2d');
+  useIsle(WORLD.isle || 0);
   paintGround(WORLD.ctx);
+  paintWaterDetail();
   const r = prng(17), inRiver = x => x > RIVER[0] - 14 && x < RIVER[1] + 14;
   const grassy = (x, y, pad = 3) => [[0, 0], [pad, 0], [-pad, 0], [0, pad], [0, -pad]].every(([a, b]) => terrainAt(x + a, y + b) === T.GRASS);
   // Little tufts of darker and lighter grass all over.
   for (let i = 0; i < 900; i++) {
     const x = r() * WW, y = 44 + r() * 226;
     if (!grassy(x, y)) continue;
-    if (r() < 0.6) { px(x, y, 1, 2, '#3e8430'); px(x + 2, y - 1, 1, 3, '#3e8430'); px(x + 1, y, 1, 2, '#94d86c'); }
-    else { px(x, y, 2, 1, '#94d86c'); px(x + 3, y + 1, 1, 1, '#94d86c'); }
+    const [dk, lt] = STYLE.tuft;
+    if (r() < 0.6) { px(x, y, 1, 2, dk); px(x + 2, y - 1, 1, 3, dk); px(x + 1, y, 1, 2, lt); }
+    else { px(x, y, 2, 1, lt); px(x + 3, y + 1, 1, 1, lt); }
   }
   // Mountain: cracks and boulders.
-  for (let i = 0; i < 40; i++) { const x = 1050 + r() * 148, y = 40 + r() * 130; if (terrainAt(x, y) === T.ROCK && terrainAt(x, y - 6) === T.ROCK) { px(x, y, 1, 3 + r() * 4, '#5a4737'); px(x + 1, y, 1, 2, '#bba387'); } }
+  for (let i = 0; i < 40; i++) { const x = 1050 + r() * 148, y = 40 + r() * 130; if (terrainAt(x, y) === T.ROCK && terrainAt(x, y - 6) === T.ROCK) { px(x, y, 1, 3 + r() * 4, STYLE.rockLo); px(x + 1, y, 1, 2, STYLE.rockHi); } }
   // Tall grass patches and ledges on the route east.
   for (const [x0, y0, w, h] of [[600, 230, 64, 30], [900, 222, 96, 40], [940, 96, 80, 56], [1030, 230, 56, 32]]) tallGrass(x0, y0, w, h);
   for (const [x0, y0, w] of [[900, 270, 80], [1000, 214, 60]]) ledge(x0, y0, w);
   // Pond: lily pads and reeds.
-  for (const [lx, ly] of [[236, 246], [262, 254], [270, 244]]) { pell(lx, ly, 4, 2, '#2f7a34'); px(lx + 1, ly - 2, 2, 2, '#2f7a34'); px(lx - 2, ly - 1, 3, 1, '#4ea548'); }
-  px(268, 243, 2, 2, '#f6a8c8'); px(268, 242, 1, 1, '#ffffff');
-  for (const [rx, ry] of [[222, 244], [226, 241], [277, 255], [280, 251]]) { px(rx, ry - 8, 1, 9, '#3e7a2a'); px(rx + 2, ry - 6, 1, 7, '#4e9234'); px(rx, ry - 10, 1, 3, '#7a4a26'); }
+  const glowPads = STYLE.waterKind === 'night';
+  if (STYLE.lily) {
+    for (const [lx, ly] of [[236, 246], [262, 254], [270, 244]]) { pell(lx, ly, 4, 2, glowPads ? '#1e5a66' : '#2f7a34'); px(lx + 1, ly - 2, 2, 2, glowPads ? '#1e5a66' : '#2f7a34'); px(lx - 2, ly - 1, 3, 1, glowPads ? '#7af0ff' : '#4ea548'); }
+    px(268, 243, 2, 2, glowPads ? '#ff8af0' : '#f6a8c8'); px(268, 242, 1, 1, '#ffffff');
+  }
+  if (STYLE.reeds) for (const [rx, ry] of [[222, 244], [226, 241], [277, 255], [280, 251]]) { px(rx, ry - 8, 1, 9, '#3e7a2a'); px(rx + 2, ry - 6, 1, 7, '#4e9234'); px(rx, ry - 10, 1, 3, '#7a4a26'); }
   // Flowers in little clusters, rocks and bushes.
-  const COLS = ['#f25d5d', '#f8e04a', '#ffffff', '#b77df0', '#6fb2ff', '#ff9ad0'];
+  const COLS = STYLE.flowers;
   for (let i = 0; i < 70; i++) {
     const cx = 40 + r() * 1040, cy = 52 + r() * 214, c = COLS[Math.floor(r() * COLS.length)];
     if (inRiver(cx)) continue;
@@ -204,67 +266,142 @@ function paintWorld() {
   paintFarm(); paintWoodYard();
   // The forest along the top edge (back to front), trees between buildings, then buildings.
   const forest = [];
-  for (let x = 0; x < 1100; x += 9) { if (inRiver(x)) continue; forest.push([x + r() * 4, 22 + r() * 6, r() < 0.3]); forest.push([x + 4 + r() * 4, 38 + r() * 6, r() < 0.3]); }
-  for (let y = 54; y < 186; y += 13) { forest.push([6 + r() * 3, y, r() < 0.4]); forest.push([24 + r() * 3, y + 6, r() < 0.4]); }
-  forest.sort((a, b) => a[1] - b[1]).forEach(([x, y, pine]) => (pine ? pineTree(x, y) : tree(x, y)));
-  for (const x of [176, 300, 432, 568, 714, 904]) tree(x, 150);
-  for (const [x, y] of [[1100, 232], [1132, 248], [1170, 226], [1186, 258], [1150, 266]]) pineTree(x, y);
+  const gap = STYLE.gap || 9; // palms spread wide, so the desert's tree line is sparser
+  for (let x = 0; x < 1100; x += gap) { if (inRiver(x)) continue; forest.push([x + r() * 4, 22 + r() * 6, r() < 0.3]); forest.push([x + 4 + r() * 4, 38 + r() * 6, r() < 0.3]); }
+  for (let y = 54; y < 186; y += gap + 4) { forest.push([6 + r() * 3, y, r() < 0.4]); forest.push([24 + r() * 3, y + 6, r() < 0.4]); }
+  forest.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt));
+  for (const x of [176, 300, 432, 568, 714, 904]) forestTree(x, 150, false);
+  for (const [x, y] of [[1100, 232], [1132, 248], [1170, 226], [1186, 258], [1150, 266]]) forestTree(x, y, true);
   for (const [x, y] of [[1090, 194], [1176, 196], [1116, 262], [1060, 192]]) rock(x, y, true);
-  tree(296, 128); pineTree(716, 130); pineTree(1012, 150);
+  forestTree(296, 128, false); forestTree(716, 130, true); forestTree(1012, 150, true);
+  if (STYLE.snow) for (const [sx, sy] of [[150, 128], [610, 262]]) snowman(sx, sy);
   paintTownDecor(); paintTownSign(); paintBoard(); paintTrophy(); paintHouse(); paintMarket(); paintForge(); paintTemple(); paintLighthouse(); paintCave();
   fence(188, 182, 104, 240);
   // The forest along the bottom edge, front-most.
   const south = [];
-  for (let x = 0; x < WW; x += 9) { if (inRiver(x)) continue; south.push([x + r() * 4, 286 + r() * 3, r() < 0.3]); south.push([x + 4 + r() * 4, 300 + r() * 3, r() < 0.3]); }
-  for (let y = 220; y < 286; y += 13) { south.push([6 + r() * 3, y, r() < 0.4]); south.push([24 + r() * 3, y + 6, r() < 0.4]); }
-  south.sort((a, b) => a[1] - b[1]).forEach(([x, y, pine]) => (pine ? pineTree(x, y) : tree(x, y)));
+  for (let x = 0; x < WW; x += gap) { if (inRiver(x)) continue; south.push([x + r() * 4, 286 + r() * 3, r() < 0.3]); south.push([x + 4 + r() * 4, 300 + r() * 3, r() < 0.3]); }
+  for (let y = 220; y < 286; y += gap + 4) { south.push([6 + r() * 3, y, r() < 0.4]); south.push([24 + r() * 3, y + 6, r() < 0.4]); }
+  south.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt));
   WORLD.ctx = prev;
   return cv;
 }
 
 // ---------- scenery pieces ----------
+function forestTree(x, y, alt) {
+  const k = STYLE.tree;
+  if (k === 'palm') return alt ? cactus(x, y) : palm(x, y);
+  if (k === 'dead') return alt ? pineTree(x, y) : deadTree(x, y);
+  if (k === 'crystal') return alt ? glowShroom(x, y) : crystalTree(x, y);
+  return alt ? pineTree(x, y) : tree(x, y);
+}
 function tree(x, y) {
+  const [o, d, m, l, t, t2] = STYLE.leaf, [tk, tkd] = STYLE.trunk;
   pell(x + 1, y, 9, 3, 'rgba(20,50,20,0.35)');
-  px(x - 2, y - 8, 5, 8, OUT); px(x - 1, y - 8, 3, 8, '#7a4c2a'); px(x + 1, y - 8, 1, 8, '#5a361c'); px(x - 3, y - 1, 7, 1, '#5a361c');
-  pell(x, y - 17, 11, 9, '#1f4720'); pell(x - 6, y - 13, 6, 5, '#1f4720'); pell(x + 6, y - 13, 6, 5, '#1f4720');
-  pell(x, y - 17, 10, 8, '#33702f'); pell(x - 6, y - 13, 5, 4, '#33702f'); pell(x + 6, y - 13, 5, 4, '#2c6229');
-  pell(x - 1, y - 19, 8, 5, '#45903b'); pell(x - 4, y - 15, 4, 3, '#45903b');
-  pell(x - 3, y - 21, 4, 2, '#62b04c'); px(x - 5, y - 22, 3, 1, '#8ad064'); px(x + 3, y - 18, 2, 1, '#62b04c');
-  px(x + 5, y - 11, 2, 1, '#1f4720'); px(x - 2, y - 12, 2, 1, '#2c6229');
+  px(x - 2, y - 8, 5, 8, OUT); px(x - 1, y - 8, 3, 8, tk); px(x + 1, y - 8, 1, 8, tkd); px(x - 3, y - 1, 7, 1, tkd);
+  pell(x, y - 17, 11, 9, o); pell(x - 6, y - 13, 6, 5, o); pell(x + 6, y - 13, 6, 5, o);
+  pell(x, y - 17, 10, 8, m); pell(x - 6, y - 13, 5, 4, m); pell(x + 6, y - 13, 5, 4, d);
+  pell(x - 1, y - 19, 8, 5, l); pell(x - 4, y - 15, 4, 3, l);
+  pell(x - 3, y - 21, 4, 2, t); px(x - 5, y - 22, 3, 1, t2); px(x + 3, y - 18, 2, 1, t);
+  px(x + 5, y - 11, 2, 1, o); px(x - 2, y - 12, 2, 1, d);
+  if (STYLE.snow) { pell(x - 1, y - 23, 7, 2, '#ffffff'); px(x - 9, y - 16, 4, 1, '#ffffff'); px(x + 5, y - 16, 4, 1, '#ffffff'); }
 }
 function pineTree(x, y) {
+  const [o, d, m, l] = STYLE.pine;
   pell(x + 1, y, 7, 2, 'rgba(20,50,20,0.35)');
-  px(x - 1, y - 5, 3, 5, '#5a361c');
+  px(x - 1, y - 5, 3, 5, STYLE.trunk[1]);
   for (let i = 0; i < 3; i++) {
     const top = y - 26 + i * 6, w = 4 + i * 3;
     for (let k = 0; k < 10; k++) {
       const hw = Math.round((k / 10) * w) + 1;
-      px(x - hw - 1, top + k, hw * 2 + 3, 1, '#173a1e');
-      px(x - hw, top + k, hw * 2 + 1, 1, k % 3 === 2 ? '#24582a' : '#2d6a32');
-      px(x - hw, top + k, Math.max(1, Math.floor(hw / 2)), 1, '#3f8a40');
+      px(x - hw - 1, top + k, hw * 2 + 3, 1, o);
+      px(x - hw, top + k, hw * 2 + 1, 1, k % 3 === 2 ? d : m);
+      px(x - hw, top + k, Math.max(1, Math.floor(hw / 2)), 1, l);
+      if (STYLE.snow && k < 3) px(x - hw, top + k, hw * 2 + 1, 1, k === 2 ? '#dce7f4' : '#ffffff');
+      if (STYLE.tree === 'dead' && k === 9 && hash2(x, top) < 0.5) px(x + hw - 1, top + k, 1, 1, '#ff7a2a');
     }
   }
-  px(x, y - 27, 1, 2, '#173a1e');
+  px(x, y - 27, 1, 2, o);
+}
+function palm(x, y) {
+  pell(x + 4, y, 9, 2, 'rgba(60,40,10,0.3)');
+  let tx = x, ty = y;
+  for (let i = 0; i < 22; i++) {
+    tx = x + Math.round(Math.sin(i / 7) * 3); ty = y - i;
+    px(tx - 2, ty, 5, 1, OUT); px(tx - 1, ty, 3, 1, i % 3 ? '#a8743e' : '#7a4c2a');
+  }
+  for (const a of [-2.8, -2.2, -1.5, -0.9, -0.3, 0.3]) {
+    for (let k = 0; k < 11; k++) {
+      const lx = tx + Math.cos(a) * k, ly = ty - 1 + Math.sin(a) * k * 0.55 + k * k * 0.07;
+      px(lx, ly + 1, 2, 1, '#1f4720'); px(lx, ly, 2, 1, k % 3 ? '#3f8a30' : '#55a046');
+    }
+  }
+  pell(tx, ty - 1, 3, 2, '#2f6e26'); px(tx - 2, ty + 1, 2, 2, '#6e4428'); px(tx + 1, ty + 1, 2, 2, '#5a361c');
+}
+function cactus(x, y) {
+  pell(x + 1, y, 6, 2, 'rgba(60,40,10,0.3)');
+  parts([[x - 2, y - 18, 5, 18, '#4a9a48'], [x - 7, y - 12, 4, 3, '#4a9a48'], [x - 7, y - 16, 3, 5, '#4a9a48'], [x + 3, y - 9, 4, 3, '#4a9a48'], [x + 5, y - 14, 3, 6, '#4a9a48']]);
+  for (let k = y - 17; k < y - 1; k += 3) { px(x - 1, k, 1, 1, '#3a7a38'); px(x + 1, k + 1, 1, 1, '#6cb85a'); }
+  px(x - 1, y - 19, 3, 1, '#f25d5d');
+}
+function deadTree(x, y) {
+  pell(x + 1, y, 8, 2, 'rgba(0,0,0,0.35)');
+  px(x - 2, y - 16, 4, 16, OUT); px(x - 1, y - 16, 2, 16, '#3a3032');
+  for (const [dx, dy, len, dir] of [[0, -14, 7, -1], [0, -11, 6, 1], [0, -19, 4, 1], [0, -7, 5, -1]]) {
+    for (let k = 0; k < len; k++) px(x + dx + dir * k, y + dy - Math.floor(k / 2), 1, 1, k === len - 1 && hash2(x, dy) < 0.5 ? '#ff7a2a' : '#2a2224');
+  }
+  px(x - 1, y - 20, 2, 4, '#2a2224');
+}
+function crystalTree(x, y) {
+  pell(x + 1, y, 8, 2, 'rgba(0,0,0,0.35)');
+  px(x - 1, y - 8, 3, 8, '#241c3a'); px(x, y - 8, 1, 8, '#3a3058');
+  const shard = (cx, cy, h, c) => { for (let k = 0; k < h; k++) { const w = Math.max(1, Math.round((1 - Math.abs(k - h / 2) / (h / 2)) * 3)); px(cx - w, cy - k, w * 2 + 1, 1, OUT); px(cx - w + 1, cy - k, Math.max(1, w * 2 - 1), 1, c); } px(cx - 1, cy - Math.floor(h * 0.7), 1, 2, '#ffffff'); };
+  shard(x - 5, y - 9, 10, '#b8a6ff'); shard(x + 5, y - 10, 11, '#7af0ff'); shard(x, y - 12, 15, '#d8a6ff'); shard(x + 2, y - 8, 7, '#ff8af0');
+}
+function glowShroom(x, y) {
+  pell(x + 1, y, 6, 2, 'rgba(0,0,0,0.35)');
+  px(x - 2, y - 10, 4, 10, OUT); px(x - 1, y - 10, 2, 10, '#d8d0f0');
+  pell(x, y - 12, 9, 5, OUT); pell(x, y - 12, 8, 4, '#8a5ad8'); pell(x - 2, y - 13, 4, 2, '#b08af0');
+  for (const [dx, dy] of [[-4, -12], [2, -14], [5, -11], [-1, -10]]) px(x + dx, y + dy, 1, 1, '#7af0ff');
+}
+function snowman(x, y) {
+  pell(x + 1, y, 7, 2, 'rgba(60,80,110,0.3)');
+  pell(x, y - 4, 6, 5, OUT); pell(x, y - 4, 5, 4, '#ffffff'); pell(x, y - 12, 4, 4, OUT); pell(x, y - 12, 3, 3, '#ffffff');
+  px(x - 1, y - 13, 1, 1, OUT); px(x + 1, y - 13, 1, 1, OUT); px(x + 1, y - 12, 3, 1, '#f08a28'); px(x - 3, y - 9, 7, 1, '#d84848');
+  px(x - 3, y - 18, 7, 2, OUT); px(x - 2, y - 21, 5, 3, OUT); px(x - 1, y - 4, 1, 1, OUT); px(x - 1, y - 2, 1, 1, OUT);
 }
 function bush(x, y) {
+  const [d, m, l, t, berry] = STYLE.bush;
   pell(x + 1, y + 1, 8, 2, 'rgba(20,50,20,0.3)');
-  pell(x, y - 4, 8, 5, '#1f4720'); pell(x, y - 4, 7, 4, '#3a7e34'); pell(x - 2, y - 6, 4, 2, '#55a046'); px(x - 4, y - 7, 2, 1, '#86c862');
-  px(x + 3, y - 5, 1, 1, '#f25d5d'); px(x - 1, y - 3, 1, 1, '#f25d5d');
+  pell(x, y - 4, 8, 5, d); pell(x, y - 4, 7, 4, m); pell(x - 2, y - 6, 4, 2, l); px(x - 4, y - 7, 2, 1, t);
+  px(x + 3, y - 5, 1, 1, berry); px(x - 1, y - 3, 1, 1, berry);
 }
 function rock(x, y, big) {
   const w = big ? 7 : 4;
   pell(x + 1, y + 1, w, 1, 'rgba(20,50,20,0.3)');
-  pell(x, y - 1, w, big ? 3 : 2, '#5d5650'); pell(x, y - 2, w - 1, big ? 2 : 1, '#8a827a'); px(x - w + 2, y - (big ? 4 : 3), 2, 1, '#b8b0a6');
+  pell(x, y - 1, w, big ? 3 : 2, STYLE.rockLo); pell(x, y - 2, w - 1, big ? 2 : 1, STYLE.rock[1]); px(x - w + 2, y - (big ? 4 : 3), 2, 1, STYLE.rockHi);
 }
-function flower(x, y, c) { px(x, y + 1, 1, 2, '#2f7228'); px(x - 1, y, 3, 1, c); px(x, y - 1, 1, 3, c); px(x, y, 1, 1, c === '#f8e04a' ? '#c86a1a' : '#f8e04a'); }
+function flower(x, y, c) { px(x, y + 1, 1, 2, STYLE.stem); px(x - 1, y, 3, 1, c); px(x, y - 1, 1, 3, c); px(x, y, 1, 1, c === '#f8e04a' ? '#c86a1a' : '#f8e04a'); }
 function tallGrass(x0, y0, w, h) {
+  const [base, mid, hi, tip, tip2] = STYLE.tall;
   for (let y = y0; y < y0 + h; y += 6) for (let x = x0 + ((y - y0) % 12 ? 3 : 0); x < x0 + w - 2; x += 6) {
-    px(x, y + 1, 7, 6, '#2f6e26');
-    px(x, y + 2, 1, 4, '#3f8a30'); px(x + 2, y, 1, 6, '#4da03a'); px(x + 4, y + 1, 1, 5, '#3f8a30'); px(x + 6, y + 2, 1, 4, '#4da03a');
-    px(x + 2, y, 1, 1, '#9ee070'); px(x + 4, y + 1, 1, 1, '#7ccc58'); px(x, y + 2, 1, 1, '#7ccc58');
+    px(x, y + 1, 7, 6, base);
+    px(x, y + 2, 1, 4, mid); px(x + 2, y, 1, 6, hi); px(x + 4, y + 1, 1, 5, mid); px(x + 6, y + 2, 1, 4, hi);
+    px(x + 2, y, 1, 1, tip); px(x + 4, y + 1, 1, 1, tip2); px(x, y + 2, 1, 1, tip2);
   }
 }
-function ledge(x0, y0, w) { px(x0, y0 - 1, w, 1, '#86cc5e'); px(x0, y0, w, 3, '#4c8a34'); px(x0, y0 + 3, w, 2, '#2f5e22'); for (let x = x0 + 3; x < x0 + w; x += 7) px(x, y0 + 1, 2, 1, '#3a7028'); }
+function ledge(x0, y0, w) { const [top, mid, dark, notch] = STYLE.ledge; px(x0, y0 - 1, w, 1, top); px(x0, y0, w, 3, mid); px(x0, y0 + 3, w, 2, dark); for (let x = x0 + 3; x < x0 + w; x += 7) px(x, y0 + 1, 2, 1, notch); }
+// Ice cracks, lava crust and reflected stars, painted on top of the water once.
+function paintWaterDetail() {
+  const r = prng(41), k = STYLE.waterKind;
+  if (k === 'water' || k === 'oasis') return;
+  for (let i = 0; i < (k === 'night' ? 160 : 60); i++) {
+    const x = RIVER[0] + r() * (RIVER[1] - RIVER[0]), y = r() * WH;
+    if (terrainAt(x, y) !== T.WATER) continue;
+    if (k === 'night') { px(x, y, 1, 1, r() < 0.3 ? '#ffffff' : '#7a9ae8'); continue; }
+    if (k === 'ice') { let cx = x, cy = y; for (let s = 0; s < 8 + r() * 8; s++) { cx += r() < 0.5 ? 1 : -1; cy += r() < 0.6 ? 1 : 0; px(cx, cy, 1, 1, '#7ab0d8'); px(cx + 1, cy, 1, 1, '#ffffff'); } }
+    if (k === 'lava') { pell(x, y, 3 + r() * 4, 1 + r() * 2, '#5a2a1a'); px(x - 1, y, 2, 1, '#2a1410'); }
+  }
+}
 function fence(x0, y, w, gapX) {
   px(x0, y - 6, w, 2, OUT); px(x0, y - 2, w, 2, OUT);
   for (let x = x0; x < x0 + w; x += 7) { if (Math.abs(x + 1 - gapX) < 9) continue; px(x - 1, y - 10, 5, 12, OUT); px(x, y - 9, 3, 10, '#f4efe4'); px(x + 2, y - 8, 1, 9, '#c9c0b0'); px(x + 1, y - 10, 1, 1, OUT); }
@@ -307,6 +444,7 @@ function roof(x, y, w, h, base, dark, light) {
   }
   px(x + 3, y - 1, w - 6, 1, OUT); px(x + 4, y, w - 8, 1, light);
   px(x - 1, y + h, w + 2, 2, OUT); px(x, y + h, w, 1, dark);
+  if (STYLE.snow) { px(x + 3, y, w - 6, 3, '#ffffff'); px(x + 2, y + 3, w - 4, 1, '#dce7f4'); for (let i = x + 5; i < x + w - 5; i += 9) px(i, y + 4, 2, 2, '#ffffff'); }
 }
 function wall(x, y, w, h, style, base, dark, line) {
   px(x - 1, y, w + 2, h + 1, OUT); px(x, y, w, h, base);
@@ -622,13 +760,25 @@ function drawBubbles(g, dt) {
 
 // ---------- each frame ----------
 function drawLive(g, dt, t) {
-  // River and pond: flowing streaks and sparkles.
-  for (let i = 0; i < 26; i++) {
-    const y = (i * 53 + t * (10 + (i % 3) * 3)) % WH, [w0, w1] = riverBanks(y), x = w0 + 10 + ((i * 37) % (w1 - w0 - 20));
-    g.fillStyle = 'rgba(200,232,255,0.55)'; g.fillRect(Math.round(x), Math.round(y), 1, 4);
+  // River and pond: flowing water, still ice that glints, slow glowing lava, or stars on night water.
+  const wk = STYLE.waterKind;
+  if (wk === 'water' || wk === 'oasis' || wk === 'lava') {
+    const lava = wk === 'lava';
+    for (let i = 0; i < 26; i++) {
+      const y = (i * 53 + t * (lava ? 3 + (i % 3) : 10 + (i % 3) * 3)) % WH, [w0, w1] = riverBanks(y), x = w0 + 10 + ((i * 37) % (w1 - w0 - 20));
+      g.fillStyle = lava ? `rgba(255,${200 + (i % 3) * 20},90,0.75)` : wk === 'oasis' ? 'rgba(200,250,248,0.6)' : 'rgba(200,232,255,0.55)';
+      g.fillRect(Math.round(x), Math.round(y), lava ? 2 : 1, lava ? 2 : 4);
+    }
   }
-  for (let i = 0; i < 14; i++) if (Math.sin(t * 2.3 + i * 1.7) > 0.8) { g.fillStyle = '#ffffff'; g.fillRect(RIVER[0] + 12 + ((i * 29) % 96), (i * 41) % WH, 2, 1); }
-  const rp = (t % 3) / 3; g.strokeStyle = `rgba(220,240,255,${0.6 * (1 - rp)})`; g.lineWidth = 1; g.beginPath(); g.ellipse(244, 252, 2 + rp * 9, 1 + rp * 3, 0, 0, Math.PI * 2); g.stroke();
+  if (wk === 'lava') {
+    for (let i = 0; i < 8; i++) { const ph = (t * 0.7 + i * 0.37) % 1, bx = RIVER[0] + 14 + ((i * 47) % 96), by = (i * 61) % WH; if (ph < 0.3) { g.fillStyle = '#ffd060'; g.fillRect(bx, by - Math.round(ph * 6), 2, 2); } }
+    glow(g, (RIVER[0] + RIVER[1]) / 2, 200, 70, `rgba(255,110,30,${0.14 + 0.04 * Math.sin(t * 2)})`);
+  } else if (wk === 'ice') {
+    for (let i = 0; i < 10; i++) if (Math.sin(t * 1.3 + i * 2.1) > 0.92) { g.fillStyle = '#ffffff'; const x = RIVER[0] + 12 + ((i * 29) % 96), y = (i * 41) % WH; g.fillRect(x, y, 1, 1); g.fillRect(x - 1, y + 1, 3, 1); g.fillRect(x, y + 2, 1, 1); }
+  } else {
+    for (let i = 0; i < 14; i++) if (Math.sin(t * 2.3 + i * 1.7) > 0.8) { g.fillStyle = wk === 'night' ? '#fff4a8' : '#ffffff'; g.fillRect(RIVER[0] + 12 + ((i * 29) % 96), (i * 41) % WH, 2, 1); }
+    const rp = (t % 3) / 3; g.strokeStyle = `rgba(220,240,255,${0.6 * (1 - rp)})`; g.lineWidth = 1; g.beginPath(); g.ellipse(244, 252, 2 + rp * 9, 1 + rp * 3, 0, 0, Math.PI * 2); g.stroke();
+  }
   // Lights: forge furnace, temple braziers, the crystal, cave lanterns, the lighthouse lamp.
   const fl = 0.5 + 0.5 * Math.sin(t * 13) * Math.sin(t * 7.3);
   g.fillStyle = '#c04018'; g.fillRect(473, 152, 16, 12); g.fillStyle = fl > 0.5 ? '#ff9a30' : '#f07a20'; g.fillRect(474, 150 + Math.round(fl * 3), 14, 14 - Math.round(fl * 3));
@@ -681,11 +831,41 @@ function drawLive(g, dt, t) {
   if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { g.fillStyle = '#ff3040'; g.fillRect(1139, 160, 2, 1); g.fillRect(1149, 160, 2, 1); glow(g, 1145, 162, 14, 'rgba(255,40,60,0.25)'); }
   g.drawImage(heroSprite(0), SPAWN.x - 8, SPAWN.y - 13 + (Math.floor(t * 2) % 2), 16, 16);
   drawBubbles(g, dt);
-  // Birds crossing high up, and slow cloud shadows over everything.
+  drawWeather(g, t);
+  // Birds crossing high up (not at night or over the lava), and slow cloud shadows over everything.
   const bx = ((t * 26) % (WW + 300)) - 150;
-  for (const [ox, oy] of [[0, 0], [-7, -4], [-7, 4]]) { const fx = Math.floor(t * 6 + ox) % 2; g.fillStyle = '#2a2a3a'; g.fillRect(Math.round(bx + ox), Math.round(58 + oy + Math.sin(t) * 3), 1, 1); g.fillRect(Math.round(bx + ox - 2), Math.round(58 + oy - fx + Math.sin(t) * 3), 2, 1); g.fillRect(Math.round(bx + ox + 1), Math.round(58 + oy - fx + Math.sin(t) * 3), 2, 1); }
+  if (!STYLE.tint) for (const [ox, oy] of [[0, 0], [-7, -4], [-7, 4]]) { const fx = Math.floor(t * 6 + ox) % 2; g.fillStyle = '#2a2a3a'; g.fillRect(Math.round(bx + ox), Math.round(58 + oy + Math.sin(t) * 3), 1, 1); g.fillRect(Math.round(bx + ox - 2), Math.round(58 + oy - fx + Math.sin(t) * 3), 2, 1); g.fillRect(Math.round(bx + ox + 1), Math.round(58 + oy - fx + Math.sin(t) * 3), 2, 1); }
   g.fillStyle = 'rgba(20,40,70,0.09)';
   for (const [off, cy, rx] of [[0, 90, 70], [520, 230, 56], [900, 150, 80]]) { const cx = ((t * 5 + off) % (WW + 300)) - 150; g.beginPath(); g.ellipse(cx, cy, rx, rx * 0.36, 0, 0, Math.PI * 2); g.fill(); }
+}
+// Weather for each island: falling snow, drifting sand, rising embers, or fireflies and shooting stars.
+function drawWeather(g, t) {
+  const w = STYLE.weather;
+  if (!w) return;
+  const x0 = WORLD.cam.x - 20, span = (WORLD.vw / WORLD.z) + 40;
+  if (w === 'snow') {
+    for (let i = 0; i < 90; i++) {
+      const sp = 9 + (i % 5) * 3, y = (i * 37 + t * sp) % (WH + 10) - 5, x = x0 + ((i * 53.7) % span) + Math.sin(t * 0.8 + i) * 4;
+      g.fillStyle = i % 4 ? 'rgba(255,255,255,0.85)' : '#ffffff'; g.fillRect(Math.round(x), Math.round(y), i % 7 ? 1 : 2, i % 7 ? 1 : 2);
+    }
+  } else if (w === 'dust') {
+    for (let i = 0; i < 40; i++) {
+      const x = x0 + ((i * 61.3 + t * (30 + (i % 4) * 10)) % span), y = (i * 47) % WH + Math.sin(t + i) * 3;
+      g.fillStyle = `rgba(250,232,190,${0.25 + (i % 3) * 0.12})`; g.fillRect(Math.round(x), Math.round(y), 3 + (i % 3), 1);
+    }
+  } else if (w === 'embers') {
+    for (let i = 0; i < 50; i++) {
+      const y = WH - ((i * 41 + t * (8 + (i % 4) * 3)) % (WH + 10)), x = x0 + ((i * 59.1) % span) + Math.sin(t * 1.5 + i) * 3;
+      g.fillStyle = Math.sin(t * 6 + i) > 0 ? '#ffb040' : '#ff6a2a'; g.fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
+  } else if (w === 'stars') {
+    for (let i = 0; i < 36; i++) {
+      const x = x0 + ((i * 71.3) % span) + Math.sin(t * 0.6 + i) * 8, y = (i * 53) % WH + Math.cos(t * 0.5 + i * 2) * 6, on = Math.sin(t * 2 + i * 1.3);
+      if (on > -0.2) { g.globalAlpha = 0.4 + 0.6 * Math.max(0, on); g.fillStyle = i % 3 ? '#d8ff8a' : '#7af0ff'; g.fillRect(Math.round(x), Math.round(y), 1, 1); glow(g, x, y, 3, 'rgba(200,255,140,0.25)'); g.globalAlpha = 1; }
+    }
+    const sp = (t % 9) / 9;
+    if (sp < 0.12) { const sx = x0 + span * (0.2 + sp * 5), sy = 20 + sp * 300; g.fillStyle = '#ffffff'; g.fillRect(Math.round(sx), Math.round(sy), 2, 1); g.fillStyle = 'rgba(255,255,255,0.4)'; g.fillRect(Math.round(sx - 6), Math.round(sy - 3), 6, 1); }
+  }
 }
 function glow(g, x, y, r, c) { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, c); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
 
@@ -693,10 +873,11 @@ function drawWorld(dt) {
   const g = WORLD.ctx, dpr = WORLD.dpr, z = WORLD.z;
   WORLD.t += dt;
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.fillStyle = '#1f4720'; g.fillRect(0, 0, WORLD.cv.width, WORLD.cv.height);
+  g.fillStyle = STYLE.bg; g.fillRect(0, 0, WORLD.cv.width, WORLD.cv.height);
   g.setTransform(dpr * z, 0, 0, dpr * z, -WORLD.cam.x * dpr * z, -WORLD.cam.y * dpr * z);
   g.imageSmoothingEnabled = false;
   g.drawImage(WORLD.img, 0, 0);
+  if (STYLE.tint) { g.fillStyle = STYLE.tint; g.fillRect(0, 0, WW, WH); } // night or the ember glow; what moves is drawn over it, lit
   drawLive(g, dt, WORLD.t);
   // A soft shade at the top and bottom of the screen pulls the eye to the road.
   g.setTransform(1, 0, 0, 1, 0, 0);
@@ -742,7 +923,7 @@ function islandHtml() {
     h += `<button class="sign" ${act} aria-label="${b.name}" style="left:${b.x + b.w / 2}px;top:${sy}px">${b.name}<small id="isl-${b.tab}"></small><i class="dot"></i></button>`;
   }
 
-  h += '</div><div class="edge l" id="edgeL">◀</div><div class="edge r" id="edgeR">▶</div><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button></div>';
+  h += '</div><div class="edge l" id="edgeL">◀</div><div class="edge r" id="edgeR">▶</div><button class="toSpawn" id="toSpawn" aria-label="Back to town">⌂ Town</button><div class="islebanner" id="isleBanner"></div></div>';
   return h;
 }
 
@@ -752,7 +933,9 @@ function buildIsland() {
     sec.innerHTML = islandHtml();
     WORLD.cv = $('#worldCv');
     WORLD.ctx = WORLD.cv.getContext('2d');
+    WORLD.isle = worldIsle();
     WORLD.img = paintWorld();
+    updateIsleBanner(false);
     bindSwipe($('#world'));
     $('#world').addEventListener('click', e => {
       if (e.target.closest('button')) return;
@@ -785,7 +968,7 @@ function updateIslandSigns() {
   set('fight', bossWaiting() ? 'Boss!' : 'B' + S.run.floor);
   set('skills', S.run.sp > 0 ? S.run.sp + ' pts' : '');
   set('cases', freeCrateReady() ? 'Free!' : '');
-  set('dock', 'Soon');
+  set('dock', islesReached() > 0 ? 'Sail' : '');
 }
 
 function islandLoop(now) {
@@ -794,6 +977,9 @@ function islandLoop(now) {
   const dt = Math.min(0.1, (now - (WORLD.last || now)) / 1000);
   WORLD.last = now;
   if (!WORLD.drag && Math.abs(WORLD.vx) > 0.05) { WORLD.cam.x += WORLD.vx; WORLD.vx *= 0.9; clampCam(); placeLayer(); }
+  // Dug past the next 50 floors, or sailed somewhere: repaint the world as that island.
+  const isle = worldIsle();
+  if (isle !== WORLD.isle) { WORLD.isle = isle; WORLD.img = paintWorld(); updateIsleBanner(true); }
   drawWorld(dt);
   if ((WORLD.signT = (WORLD.signT || 0) + dt) > 0.5) { WORLD.signT = 0; updateIslandSigns(); }
 }
@@ -802,7 +988,7 @@ requestAnimationFrame(islandLoop);
 // Buildings open their screen; the phone's back gesture (or the back button) returns to the world.
 function goBuilding(tab) {
   audioUnlock();
-  if (tab === 'dock') { toast('Boats to new islands are coming soon', 'gold'); return; }
+  if (tab === 'dock') { openHarbor(); return; }
   SFX.click();
   if (UI.tab === 'island') history.pushState({ ddh: tab }, '');
   showTab(tab);
@@ -820,3 +1006,33 @@ document.addEventListener('click', e => {
   if (b) { goBuilding(b.dataset.go); return; }
   if (e.target.closest('#homeBtn')) goIsland();
 });
+
+// ---------- Version 2: islands and the harbor ----------
+function updateIsleBanner(big) {
+  const el = $('#isleBanner');
+  if (!el) return;
+  const i = WORLD.isle || 0, isl = ISLANDS[i], next = ISLANDS[i + 1];
+  el.innerHTML = `<b>${isl.name}</b><small>B${isl.from}${next ? '–' + (next.from - 1) : '+'}</small>`;
+  if (big) { el.classList.remove('big'); void el.offsetWidth; el.classList.add('big'); }
+}
+function openHarbor() {
+  const top = islesReached(), cur = worldIsle(), follow = S.isle.view < 0;
+  let h = `<h2>Harbor</h2><p class="small muted" style="text-align:center">Every 50 floors down the mine is a new island. Sail to any island you have reached, or let the world follow your depth this run.</p><div class="islelist">`;
+  ISLANDS.forEach((isl, i) => {
+    const ok = i <= top;
+    h += `<button class="isleopt ${cur === i ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="sail" data-i="${i}" ${ok ? '' : 'disabled'}>
+      <span class="isleswatch" style="background:${ok ? ISLE_STYLE[isl.id].swatch : 'var(--ink)'}"></span>
+      <span class="grow"><b>${isl.name}</b><small>${ok ? isl.blurb : 'Reach B' + isl.from + ' to sail here'}</small></span>${cur === i ? '<span class="isletag">Here</span>' : ''}</button>`;
+  });
+  h += `</div><button class="btn ${follow ? 'gold' : ''}" data-act="sail" data-i="-1" style="width:100%;margin-top:6px">${follow ? '✓ ' : ''}Follow my depth</button>
+    <p class="small muted" style="text-align:center;margin:8px 0 0">Islands reached: ${top + 1}/${ISLANDS.length} · +${Math.round(ISLE_COINS * S.isle.claimed * 100)}% coins forever</p>
+    <div class="mbtns"><button class="btn" data-act="close">Close</button></div>`;
+  openModal(h, { dismissable: true });
+}
+function sailTo(i) {
+  closeModal();
+  if (i >= 0 && i > islesReached()) return;
+  S.isle.view = i;
+  SFX.claim();
+  toast(i < 0 ? 'The world follows your depth again' : `Sailing to ${ISLANDS[i].name}`, 'gold');
+}

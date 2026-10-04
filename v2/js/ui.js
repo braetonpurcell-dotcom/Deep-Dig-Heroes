@@ -1628,6 +1628,22 @@ on('bestFloor', ({ floor }) => {
   if (floor === 25 && S.prestiges === 0) toast('Prestige unlocked! See the More tab.', 'purple', 'core');
 });
 on('bossFail', () => setTicker('The boss escaped. Farm here, then tap Retry boss.', 'bad', 4000));
+// Version 2: reaching a new island for the first time.
+on('isles', list => {
+  const keys = list.reduce((a, x) => a + x.keys, 0), last = ISLANDS[list[list.length - 1].i];
+  if (UI.tab === 'fight' && !UI.booting) { SFX.levelup(); toast(`Land ho! You reached ${last.name}: +${keys} keys and +${Math.round(ISLE_COINS * list.length * 100)}% coins forever`, 'gold', 'key'); return; }
+  queueModal(() => showIslesArrived(list));
+});
+function showIslesArrived(list) {
+  const keys = list.reduce((a, x) => a + x.keys, 0), last = ISLANDS[list[list.length - 1].i];
+  const hats = LOOK_HATS.filter(h => h.isle && list.some(x => x.i === h.isle));
+  openModal(`<h2>${list.length > 1 ? 'New islands reached!' : 'Land ho: ' + last.name + '!'}</h2>
+    <div class="islelist">${list.map(x => { const isl = ISLANDS[x.i]; return `<div class="isleopt on"><span class="isleswatch" style="background:${ISLE_STYLE[isl.id].swatch}"></span><span class="grow"><b>${isl.name}</b><small>B${isl.from}+ · ${isl.blurb}</small></span></div>`; }).join('')}</div>
+    <p style="text-align:center">+${keys} keys · +${Math.round(ISLE_COINS * list.length * 100)}% coins forever${hats.length ? `<br>New ${hats.length > 1 ? 'hats' : 'hat'} in the House: ${hats.map(h => h.name).join(', ')}` : ''}</p>
+    <p class="small muted" style="text-align:center">The world turns into each island as you dig past it. Sail back to any island from the Harbor by the bridge.</p>
+    <div class="mbtns"><button class="btn gold" data-act="close">Explore</button></div>`, { dismissable: true });
+  SFX.levelup();
+}
 on('dailyAuto', res => {
   let what = res.label;
   if (res.keys) what = `+${res.keys} keys`;
@@ -1666,6 +1682,7 @@ function handleAction(el) {
       S.caseKind = d.v === 'pet' || d.v === 'drill' ? d.v : 'tool'; SFX.click(); buildCases(); break;
     case 'goDrillCrates': if (UI.auto) stopAutoRoll(); S.caseKind = 'drill'; SFX.click(); showTab('cases'); break;
     case 'drillShow': S.drill.show = !S.drill.show; SFX.click(); buildForge(); break;
+    case 'sail': sailTo(Number(d.i)); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
     case 'learnPlan': doLearnPlan(d.id); break;

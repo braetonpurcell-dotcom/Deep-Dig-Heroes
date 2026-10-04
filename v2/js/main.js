@@ -221,6 +221,7 @@ function boot(hotData) {
   if (S.bonusRound) toast(`Your double-it round is still on: ${BONUS_TAPS} taps in a row`, 'purple');
   if (offline && offline.coins > 0) queueModal(() => showWelcomeBack(offline));
   if (!S.daily.claimed) queueModal(showDailyPopup);
+  checkIslands(); // islands reached before this update get their arrival rewards now
 
   saveLocal();
   applyWakeLock();

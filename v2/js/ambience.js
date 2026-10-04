@@ -95,9 +95,13 @@ function ambTick() {
   } else if (UI.tab === 'fight') cave = 0.45; // a hint of the cave under the fight
   if (!audible) grass = water = cave = 0;
   AMB.w = { grass, water, cave };
+  // Each island sounds a little different: colder wind on the snow, a frozen (quiet) river, dry
+  // desert wind, a crackling lava river, and a hushed night.
+  const isle = UI.tab === 'island' && typeof WORLD !== 'undefined' && WORLD.isle != null ? ISLANDS[WORLD.isle].id : 'green';
+  const mix = { green: [1, 1], frost: [1.35, 0.15], sand: [1.15, 0.6], ember: [0.6, 0.85], star: [0.5, 0.6] }[isle] || [1, 1];
   const k = document.hidden ? 0.05 : 0.5;
-  L.grass.gain.setTargetAtTime(grass * 0.08, now, k);
-  L.water.gain.setTargetAtTime(water * 0.073, now, k);
+  L.grass.gain.setTargetAtTime(grass * 0.08 * mix[0], now, k);
+  L.water.gain.setTargetAtTime(water * 0.073 * mix[1], now, k);
   L.cave.gain.setTargetAtTime(cave * 0.27, now, k);
   // Gusts of wind, flickering water, a slowly moving howl.
   const t = now;
@@ -108,7 +112,9 @@ function ambTick() {
   L.howlF.frequency.setTargetAtTime(330 + 140 * Math.sin(t * 0.21) + 50 * Math.sin(t * 0.07), now, 0.5);
   if (cave > 0.2 && Math.random() < 0.035) drip();
   if (cave > 0.5 && Math.random() < 0.006) whisper();
-  if (grass > 0.4 && UI.tab === 'island' && Math.random() < 0.01) birdChirp(grass);
+  if (grass > 0.4 && UI.tab === 'island' && (isle === 'green' || isle === 'sand') && Math.random() < 0.01) birdChirp(grass);
+  if (isle === 'ember' && water > 0.2 && Math.random() < 0.25) noise(0.02 + Math.random() * 0.03, 0.05 * water, 1800 + Math.random() * 2400); // lava crackle
+  if (isle === 'star' && grass > 0.3 && Math.random() < 0.02) { const tt = AU.ctx.currentTime; voice(m2f(84 + MEL_SCALE[Math.floor(Math.random() * 5)]), tt, 0.9, 'sine', 0.015 * grass, AMB.layers.bed); } // night chimes
   // Music: everywhere, quieter in the fight and as you near the cave.
   const musicOn = audible && S.settings.music !== false;
   const lvl = UI.tab === 'island' ? 1 - cave * 0.65 : UI.tab === 'fight' ? 0.45 : 0.75;
