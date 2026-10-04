@@ -574,13 +574,52 @@ function drawChickens(dt, t) {
   }
 }
 
-function drawSheep(t) {
-  for (const [x0, y, ph] of [[376, 74, 0], [400, 82, 2], [566, 68, 4], [700, 78, 1]]) {
-    const x = Math.round(x0 + Math.sin(t * 0.15 + ph) * 6), dir = Math.cos(t * 0.15 + ph) > 0 ? 1 : -1, down = Math.sin(t * 1.3 + ph) > 0.3;
+function drawSheep(t, dt) {
+  WORLD.sheep = WORLD.sheep || [0, 0, 0, 0].map(() => ({ x: 0, y: 0, hop: 0 }));
+  [[376, 74, 0], [400, 82, 2], [566, 68, 4], [700, 78, 1]].forEach(([x0, y0, ph], i) => {
+    const sh = WORLD.sheep[i]; sh.hop = Math.max(0, sh.hop - dt);
+    const y = y0 - Math.round(Math.sin((sh.hop / 0.5) * Math.PI) * 5);
+    const x = Math.round(x0 + Math.sin(t * 0.15 + ph) * 6); sh.x = x; sh.y = y0;
+    const dir = Math.cos(t * 0.15 + ph) > 0 ? 1 : -1, down = Math.sin(t * 1.3 + ph) > 0.3;
     pell(x, y, 6, 1, 'rgba(20,45,15,0.35)');
     px(x - 4, y - 2, 2, 2, OUT); px(x + 2, y - 2, 2, 2, OUT);
     parts([[x - 5, y - 8, 10, 6, '#fbf7ee'], [x + (dir > 0 ? 4 : -7), y - (down ? 5 : 9), 3, 4, '#3a3448']]);
     px(x - 4, y - 8, 4, 1, '#ffffff'); px(x - 1, y - 4, 5, 1, '#d6ccb4');
+  });
+}
+
+// ---------- tapping the world: animals, villagers, water and tall grass answer back ----------
+const TALL = [[600, 230, 64, 30], [900, 222, 96, 40], [940, 96, 80, 56], [1030, 230, 56, 32]];
+const LINES = {
+  farmer: ['Carrots soon!', 'Water, water...', 'Lovely day!', 'Mind the pumpkins.'],
+  cutter: ['Timber!', 'Wood for the forge.', 'Hup!', 'One more log...'],
+  smith: ['Sharp as ever.', 'Need an upgrade?', 'Hot work!', 'Bring me ore!'],
+};
+function say(x, y, text) { WORLD.bubbles = (WORLD.bubbles || []).filter(b => Math.abs(b.x - x) > 4).concat({ x, y, text, t: 0 }); }
+function worldTap(wx, wy) {
+  const near = (x, y, r) => Math.hypot(wx - x, wy - y) < r;
+  const sheep = (WORLD.sheep || []).findIndex(s => near(s.x, s.y - 5, 10));
+  if (sheep >= 0) { const s = WORLD.sheep[sheep]; s.hop = 0.5; CRITTER_SFX.baa(0.85 + sheep * 0.1); say(s.x, s.y - 14, 'Baa!'); return; }
+  const hen = (WORLD.hens || []).find(h => near(h.x, h.y - 4, 8));
+  if (hen) { hen.tx = Math.max(124, Math.min(190, hen.x + (wx < hen.x ? 22 : -22))); hen.ty = Math.max(226, Math.min(260, hen.y + (Math.random() - 0.5) * 16)); hen.peck = 0; CRITTER_SFX.cluck(); say(hen.x, hen.y - 12, 'Bawk!'); return; }
+  const pick = k => LINES[k][Math.floor(Math.random() * LINES[k].length)];
+  const f = WORLD.farmer;
+  if (f && near(f.x, f.y - 8, 10)) { CRITTER_SFX.talk(1); say(f.x, f.y - 22, pick('farmer')); return; }
+  if (near(507, 241, 10)) { CRITTER_SFX.talk(0.8); say(507, 226, pick('cutter')); return; }
+  if (near(527, 179, 10)) { CRITTER_SFX.talk(0.7); say(527, 162, pick('smith')); return; }
+  if (terrainAt(wx, wy) === T.WATER) { CRITTER_SFX.splash(); for (let i = 0; i < 8; i++) WORLD.fx.push({ x: wx, y: wy, vx: (Math.random() - 0.5) * 40, vy: -30 - Math.random() * 30, g: 140, t: 0, life: 0.5, c: i % 2 ? '#ffffff' : '#bfe3f8', s: 1 }); return; }
+  if (TALL.some(([x, y, w, h]) => wx >= x && wx < x + w && wy >= y && wy < y + h)) { CRITTER_SFX.rustle(); for (let i = 0; i < 6; i++) WORLD.fx.push({ x: wx, y: wy, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 20, g: 50, t: 0, life: 0.7, c: i % 2 ? '#7ccc58' : '#4da03a', s: 1 }); }
+}
+function drawBubbles(g, dt) {
+  WORLD.bubbles = (WORLD.bubbles || []).filter(b => (b.t += dt) < 2.2);
+  g.font = '8px "Jersey 10", monospace'; g.textBaseline = 'middle'; g.textAlign = 'center';
+  for (const b of WORLD.bubbles) {
+    const w = Math.ceil(g.measureText(b.text).width) + 6, y = Math.round(b.y - Math.min(3, b.t * 12)), x = Math.round(Math.max(w / 2 + 2, Math.min(WW - w / 2 - 2, b.x)));
+    g.globalAlpha = Math.min(1, (2.2 - b.t) * 3);
+    g.fillStyle = OUT; g.fillRect(x - w / 2 - 1, y - 6, w + 2, 11); g.fillRect(Math.round(b.x) - 2, y + 5, 4, 2);
+    g.fillStyle = '#fbf7ee'; g.fillRect(x - w / 2, y - 5, w, 9); g.fillRect(Math.round(b.x) - 1, y + 4, 2, 2);
+    g.fillStyle = OUT; g.fillText(b.text, x, y);
+    g.globalAlpha = 1;
   }
 }
 
@@ -628,7 +667,7 @@ function drawLive(g, dt, t) {
   // People and animals.
   WORLD.thunk = Math.max(0, (WORLD.thunk || 0) - dt);
   const prev = WORLD.ctx; WORLD.ctx = g;
-  drawSheep(t); drawSmith(dt, t); drawWoodcutter(t); drawFarm(dt, t); drawChickens(dt, t);
+  drawSheep(t, dt); drawSmith(dt, t); drawWoodcutter(t); drawFarm(dt, t); drawChickens(dt, t);
   WORLD.ctx = prev;
   // Sparks, wood chips and water drops.
   for (const p of WORLD.fx) { p.t += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; g.globalAlpha = Math.max(0, 1 - p.t / p.life); g.fillStyle = p.c; g.fillRect(Math.round(p.x), Math.round(p.y), p.s, p.s); }
@@ -644,6 +683,7 @@ function drawLive(g, dt, t) {
   g.globalAlpha = 0.35 + 0.25 * Math.sin(t * 3); g.fillStyle = '#c8f8ff'; g.fillRect(SPAWN.x - 6, SPAWN.y + 1, 12, 4); g.globalAlpha = 1;
   if (typeof bossWaiting === 'function' && bossWaiting() && Math.floor(t * 2) % 2) { g.fillStyle = '#ff3040'; g.fillRect(1139, 160, 2, 1); g.fillRect(1149, 160, 2, 1); glow(g, 1145, 162, 14, 'rgba(255,40,60,0.25)'); }
   g.drawImage(heroSprite(0), SPAWN.x - 8, SPAWN.y - 13 + (Math.floor(t * 2) % 2), 16, 16);
+  drawBubbles(g, dt);
   // Birds crossing high up, and slow cloud shadows over everything.
   const bx = ((t * 26) % (WW + 300)) - 150;
   for (const [ox, oy] of [[0, 0], [-7, -4], [-7, 4]]) { const fx = Math.floor(t * 6 + ox) % 2; g.fillStyle = '#2a2a3a'; g.fillRect(Math.round(bx + ox), Math.round(58 + oy + Math.sin(t) * 3), 1, 1); g.fillRect(Math.round(bx + ox - 2), Math.round(58 + oy - fx + Math.sin(t) * 3), 2, 1); g.fillRect(Math.round(bx + ox + 1), Math.round(58 + oy - fx + Math.sin(t) * 3), 2, 1); }
@@ -717,6 +757,11 @@ function buildIsland() {
     WORLD.ctx = WORLD.cv.getContext('2d');
     WORLD.img = paintWorld();
     bindSwipe($('#world'));
+    $('#world').addEventListener('click', e => {
+      if (e.target.closest('button')) return;
+      const r = $('#world').getBoundingClientRect();
+      worldTap(WORLD.cam.x + (e.clientX - r.left) / WORLD.z, WORLD.cam.y + (e.clientY - r.top) / WORLD.z);
+    });
     $('#toSpawn').addEventListener('click', e => { e.stopPropagation(); centerOnSpawn(); SFX.click(); });
     sizeIsland();
     centerOnSpawn();

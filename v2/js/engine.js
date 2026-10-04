@@ -127,7 +127,7 @@ function freshState() {
       prestiges: 0, bestFloor: 1, maxHit: 0, dailyDone: 0, bestLogin: 0, days: {},
     },
     settings: {
-      sound: true, vibe: true,
+      sound: true, music: true, vibe: true,
       autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA, bagSort: 'new', bagShow: 'all', bagOnly: 'any',
     },
   };
@@ -370,6 +370,7 @@ function hydrate(obj) {
   const st = s.settings;
   if (!['low', 'med', 'high'].includes(st.juice)) st.juice = 'high';
   st.shake = st.shake !== false;
+  st.music = st.music !== false;
   st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, TOP_RARITY) : 0;
   if (!['new', 'rarity', 'best', 'tier', 'lv', 'fn', ...Object.keys(STATS)].includes(st.bagSort)) st.bagSort = 'new';
   if (!['all', 'pick', 'helm', 'charm'].includes(st.bagShow)) st.bagShow = 'all';
