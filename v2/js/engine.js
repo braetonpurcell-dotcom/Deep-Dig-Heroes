@@ -107,6 +107,8 @@ function freshState() {
     gear: { eq: { pick: null, helm: null, charm: null }, bag: [] },
     pets: { inv, eq: [] },
     look: { ...DEFAULT_LOOK }, // Version 2: the miner's wardrobe
+    classes: [], // Version 2: saved builds (skills, gear, pets and look), up to CLASS_SLOTS
+    activeClass: -1,
     pity: { epic: 0, leg: 0 },
     pace: 0, // tap pad pace you settled at last session
     profile: { name: '', pid: '' },
@@ -373,11 +375,19 @@ function hydrate(obj) {
   st.shake = st.shake !== false;
   st.music = st.music !== false;
   // The miner's look: any bad value goes back to the default.
-  if (!s.look || typeof s.look !== 'object') s.look = { ...DEFAULT_LOOK };
-  if (!LOOK_HATS.some(h => h.id === s.look.hat)) s.look.hat = DEFAULT_LOOK.hat;
-  for (const [k, list] of [['hatC', LOOK_CLOTH], ['hair', LOOK_HAIR], ['skin', LOOK_SKIN], ['shirt', LOOK_CLOTH], ['pants', LOOK_CLOTH], ['boots', LOOK_BOOTS]]) {
-    if (!Number.isInteger(s.look[k]) || s.look[k] < 0 || s.look[k] >= list.length) s.look[k] = DEFAULT_LOOK[k];
-  }
+  s.look = cleanLook(s.look);
+  // Saved classes.
+  s.classes = (Array.isArray(s.classes) ? s.classes : []).slice(0, CLASS_SLOTS).map(c => {
+    if (!c || typeof c !== 'object') return null;
+    const skills = {};
+    for (const [id, n] of Object.entries(c.skills || {})) if (SKILL_INDEX[id] && Number.isInteger(n) && n > 0) skills[id] = Math.min(n, SKILL_INDEX[id].max);
+    const gear = {};
+    for (const slot of SLOT_IDS) gear[slot] = c.gear && Number.isInteger(c.gear[slot]) ? c.gear[slot] : null;
+    const pets = (Array.isArray(c.pets) ? c.pets : []).filter(p => p && PETS[p.sp] && Number.isInteger(p.r) && p.r >= 0 && p.r <= TOP_RARITY).slice(0, 6).map(p => ({ sp: p.sp, r: p.r }));
+    return { name: String(c.name || 'Class').slice(0, 20), skills, gear, pets, look: cleanLook(c.look), at: nonNeg(c.at) };
+  });
+  while (s.classes.length && !s.classes[s.classes.length - 1]) s.classes.pop();
+  if (!Number.isInteger(s.activeClass) || !s.classes[s.activeClass]) s.activeClass = -1;
   st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, TOP_RARITY) : 0;
   if (!['new', 'rarity', 'best', 'tier', 'lv', 'fn', ...Object.keys(STATS)].includes(st.bagSort)) st.bagSort = 'new';
   if (!['all', 'pick', 'helm', 'charm'].includes(st.bagShow)) st.bagShow = 'all';
@@ -1233,6 +1243,93 @@ function learnSkill(id) {
   S.run.skills[id] = skillRank(id) + 1;
   S.run.sp--;
   recalc();
+  return true;
+}
+
+// ---------- Version 2: classes (saved builds) ----------
+const CLASS_SLOTS = 4;
+function cleanLook(l) {
+  const L = { ...DEFAULT_LOOK, ...(l && typeof l === 'object' ? l : {}) };
+  if (!LOOK_HATS.some(h => h.id === L.hat)) L.hat = DEFAULT_LOOK.hat;
+  for (const [k, list] of [['hatC', LOOK_CLOTH], ['hair', LOOK_HAIR], ['skin', LOOK_SKIN], ['shirt', LOOK_CLOTH], ['pants', LOOK_CLOTH], ['boots', LOOK_BOOTS]]) {
+    if (!Number.isInteger(L[k]) || L[k] < 0 || L[k] >= list.length) L[k] = DEFAULT_LOOK[k];
+  }
+  return { hat: L.hat, hatC: L.hatC, hair: L.hair, skin: L.skin, shirt: L.shirt, pants: L.pants, boots: L.boots };
+}
+// Points a class puts in each direction of the web, and the direction it leans to most.
+function classBranches(c) {
+  const by = {};
+  for (const b of BRANCHES) by[b.id] = 0;
+  for (const [id, n] of Object.entries(c.skills)) { const br = SKILL_INDEX[id] && SKILL_INDEX[id].branch; if (br in by) by[br] += n; }
+  return by;
+}
+function classLean(c) {
+  const by = classBranches(c);
+  let best = null;
+  for (const b of BRANCHES) if (by[b.id] > 0 && (!best || by[b.id] > by[best.id])) best = b;
+  return best;
+}
+function classPoints(c) { return Object.values(c.skills).reduce((a, n) => a + n, 0); }
+function snapshotClass(name) {
+  const gear = {};
+  for (const slot of SLOT_IDS) gear[slot] = S.gear.eq[slot] ? S.gear.eq[slot].id : null;
+  return { name, skills: { ...S.run.skills }, gear, pets: S.pets.eq.map(p => ({ sp: p.sp, r: p.r })), look: { ...S.look }, at: Date.now() };
+}
+function saveClass(i, name) {
+  if (i < 0 || i >= CLASS_SLOTS) return null;
+  while (S.classes.length < i) S.classes.push(null);
+  S.classes[i] = snapshotClass(name || (S.classes[i] && S.classes[i].name) || 'Class');
+  S.activeClass = i;
+  return S.classes[i];
+}
+// Spend points on a class's skills, inner nodes first, as far as your points go.
+function learnClassSkills(c) {
+  const want = c.skills, dist = id => Math.hypot(SKILL_INDEX[id].x, SKILL_INDEX[id].y);
+  const ids = Object.keys(want).filter(id => SKILL_INDEX[id]).sort((a, b) => dist(a) - dist(b));
+  let n = 0, more = true, guard = 0;
+  while (more && S.run.sp > 0 && guard++ < 60) {
+    more = false;
+    for (const id of ids) {
+      while (S.run.sp > 0 && skillRank(id) < Math.min(want[id], SKILL_INDEX[id].max) && canLearn(id)) {
+        if (!learnSkill(id)) break;
+        n++; more = true;
+      }
+    }
+  }
+  return n;
+}
+function classMissing(c) {
+  let left = 0;
+  for (const [id, n] of Object.entries(c.skills)) left += Math.max(0, n - skillRank(id));
+  return left;
+}
+// Switch to a saved class: refund every skill point and spend it to match, then put on its gear,
+// pets and look. Anything you no longer have (scrapped gear, merged pets) is left out and listed.
+function applyClass(i) {
+  const c = S.classes[i];
+  if (!c) return null;
+  respecSkills();
+  const placed = learnClassSkills(c);
+  const missing = [];
+  for (const slot of SLOT_IDS) {
+    const id = c.gear[slot];
+    if (id == null) continue;
+    const f = findItem(id);
+    if (!f) { missing.push(SLOTS[slot].name); continue; }
+    if (f.where === 'bag') equipItem(id);
+  }
+  S.pets.eq = [];
+  for (const p of c.pets) if (!equipPet(p.sp, p.r)) missing.push(`${RARITY[p.r].name} ${PETS[p.sp].name}`);
+  S.look = { ...c.look };
+  S.activeClass = i;
+  recalc();
+  return { placed, wanted: classPoints(c), left: classMissing(c), missing };
+}
+function deleteClass(i) {
+  if (!S.classes[i]) return false;
+  S.classes[i] = null;
+  while (S.classes.length && !S.classes[S.classes.length - 1]) S.classes.pop();
+  if (S.activeClass === i) S.activeClass = -1;
   return true;
 }
 

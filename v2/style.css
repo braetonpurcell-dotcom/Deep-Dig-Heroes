@@ -787,3 +787,16 @@ body.roomtab #screenbar b { text-shadow: 0 2px 0 #000, 0 0 6px rgba(0,0,0,.8); }
 .swrow { display: flex; flex-wrap: wrap; gap: 5px; }
 .sw { width: 28px; height: 28px; padding: 0; background: var(--c); border: 2px solid rgba(0,0,0,.5); box-shadow: inset 0 -3px 0 rgba(0,0,0,.25); }
 .sw.on { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+/* Version 2 classes */
+.classslot { display: flex; flex-direction: column; gap: 6px; border-left: 4px solid var(--cc, var(--line)); }
+.classslot.active { border-color: var(--cc); box-shadow: inset 0 0 0 1px var(--cc); }
+.classslot.empty { border-left-color: var(--line); }
+.classhead { display: flex; gap: 10px; align-items: center; }
+.classhero { width: 64px; height: 64px; image-rendering: pixelated; background: radial-gradient(circle at 50% 60%, #3a2d52, #1a1424 70%); border: 2px solid var(--line); flex: none; }
+.classhero.none { display: grid; place-items: center; font-size: 28px; color: var(--dim); }
+.classtag { font-size: 12px; padding: 0 5px; background: var(--cc); color: #120c18; vertical-align: 2px; }
+.classkit { display: flex; gap: 4px; flex-wrap: wrap; }
+.classkit img { width: 32px; height: 32px; image-rendering: pixelated; background: var(--ink); border: 1px solid var(--line); }
+.classbtns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.classbtns .btn { padding-inline: 2px; }

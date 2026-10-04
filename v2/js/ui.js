@@ -544,11 +544,13 @@ function buildSummary() {
 
 function skillTabsHtml() {
   return `<div class="seg"><button data-act="skillView" data-v="web" class="${UI.skillView === 'web' ? 'on' : ''}">Skill web</button>
-    <button data-act="skillView" data-v="prestige" class="${UI.skillView === 'prestige' ? 'on' : ''}">Prestige tree</button></div>`;
+    <button data-act="skillView" data-v="classes" class="${UI.skillView === 'classes' ? 'on' : ''}">Classes</button>
+    <button data-act="skillView" data-v="prestige" class="${UI.skillView === 'prestige' ? 'on' : ''}">Prestige</button></div>`;
 }
 
 function buildSkills() {
   if (UI.skillView === 'prestige') { buildPrestigeTree(); return; }
+  if (UI.skillView === 'classes') { buildClasses(); return; }
   let spent = 0;
   for (const k in S.run.skills) spent += S.run.skills[k];
   let h = skillTabsHtml();
@@ -564,6 +566,43 @@ function buildSkills() {
   $('#tab-skills').innerHTML = h;
   $('#tab-skills').classList.add('web');
   applyTreeView();
+}
+
+// ---------- Version 2: classes ----------
+function buildClasses() {
+  $('#tab-skills').classList.remove('web');
+  let h = skillTabsHtml();
+  h += `<div class="card small">Save your skills, gear, pets and look as a class, then switch in one tap. Switching is free: your skill points come back and are spent to match.
+    After a prestige, <b>Auto</b> in the Skill web rebuilds your active class as you earn points.</div>`;
+  for (let i = 0; i < CLASS_SLOTS; i++) {
+    const c = S.classes[i];
+    if (!c) {
+      h += `<div class="card classslot empty"><div class="classhead"><div class="classhero none">+</div><div class="grow"><b class="muted">Empty slot</b>
+        <div class="small muted">Save the build you're using now.</div></div><button class="btn small gold" data-act="classSave" data-i="${i}">Save here</button></div></div>`;
+      continue;
+    }
+    const lean = classLean(c), active = S.activeClass === i, by = classBranches(c), left = active ? classMissing(c) : 0;
+    const kit = SLOT_IDS.map(slot => { const f = c.gear[slot] != null ? findItem(c.gear[slot]) : null; return f ? `<img src="${gearUrl(f.it.slot, f.it.t, f.it.r)}" alt="${SLOTS[slot].name}">` : ''; }).join('')
+      + c.pets.map(p => `<img src="${petUrl(p.sp, false, p.r)}" alt="${PETS[p.sp].name}">`).join('');
+    h += `<div class="card classslot ${active ? 'active' : ''}" style="--cc:${lean ? lean.color : 'var(--line-hi)'}">
+      <div class="classhead"><img class="classhero" src="${spriteUrl(heroSprite(0, c.look), 4)}" alt="">
+        <div class="grow"><b>${escapeHtml(c.name)}</b>${active ? ' <span class="classtag">Active</span>' : ''}
+          <div class="small" style="color:var(--cc)">${lean ? lean.name : 'No skills'} · ${classPoints(c)} ${classPoints(c) === 1 ? 'point' : 'points'}</div>
+          ${BRANCHES.filter(b => by[b.id]).length > 1 ? `<div class="small muted">${BRANCHES.filter(b => by[b.id]).map(b => `<span style="color:${b.color}">${b.name} ${by[b.id]}</span>`).join(' · ')}</div>` : ''}
+          ${left ? `<div class="small" style="color:var(--gold)">${left} more ${left === 1 ? 'point' : 'points'} to finish it</div>` : ''}</div></div>
+      ${kit ? `<div class="classkit">${kit}</div>` : ''}
+      <div class="classbtns"><button class="btn small ${active ? '' : 'gold'}" data-act="classUse" data-i="${i}">${active ? 'Re-apply' : 'Switch'}</button>
+        <button class="btn small" data-act="classSave" data-i="${i}">Save over</button>
+        <button class="btn small" data-act="classRename" data-i="${i}">Rename</button>
+        <button class="btn small bad" data-act="classDelete" data-i="${i}">Delete</button></div></div>`;
+  }
+  $('#tab-skills').innerHTML = h;
+}
+function newClassName() {
+  const snap = snapshotClass(''), lean = classLean(snap), base = lean ? lean.name : 'Class';
+  let name = base, n = 2;
+  while (S.classes.some(c => c && c.name === name)) name = `${base} ${n++}`;
+  return name;
 }
 
 function buildPrestigeTree() {
@@ -1574,7 +1613,64 @@ function handleAction(el) {
     case 'learnPlan': doLearnPlan(d.id); break;
     case 'lockSkill': if (lockRank(d.id)) { SFX.buy(); toast('Rank locked: it stays through prestige', 'purple', 'lock'); } buildSkills(); break;
     case 'unlockSkill': if (unlockRank(d.id)) SFX.click(); buildSkills(); break;
-    case 'autoSkills': { const n = autoSpendSkills(); if (n) { SFX.buy(); toast(`Auto spent ${n} ${n === 1 ? 'point' : 'points'}`, 'good'); } buildSkills(); break; }
+    case 'autoSkills': {
+      // With a class active, Auto rebuilds it first, then spreads any points left over.
+      const c = S.classes[S.activeClass];
+      const forClass = c ? learnClassSkills(c) : 0;
+      const n = forClass + autoSpendSkills();
+      if (n) { SFX.buy(); toast(forClass ? `Auto spent ${n} ${n === 1 ? 'point' : 'points'} (${forClass} on ${c.name})` : `Auto spent ${n} ${n === 1 ? 'point' : 'points'}`, 'good'); }
+      buildSkills();
+      break;
+    }
+    case 'classSave': {
+      const i = Number(d.i), c = S.classes[i];
+      if (c && !d.ok) {
+        openModal(`<h2>Save over ${escapeHtml(c.name)}?</h2><p class="small muted" style="text-align:center">Your skills, gear, pets and look right now replace what this class had.</p>
+          <div class="mbtns"><button class="btn gold" data-act="classSave" data-i="${i}" data-ok="1">Save</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
+        break;
+      }
+      closeModal();
+      saveClass(i, c ? c.name : newClassName());
+      SFX.claim(); toast(`Saved ${S.classes[i].name}`, 'good');
+      buildSkills();
+      break;
+    }
+    case 'classUse': {
+      const res = applyClass(Number(d.i));
+      if (!res) break;
+      const c = S.classes[Number(d.i)];
+      SFX.levelup();
+      toast(res.left ? `${c.name}: ${res.wanted - res.left}/${res.wanted} points placed. Earn ${res.left} more to finish it.` : `Switched to ${c.name}`, 'good');
+      if (res.missing.length) toast(`No longer have: ${res.missing.join(', ')}`, 'bad');
+      buildSkills();
+      break;
+    }
+    case 'classRename': {
+      const i = Number(d.i), c = S.classes[i];
+      if (!c) break;
+      openModal(`<h2>Name this class</h2><input type="text" id="classNameInput" maxlength="20" autocomplete="off" value="${escapeHtml(c.name)}">
+        <div class="mbtns"><button class="btn gold" data-act="classRenameOk" data-i="${i}">Save</button><button class="btn" data-act="close">Cancel</button></div>`,
+      { dismissable: true, onOpen(sheet) { const inp = $('#classNameInput', sheet); inp.focus(); inp.select(); } });
+      break;
+    }
+    case 'classRenameOk': {
+      const c = S.classes[Number(d.i)], v = ($('#classNameInput').value || '').trim().replace(/\s+/g, ' ').slice(0, 20);
+      if (!c) break;
+      if (!v) { toast('Type a name first', 'bad'); break; }
+      c.name = v; closeModal(); SFX.click(); buildSkills();
+      break;
+    }
+    case 'classDelete': {
+      const i = Number(d.i), c = S.classes[i];
+      if (!c) break;
+      if (!d.ok) {
+        openModal(`<h2>Delete ${escapeHtml(c.name)}?</h2><p class="small muted" style="text-align:center">Only the saved class goes. Your skills, gear and pets stay as they are.</p>
+          <div class="mbtns"><button class="btn bad" data-act="classDelete" data-i="${i}" data-ok="1">Delete</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
+        break;
+      }
+      closeModal(); deleteClass(i); SFX.click(); buildSkills();
+      break;
+    }
     case 'treeZoom': {
       const k = Number(d.v);
       if (k) UI.view.k = clamp(UI.view.k * k, TREE_MIN_K, 2); else UI.view = { cx: 0, cy: 0, k: 0.9 };
