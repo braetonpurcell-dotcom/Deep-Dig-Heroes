@@ -199,6 +199,7 @@ function boot(hotData) {
   UI.nextBreak = S.settings.breakMin > 0 ? S.settings.breakMin * 60 : 0;
   showTab('island');
   tapStart();
+  if (!(hotData && hotData.save)) showTitle(); // Version 2: the title screen, over a live view of your island
 
   const away = base ? (Date.now() - (S.lastSeen || Date.now())) / 1000 : 0;
   const offline = away >= 60 ? applyOffline(away) : null;

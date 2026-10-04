@@ -973,7 +973,7 @@ function updateIslandSigns() {
 
 function islandLoop(now) {
   requestAnimationFrame(islandLoop);
-  if (UI.tab !== 'island' || document.hidden || !WORLD.img) { WORLD.last = now; return; }
+  if (UI.tab !== 'island' || document.hidden || !WORLD.img || (typeof TITLE !== 'undefined' && TITLE.on)) { WORLD.last = now; return; }
   const dt = Math.min(0.1, (now - (WORLD.last || now)) / 1000);
   WORLD.last = now;
   if (!WORLD.drag && Math.abs(WORLD.vx) > 0.05) { WORLD.cam.x += WORLD.vx; WORLD.vx *= 0.9; clampCam(); placeLayer(); }
