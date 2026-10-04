@@ -639,7 +639,16 @@ function frostTop(x) {
   y = Math.max(y, base - Math.min(x - x0, x1 - x) * 2.3);
   return Math.min(base + 1, Math.round(y));
 }
-function frostShade(x, y) { let best = null; for (const [px_, py, k] of FROST_PEAKS) if (py + Math.abs(x - px_) * k <= y + 2 && (!best || py < best[1])) best = [px_, py]; return best && x > best[0] ? 1 : 0; }
+// How far into the shadow side a point is (0 sunlit to 1 shaded). The sun is up and to the left, so
+// each peak's right-hand slope is in shade; the ridge between them wanders down and to the right
+// like a real one, and the edge is blended rather than a hard line.
+function frostShade(x, y) {
+  let best = null;
+  for (const [px_, py, k] of FROST_PEAKS) if (py + Math.abs(x - px_) * k <= y + 2 && (!best || py < best[1])) best = [px_, py];
+  if (!best) return 0;
+  const ridge = best[0] + (y - best[1]) * 0.42 + Math.sin(y / 9 + best[0]) * 4;
+  return Math.max(0, Math.min(1, (x - ridge + 3) / 8));
+}
 function paintFrostPeak(r) {
   const { base, mx, mw, mh } = CAVE_MTN, x0 = 228, x1 = 424, inside = (x, y) => y <= base && y >= frostTop(x);
   for (let x = x0; x <= x1; x++) {
@@ -647,9 +656,9 @@ function paintFrostPeak(r) {
     if (top === Infinity) continue;
     for (let y = top; y <= base; y++) {
       const sh = frostShade(x, y), depth = y - top;
-      const t = Math.min(1, depth / 120), k = Math.floor((sh ? 1.6 : 0.2) + t * 1.8 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
+      const t = Math.min(1, depth / 120), k = Math.floor(0.2 + sh * 0.95 + t * 1.6 + BAYER[(y & 3) * 4 + (x & 3)] * 0.9);
       let c = SNOW[Math.max(0, Math.min(4, k))];
-      if (!sh && (y + Math.round(Math.sin(x / 6) * 3)) % 17 === 0 && hash2(x >> 2, y) < 0.5) c = SNOW[2]; // wind-blown ridges
+      if (sh < 0.5 && (y + Math.round(Math.sin(x / 6) * 3)) % 17 === 0 && hash2(x >> 2, y) < 0.5) c = SNOW[2]; // wind-blown ridges
       px(x, y, 1, 1, c);
     }
   }
@@ -660,7 +669,7 @@ function paintFrostPeak(r) {
     const inCrag = (x, y) => { const v = (y - (cy - h / 2)) / h; if (v < 0 || v > 1) return false; const jag = (hash2(Math.floor(y / 3), cx) - 0.5) * 6 + Math.sin(x / 3 + cx) * 2; return Math.abs(x - cx) < w / 2 * (0.45 + 0.55 * Math.sqrt(v)) + jag * 0.5 && y >= cy - h / 2 + Math.abs(Math.sin((x - cx) / 3.5)) * 4 && inside(x, y); };
     for (let y = cy - h / 2 - 1; y <= cy + h / 2 + 1; y++) for (let x = cx - w / 2 - 4; x <= cx + w / 2 + 4; x++) {
       if (inCrag(x, y)) {
-        const sh = x > cx + (y - cy) * 0.1, snowTop = !inCrag(x, y - 1) || !inCrag(x, y - 2);
+        const sh = frostShade(x, y) > 0.5, snowTop = !inCrag(x, y - 1) || !inCrag(x, y - 2);
         px(x, y, 1, 1, snowTop ? SNOW[sh ? 2 : 0] : CLIFF[(sh ? 1 : 0) + (hash2(x >> 1, y >> 1) < 0.2 ? 1 : 0)]);
       } else if (inCrag(x - 1, y) || inCrag(x + 1, y) || inCrag(x, y + 1) || inCrag(x, y - 1)) px(x, y, 1, 1, CLIFF[3]);
     }
@@ -693,7 +702,29 @@ function paintFrostPeak(r) {
   for (const [dx, w] of [[-80, 22], [-56, 14], [42, 18], [70, 24], [92, 12]]) { const x = mx + dx; pell(x, base + 1, w / 2 + 1, 5, OUT); pell(x, base, w / 2, 4.5, SNOW[1]); pell(x - 2, base - 1, w / 2 - 3, 2.5, SNOW[0]); px(x - w / 4, base + 3, w / 2, 1, SNOW[3]); }
   pell(mx - 64, base + 22, 14, 4, OUT); pell(mx - 64, base + 22, 13, 3.4, '#bfe8fa'); px(mx - 70, base + 21, 6, 1, '#ffffff'); px(mx - 58, base + 23, 4, 1, '#ffffff');
   for (const [x, y] of [[mx + 60, base - 30], [mx - 74, base - 22]]) { if (!inside(x, y)) continue; pell(x, y, 4, 3, OUT); pell(x, y, 3, 2, CLIFF[1]); px(x - 2, y - 2, 4, 1, SNOW[0]); }
+  // A frozen waterfall spilling down the right shoulder into an ice pool.
+  const wx = FROST_FALL.x, wTop = frostTop(wx) + 8;
+  for (let y = wTop; y <= base; y++) {
+    const w = 5 + Math.round((y - wTop) / (base - wTop) * 5), l = Math.round(wx - w / 2 + Math.sin(y / 7) * 1.2);
+    px(l - 1, y, w + 2, 1, OUT);
+    for (let i = 0; i < w; i++) px(l + i, y, 1, 1, i === 0 || hash2(l + i, y >> 2) < 0.12 ? ICE[0] : (i + (y >> 2)) % 4 === 0 ? ICE[1] : i > w - 2 ? ICE[3] : ICE[2]);
+  }
+  pell(wx, base + 4, 13, 4, OUT); pell(wx, base + 4, 12, 3.4, ICE[1]); px(wx - 8, base + 3, 6, 1, ICE[0]); px(wx + 2, base + 5, 5, 1, ICE[0]);
+  for (let k = 0; k < 4; k++) { const x = wx - 6 + k * 4; for (let j = 0; j < 3 + (k & 1) * 2; j++) px(x, wTop + 2 + j, 1, 1, '#ffffff'); }
+  // A little log hut with a snowy roof and a warm window (its chimney smokes, drawn live).
+  { const hx = FROST_HUT.x, hy = FROST_HUT.y; // bottom-left corner
+    groundShadow(hx + 14, hy, 16, '60,80,110');
+    parts([[hx, hy - 14, 28, 14, '#8a5a32']]);
+    for (let y = hy - 13; y < hy; y += 3) px(hx, y, 28, 1, '#5e3a1e');
+    px(hx + 3, hy - 10, 6, 5, OUT); px(hx + 4, hy - 9, 4, 3, '#ffd860'); px(hx + 6, hy - 9, 1, 3, '#c89030');
+    px(hx + 17, hy - 11, 7, 11, OUT); px(hx + 18, hy - 10, 5, 10, '#6e4428'); px(hx + 22, hy - 5, 1, 1, '#ffd860');
+    parts([[hx + 20, hy - 26, 4, 8, '#7a7a84']]); px(hx + 20, hy - 27, 4, 2, SNOW[0]);
+    for (let j = 0; j < 9; j++) { px(hx - 3 + j, hy - 15 - j, 34 - j * 2, 1, j === 8 ? OUT : SNOW[j < 2 ? 0 : 1]); px(hx - 4 + j, hy - 15 - j, 1, 1, OUT); px(hx + 30 - j, hy - 15 - j, 1, 1, OUT); }
+    px(hx - 3, hy - 15, 34, 1, SNOW[3]); for (let k = 0; k < 6; k++) px(hx - 1 + k * 6, hy - 14, 1, 2 + (k & 1), '#ffffff'); }
+  // An ice floe out at sea for the seal.
+  pell(FROST_SEAL.x, FROST_SEAL.y + 1, 11, 4, OUT); pell(FROST_SEAL.x, FROST_SEAL.y + 1, 10, 3.2, SNOW[1]); px(FROST_SEAL.x - 8, FROST_SEAL.y + 3, 16, 1, SNOW[3]); px(FROST_SEAL.x - 7, FROST_SEAL.y, 6, 1, '#ffffff');
 }
+const FROST_FALL = { x: 394 }, FROST_HUT = { x: 128, y: 166 }, FROST_SEAL = { x: 28, y: 104 };
 // Life on Frostpeak: snow hares, an arctic fox trotting about, and a snowy owl on a rock by the
 // mouth that blinks and turns its head. Glints run over the ice round the cave.
 function drawFrostLife(g, dt, t) {
@@ -731,6 +762,34 @@ function drawFrostLife(g, dt, t) {
   // glints running over the ice
   for (let k = 0; k < 6; k++) { const ph = (t * 0.7 + k * 0.37) % 1; if (ph > 0.2) continue; const a = -Math.PI + (k / 5) * Math.PI, x = CAVE_MTN.mx + Math.cos(a) * (CAVE_MTN.mw / 2 + 5), y = CAVE_MTN.base - 6 + Math.sin(a) * (CAVE_MTN.mh + 2); g.fillStyle = '#ffffff'; g.fillRect(Math.round(x), Math.round(y), 1, 1); g.fillRect(Math.round(x) - 1, Math.round(y) + 1, 3, 1); g.fillRect(Math.round(x), Math.round(y) + 2, 1, 1); }
   glow(g, CAVE_MTN.mx, CAVE_MTN.base - 12, 26, `rgba(120,210,255,${0.12 + 0.04 * Math.sin(t * 2)})`);
+  // smoke from the hut's chimney
+  F.smoke = F.smoke || [];
+  if (Math.random() < dt * 1.8) F.smoke.push({ x: FROST_HUT.x + 22, y: FROST_HUT.y - 28, t: 0 });
+  for (const sm of F.smoke) { sm.t += dt; sm.y -= dt * 7; sm.x += dt * (3 + sm.t); g.fillStyle = `rgba(140,150,170,${Math.max(0, 0.7 - sm.t * 0.17)})`; const rr = 2 + Math.round(sm.t * 1.2); g.fillRect(Math.round(sm.x - rr / 2), Math.round(sm.y - rr / 2), rr, rr); }
+  F.smoke = F.smoke.filter(sm => sm.t < 4);
+  glow(g, FROST_HUT.x + 6, FROST_HUT.y - 8, 10, 'rgba(255,200,90,0.25)');
+  WORLD.ctx = g;
+  // penguins waddling by the south shore, in a little line
+  for (let i = 0; i < 3; i++) {
+    const ph = (t * 0.08 + i * 0.07) % 2, gx = 140 + (ph < 1 ? ph : 2 - ph) * 110 + i * 10, gy = 250 + i % 2 * 3, dir = ph < 1 ? 1 : -1, wad = Math.floor(t * 6 + i) % 2;
+    groundShadow(gx, gy, 4, '60,80,110');
+    const PEN = ['.kkk..', 'kkkwk.', 'kkkkyy', 'kwwwk.', 'kwwwkk', 'kwwwkk', 'kwwwkk', '.kwwk.', '.y..y.'], pc = { k: '#1a1e2a', w: '#ffffff', y: '#f8a020' };
+    PEN.forEach((row, j) => [...row].forEach((ch, c) => { if (ch !== '.') px(dir > 0 ? gx - 3 + c : gx + 2 - c, gy - 9 + j - (j < 8 && wad ? 1 : 0), 1, 1, pc[ch]); }));
+  }
+  // a seal lounging on the ice floe, flipping its tail now and then
+  { const sx = FROST_SEAL.x - 7, sy = FROST_SEAL.y - 6, flip = Math.sin(t * 1.3) > 0.85 ? 1 : 0;
+    const SEAL = ['..........kkk.', '.........kgggk', '..kkkkkkkgegnk', '.kgggggggggggk', 'kgglllllllggk.', 'kk.kkkkkkkkk..'], sc = { k: OUT, g: '#8a96a8', l: '#c4cedc', e: OUT, n: '#3a3a48' };
+    SEAL.forEach((row, j) => [...row].forEach((ch, c) => { if (ch !== '.') px(sx + c, sy + j - (c < 2 && flip ? 2 : 0), 1, 1, sc[ch]); })); }
+  // the yeti: now and then it peeks over the saddle between the two peaks, then ducks back down
+  { const cyc = t % 24, up = cyc < 3 ? 0 : cyc < 4 ? (cyc - 3) : cyc < 6 ? 1 : cyc < 7 ? 1 - (cyc - 6) : 0;
+    if (up > 0) {
+      const YETI = ['..kkkkkk..', '.kwwwwwwk.', 'kwwwwwwwwk', 'kwbbbbbbwk', 'kwbebbebwk', 'kwbbbbbbwk', 'kwbbkkbbwk', 'kwwbbbbwwk', 'kwwwwwwwwk', 'kwwwwwwwwk'];
+      const yc = { k: OUT, w: '#ffffff', b: '#7a9ab8', e: (cyc % 2.5) < 0.1 ? '#7a9ab8' : OUT };
+      const yx = 358, yy = frostTop(358) + 1 - Math.round(up * 13);
+      YETI.forEach((row, j) => [...row].forEach((ch, c) => { const x = yx - 5 + c, y = yy + j; if (ch !== '.' && y < frostTop(x)) px(x, y, 1, 1, yc[ch]); }));
+      if (up === 1 && cyc > 4.5 && cyc < 5.5) { px(yx - 8, yy + 2, 2, 4, OUT); px(yx - 7, yy + 3, 1, 3, '#ffffff'); } // a wave
+    } }
+  WORLD.ctx = prev;
 }
 
 // Wildlife round the green hill: rabbits that hop about and stop to nibble, butterflies over the
