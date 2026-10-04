@@ -322,7 +322,8 @@ function caveHill(x, y) { return ((x - CAVE_HILL.x) / CAVE_HILL.rx) ** 2 + ((y -
 // land round it, so the beach never cuts into the cave's hill.
 function caveShore(x, y) {
   const e = ((x - CAVE_SHORE.x) / CAVE_SHORE.rx) ** 2 + ((y - CAVE_SHORE.y) / CAVE_SHORE.ry) ** 2 + 0.05 * Math.sin(x / 11) + 0.05 * Math.cos(y / 8);
-  return Math.min(e, caveHill(x, y) * 0.62);
+  const foot = ((x - 330) / 130) ** 2 + ((y - 178) / 44) ** 2; // land all along the cave's foot, so no corner of it stands in the sea
+  return Math.min(e, caveHill(x, y) * 0.62, foot);
 }
 function paintCaveIsle(i) {
   const cv = makeCanvas(WW, WH), prev = WORLD.ctx;
