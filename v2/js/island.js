@@ -14,7 +14,7 @@ const WW = 1200, WH = 300; // world size in world pixels
 const SPAWN = { x: 110, y: 200 };
 // me: your miner walking the road (hold the arrow buttons); held is -1, 0 or 1.
 const WORLD = { cv: null, ctx: null, img: null, cam: { x: 0, y: 0 }, z: 2, vx: 0, drag: null, moved: false, t: 0, smoke: [], fx: [], dpr: 1, vw: 0, vh: 0,
-  me: { x: SPAWN.x, dir: 1, held: 0, walkT: 0 }, scene: 'home', wmax: 860 };
+  me: { x: SPAWN.x, dir: 1, held: 0, walkT: 0 }, scene: 'home', wmax: 860, depth: true };
 const WALK_SPEED = 70; // world pixels a second
 const RIVER = [748, 872]; // the river's west and east banks
 const DOOR_Y = 168; // the bottom of every door on the north side of the road (the house sits further back)
@@ -293,9 +293,9 @@ function paintWorld() {
   for (let x = 0; x < SEA_X - 16; x += gap) { if (inRiver(x)) continue; forest.push([x + r() * 4, 22 + r() * 6, r() < 0.3]); forest.push([x + 4 + r() * 4, 38 + r() * 6, r() < 0.3]); }
   for (let y = 54; y < 186; y += gap + 4) { forest.push([6 + r() * 3, y, r() < 0.4]); forest.push([24 + r() * 3, y + 6, r() < 0.4]); }
   forest.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt));
-  for (const x of [176, 300, 432, 568, 714]) forestTree(x, 150, false);
+  const loose = [176, 300, 432, 568, 714].map(x => [x, 150, false]).concat([[296, 128, false], [716, 130, true], [722, 252, true]]);
+  loose.sort((a, b) => a[1] - b[1]).forEach(([x, y, alt]) => forestTree(x, y, alt)); // back to front
   for (const [x, y] of [[728, 232], [734, 168]]) rock(x, y, true);
-  forestTree(296, 128, false); forestTree(716, 130, true); forestTree(722, 252, true);
   if (STYLE.snow) for (const [sx, sy] of [[150, 128], [610, 262]]) snowman(sx, sy);
   paintTownDecor(); paintTownSign(); paintBoard(); paintTrophy();
   WORLD.ctx.save(); WORLD.ctx.translate(0, -HOUSE_BACK); paintHouse(); WORLD.ctx.restore();
@@ -624,7 +624,7 @@ function drawGreenLife(g, dt, t) {
     else { const step = 18 * dt; b.hop += dt * 7; if (Math.abs(b.tx - b.x) <= step) { b.x = b.tx; b.wait = 1.5 + Math.random() * 3; b.hop = 0; } else b.x += Math.sign(b.tx - b.x) * step; }
     const lift = b.wait > 0 ? 0 : Math.round(Math.abs(Math.sin(b.hop)) * 3), x = Math.round(b.x), y = Math.round(b.y) - lift, d = b.dir, nib = b.wait > 0 && Math.sin(t * 9 + b.y) > 0.3;
     const prev = WORLD.ctx; WORLD.ctx = g;
-    g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(x - 3, b.y + 1, 7, 1);
+    groundShadow(x, b.y, 4);
     const fx = (ox, w) => d > 0 ? x + ox : x - ox - w + 1;
     parts([[fx(-3, 6), y - 4, 6, 4, '#e8dccb'], [fx(2, 4), y - 7 + (nib ? 1 : 0), 4, 3, '#e8dccb'], [fx(3, 1), y - 10 + (nib ? 1 : 0), 1, 3, '#e8dccb'], [fx(5, 1), y - 10 + (nib ? 1 : 0), 1, 3, '#e8dccb']]);
     px(fx(-4, 2), y - 4, 2, 2, '#ffffff'); px(fx(4, 1), y - 6 + (nib ? 1 : 0), 1, 1, OUT); px(fx(3, 1), y - 9 + (nib ? 1 : 0), 1, 1, '#f0a8b8');
@@ -685,9 +685,12 @@ function forestTree(x, y, alt) {
   if (k === 'crystal') return alt ? glowShroom(x, y) : crystalTree(x, y);
   return alt ? pineTree(x, y) : tree(x, y);
 }
+// Shadows: the sun sits up and to the left, so everything standing on the ground casts the same
+// soft shadow down and to the right of its foot, sized to the thing casting it.
+function groundShadow(x, y, rx, dark = '15,35,15') { pell(x + Math.round(rx * 0.4), y + 1, rx, Math.max(1.5, rx * 0.3), `rgba(${dark},0.32)`); }
 function tree(x, y) {
   const [o, d, m, l, t, t2] = STYLE.leaf, [tk, tkd] = STYLE.trunk;
-  pell(x + 1, y, 9, 3, 'rgba(20,50,20,0.35)');
+  groundShadow(x, y, 11);
   px(x - 2, y - 8, 5, 8, OUT); px(x - 1, y - 8, 3, 8, tk); px(x + 1, y - 8, 1, 8, tkd); px(x - 3, y - 1, 7, 1, tkd);
   pell(x, y - 17, 11, 9, o); pell(x - 6, y - 13, 6, 5, o); pell(x + 6, y - 13, 6, 5, o);
   pell(x, y - 17, 10, 8, m); pell(x - 6, y - 13, 5, 4, m); pell(x + 6, y - 13, 5, 4, d);
@@ -698,7 +701,7 @@ function tree(x, y) {
 }
 function pineTree(x, y) {
   const [o, d, m, l] = STYLE.pine;
-  pell(x + 1, y, 7, 2, 'rgba(20,50,20,0.35)');
+  groundShadow(x, y, 8);
   px(x - 1, y - 5, 3, 5, STYLE.trunk[1]);
   for (let i = 0; i < 3; i++) {
     const top = y - 26 + i * 6, w = 4 + i * 3;
@@ -714,7 +717,7 @@ function pineTree(x, y) {
   px(x, y - 27, 1, 2, o);
 }
 function palm(x, y) {
-  pell(x + 4, y, 9, 2, 'rgba(60,40,10,0.3)');
+  groundShadow(x, y, 9, '60,40,10');
   let tx = x, ty = y;
   for (let i = 0; i < 22; i++) {
     tx = x + Math.round(Math.sin(i / 7) * 3); ty = y - i;
@@ -729,13 +732,13 @@ function palm(x, y) {
   pell(tx, ty - 1, 3, 2, '#2f6e26'); px(tx - 2, ty + 1, 2, 2, '#6e4428'); px(tx + 1, ty + 1, 2, 2, '#5a361c');
 }
 function cactus(x, y) {
-  pell(x + 1, y, 6, 2, 'rgba(60,40,10,0.3)');
+  groundShadow(x, y, 6, '60,40,10');
   parts([[x - 2, y - 18, 5, 18, '#4a9a48'], [x - 7, y - 12, 4, 3, '#4a9a48'], [x - 7, y - 16, 3, 5, '#4a9a48'], [x + 3, y - 9, 4, 3, '#4a9a48'], [x + 5, y - 14, 3, 6, '#4a9a48']]);
   for (let k = y - 17; k < y - 1; k += 3) { px(x - 1, k, 1, 1, '#3a7a38'); px(x + 1, k + 1, 1, 1, '#6cb85a'); }
   px(x - 1, y - 19, 3, 1, '#f25d5d');
 }
 function deadTree(x, y) {
-  pell(x + 1, y, 8, 2, 'rgba(0,0,0,0.35)');
+  groundShadow(x, y, 8, '0,0,0');
   px(x - 2, y - 16, 4, 16, OUT); px(x - 1, y - 16, 2, 16, '#3a3032');
   for (const [dx, dy, len, dir] of [[0, -14, 7, -1], [0, -11, 6, 1], [0, -19, 4, 1], [0, -7, 5, -1]]) {
     for (let k = 0; k < len; k++) px(x + dx + dir * k, y + dy - Math.floor(k / 2), 1, 1, k === len - 1 && hash2(x, dy) < 0.5 ? '#ff7a2a' : '#2a2224');
@@ -743,32 +746,32 @@ function deadTree(x, y) {
   px(x - 1, y - 20, 2, 4, '#2a2224');
 }
 function crystalTree(x, y) {
-  pell(x + 1, y, 8, 2, 'rgba(0,0,0,0.35)');
+  groundShadow(x, y, 8, '0,0,0');
   px(x - 1, y - 8, 3, 8, '#241c3a'); px(x, y - 8, 1, 8, '#3a3058');
   const shard = (cx, cy, h, c) => { for (let k = 0; k < h; k++) { const w = Math.max(1, Math.round((1 - Math.abs(k - h / 2) / (h / 2)) * 3)); px(cx - w, cy - k, w * 2 + 1, 1, OUT); px(cx - w + 1, cy - k, Math.max(1, w * 2 - 1), 1, c); } px(cx - 1, cy - Math.floor(h * 0.7), 1, 2, '#ffffff'); };
   shard(x - 5, y - 9, 10, '#b8a6ff'); shard(x + 5, y - 10, 11, '#7af0ff'); shard(x, y - 12, 15, '#d8a6ff'); shard(x + 2, y - 8, 7, '#ff8af0');
 }
 function glowShroom(x, y) {
-  pell(x + 1, y, 6, 2, 'rgba(0,0,0,0.35)');
+  groundShadow(x, y, 6, '0,0,0');
   px(x - 2, y - 10, 4, 10, OUT); px(x - 1, y - 10, 2, 10, '#d8d0f0');
   pell(x, y - 12, 9, 5, OUT); pell(x, y - 12, 8, 4, '#8a5ad8'); pell(x - 2, y - 13, 4, 2, '#b08af0');
   for (const [dx, dy] of [[-4, -12], [2, -14], [5, -11], [-1, -10]]) px(x + dx, y + dy, 1, 1, '#7af0ff');
 }
 function snowman(x, y) {
-  pell(x + 1, y, 7, 2, 'rgba(60,80,110,0.3)');
+  groundShadow(x, y, 7, '60,80,110');
   pell(x, y - 4, 6, 5, OUT); pell(x, y - 4, 5, 4, '#ffffff'); pell(x, y - 12, 4, 4, OUT); pell(x, y - 12, 3, 3, '#ffffff');
   px(x - 1, y - 13, 1, 1, OUT); px(x + 1, y - 13, 1, 1, OUT); px(x + 1, y - 12, 3, 1, '#f08a28'); px(x - 3, y - 9, 7, 1, '#d84848');
   px(x - 3, y - 18, 7, 2, OUT); px(x - 2, y - 21, 5, 3, OUT); px(x - 1, y - 4, 1, 1, OUT); px(x - 1, y - 2, 1, 1, OUT);
 }
 function bush(x, y) {
   const [d, m, l, t, berry] = STYLE.bush;
-  pell(x + 1, y + 1, 8, 2, 'rgba(20,50,20,0.3)');
+  groundShadow(x, y, 8);
   pell(x, y - 4, 8, 5, d); pell(x, y - 4, 7, 4, m); pell(x - 2, y - 6, 4, 2, l); px(x - 4, y - 7, 2, 1, t);
   px(x + 3, y - 5, 1, 1, berry); px(x - 1, y - 3, 1, 1, berry);
 }
 function rock(x, y, big) {
   const w = big ? 7 : 4;
-  pell(x + 1, y + 1, w, 1, 'rgba(20,50,20,0.3)');
+  groundShadow(x, y, w + 1);
   pell(x, y - 1, w, big ? 3 : 2, STYLE.rockLo); pell(x, y - 2, w - 1, big ? 2 : 1, STYLE.rock[1]); px(x - w + 2, y - (big ? 4 : 3), 2, 1, STYLE.rockHi);
 }
 function flower(x, y, c) { px(x, y + 1, 1, 2, STYLE.stem); px(x - 1, y, 3, 1, c); px(x, y - 1, 1, 3, c); px(x, y, 1, 1, c === '#f8e04a' ? '#c86a1a' : '#f8e04a'); }
@@ -1110,7 +1113,7 @@ function drawChickens(dt, t) {
     else if (Math.random() < dt * 0.8) { h.tx = 124 + Math.random() * 66; h.ty = 226 + Math.random() * 34; }
     else if (Math.random() < dt * 1.5) h.peck = 0.5;
     const x = Math.round(h.x), y = Math.round(h.y), d = h.dir, down = h.peck > 0 && Math.floor(h.peck * 8) % 2;
-    pell(x, y, 3, 1, 'rgba(20,45,15,0.35)');
+    groundShadow(x, y - 1, 3);
     parts([[x - 3, y - 5, 6, 4, '#fbf7ee'], [x + (d > 0 ? 1 : -3), y - (down ? 4 : 8), 3, 3, '#fbf7ee']]);
     px(x + (d > 0 ? 2 : -2), y - (down ? 5 : 9), 1, 1, '#e04040'); px(x + (d > 0 ? 4 : -4), y - (down ? 3 : 7), 1, 1, '#f2a028');
     px(x + (d > 0 ? 2 : -2), y - (down ? 3 : 7), 1, 1, OUT); px(x - (d > 0 ? 3 : -2), y - 5, 1, 2, '#d6ccb4');
@@ -1125,7 +1128,7 @@ function drawSheep(t, dt) {
     const y = y0 - Math.round(Math.sin((sh.hop / 0.5) * Math.PI) * 5);
     const x = Math.round(x0 + Math.sin(t * 0.15 + ph) * 6); sh.x = x; sh.y = y0;
     const dir = Math.cos(t * 0.15 + ph) > 0 ? 1 : -1, down = Math.sin(t * 1.3 + ph) > 0.3;
-    pell(x, y, 6, 1, 'rgba(20,45,15,0.35)');
+    groundShadow(x, y - 1, 7);
     px(x - 4, y - 2, 2, 2, OUT); px(x + 2, y - 2, 2, 2, OUT);
     parts([[x - 5, y - 8, 10, 6, '#fbf7ee'], [x + (dir > 0 ? 4 : -7), y - (down ? 5 : 9), 3, 4, '#3a3448']]);
     px(x - 4, y - 8, 4, 1, '#ffffff'); px(x - 1, y - 4, 5, 1, '#d6ccb4');
@@ -1290,19 +1293,12 @@ function drawWorld(dt) {
 
 // ---------- depth (draft) ----------
 // Cheap ways to make the flat world feel deep: haze over what is far away (the top of the screen),
-// soft contact shadows where things meet the ground, and a darker, richer foreground.
+// and a darker, richer foreground. (Shadows on the ground come from groundShadow.)
 const HAZE = { green: '214,236,255', frost: '236,246,255', sand: '255,240,210', ember: '255,150,80', star: '120,140,230' };
 function band(g, x, y0, y1, w, rgb, a0, a1) { const gr = g.createLinearGradient(0, y0, 0, y1); gr.addColorStop(0, `rgba(${rgb},${a0})`); gr.addColorStop(1, `rgba(${rgb},${a1})`); g.fillStyle = gr; g.fillRect(x, y0, w, y1 - y0); }
 function drawDepthBack(g) {
   const rgb = HAZE[ISLANDS[WORLD.isle || 0].id] || HAZE.green, W = WORLD.wmax || WW;
   band(g, 0, 0, 92, W, rgb, 0.42, 0);              // the far tree line and the far sea fade into the air
-  if (WORLD.scene === 'home') {
-    for (const b of BUILDINGS) { if (b.tab === 'dock') continue; const y = (b.doorY || DOOR_Y) + 2; band(g, b.x - 3, y - 7, y + 1, b.w + 6, '20,30,12', 0, 0.22); band(g, b.x - 3, y + 1, y + 5, b.w + 6, '20,30,12', 0.22, 0); }
-    band(g, 186, 176, 186, 108, '20,30,12', 0, 0.16);  // under the fence
-  } else {
-    const M = CAVE_MTN; band(g, 226, M.base - 10, M.base + 1, 208, '20,30,12', 0, 0.2); band(g, 226, M.base + 1, M.base + 6, 208, '20,30,12', 0.2, 0);
-    band(g, M.mx - M.mw / 2, M.base - M.mh, M.base - M.mh + 14, M.mw, '0,0,0', 0.45, 0); // the cave's ceiling in shadow
-  }
 }
 function drawDepthFront(g) {
   const W = WORLD.wmax || WW;
@@ -1361,10 +1357,10 @@ function drawDecor(g, t) {
   } else if (d.state === 'lie') {
     // Lying down: the pet flattened low to the ground, breathing slowly.
     const h = 11 + (Math.sin(t * 2) > 0 ? 1 : 0);
-    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(-7, base - 1, 15, 2);
+    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(d.dir < 0 ? -9 : -5, base - 1, 15, 2);
     g.drawImage(spr, 0, 0, spr.width, spr.height, -9 - pad, base - h - pad, spr.width + 2, h + pad * 2);
   } else {
-    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(-5, base - 1, 10, 2);
+    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(d.dir < 0 ? -7 : -3, base - 1, 10, 2);
     g.drawImage(spr, -8 - pad, base - 16 - hop - pad);
   }
   g.restore();
@@ -1425,7 +1421,7 @@ function drawMe(g, t) {
   if (pet) {
     const def = PETS[pet.sp], spr = petSprite(pet.sp, pet.r), pad = spr.fxPad || 0, px = x - me.dir * 20;
     const py = def.fly ? y - 30 + Math.round(Math.sin(t * 5) * 2) : y - 12 - (me.held && Math.floor(me.walkT * 8) % 2 ? 1 : 0);
-    if (!def.fly) { g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(px - 5, y + 2, 10, 2); }
+    if (!def.fly) { g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(px - 3, y + 2, 10, 2); }
     g.save(); g.translate(px, 0); if (me.dir < 0) g.scale(-1, 1); g.drawImage(spr, -8 - pad, py - pad); g.restore();
   }
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x - 7, y + 2, 14, 2);
