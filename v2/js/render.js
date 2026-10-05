@@ -232,10 +232,21 @@ function banner(text, sub = '', color = '#ffcc4d', life = 2) {
   SCN.banner = { text, sub, color, t: 0, life };
 }
 
+// The first row of a sprite with anything drawn on it (bosses wear their crown there).
+const SPRITE_TOP = new WeakMap();
+function spriteTop(c) {
+  if (SPRITE_TOP.has(c)) return SPRITE_TOP.get(c);
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let top = 0;
+  outer: for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4 + 3]) { top = y; break outer; }
+  SPRITE_TOP.set(c, top);
+  return top;
+}
+
 function enemyBox(e) {
   const scale = e && e.boss ? 2 : 1;
-  const w = 16 * scale;
-  const h = 16 * scale;
+  const w = 24 * scale;
+  const h = 24 * scale;
   let y = GROUND_Y - h;
   if (e && e.type === 'bat') y -= e.boss ? 4 : 14;
   return { x: ENEMY_X + (e && e.boss ? -2 : 0), y, w, h };
@@ -525,7 +536,7 @@ function drawEnemy(biome) {
     h = sh;
   }
   ctx.drawImage(e.flash > 0 ? silhouette(spr, '#ffffff') : spr, x, y, sw, h);
-  if (e.boss) ctx.drawImage(crownSprite(), x + Math.round((box.w - 18) / 2), y - 9, 18, 10);
+  if (e.boss) { const cr = crownSprite(), top = spriteTop(spr) * 2; ctx.drawImage(cr, x + Math.round((box.w - cr.width * 2) / 2), y + top - cr.height * 2 + 4, cr.width * 2, cr.height * 2); }
   if (e.type === 'goldie' && Math.sin(R.time * 9) > 0.3) {
     ctx.fillStyle = '#fff6c0';
     ctx.fillRect(x + Math.round(rand(2, 14)), y + Math.round(rand(6, 14)), 1, 1);
