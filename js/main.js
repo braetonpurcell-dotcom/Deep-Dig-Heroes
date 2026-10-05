@@ -13,12 +13,49 @@ function saveNow() {
   cloudSave();
 }
 
+// Version 2 went live: a phone that also played the Version 2 preview has a second save. Once, ask
+// which one to keep playing; the other stays on the phone untouched, as a backup.
+const PREVIEW_KEY = 'ddh-v2:ddh-save-v1', CHOICE_KEY = 'ddh-v2-choice';
+function previewSave() {
+  if (window.DDH_TEST_RECOPY) return null; // the test copies have just their own save
+  try {
+    if (localStorage.getItem(CHOICE_KEY)) return null;
+    const raw = localStorage.getItem(PREVIEW_KEY);
+    if (!raw) return null;
+    const v2 = JSON.parse(raw);
+    return v2 && v2.stats ? v2 : null;
+  } catch (e) { return null; }
+}
+function showSaveChoice(v2) {
+  const line = (title, s) => `<div class="card"><b>${title}</b><div class="small muted">Best B${fmt(s.stats.bestFloor || 1)} · ${s.prestiges || 0} prestiges · ${Math.round((s.stats.playTime || 0) / 3600)} h played${s.savedAt ? ' · last played ' + new Date(s.savedAt).toLocaleDateString() : ''}</div></div>`;
+  openModal(`<h2>Two saves on this phone</h2>
+    <p>Version 2 is now the main game. You also played the Version 2 preview, so there are two saves. Which one do you want to keep playing?</p>
+    ${line('Version 2 preview save', v2)}${line('Main game save', S)}
+    <p class="small muted">The other one stays on this phone as a backup.</p>
+    <div class="mbtns"><button class="btn gold" data-act="keepPreviewSave">Preview save</button><button class="btn" data-act="keepMainSave">Main save</button></div>`);
+}
+function keepSave(preview) {
+  try {
+    localStorage.setItem(CHOICE_KEY, preview ? 'preview' : 'main');
+    if (preview) {
+      localStorage.setItem('ddh-save-v1-before-v2', serialize()); // the main save, kept as a backup
+      localStorage.setItem(SAVE_KEY, localStorage.getItem(PREVIEW_KEY));
+      window.removeEventListener('pagehide', saveNow);
+      document.removeEventListener('visibilitychange', onVisibility);
+      location.reload();
+      return;
+    }
+  } catch (e) { /* storage blocked: keep playing the main save */ }
+  closeModal();
+  if (!S.v2Seen) queueModal(showV2Welcome);
+}
+
 function showIntro() {
   openModal(`<h2>Deep Dig Heroes</h2>
     <div style="text-align:center"><img src="${spriteUrl(heroSprite(false), 5, 'intro:hero')}" alt="" style="width:80px;image-rendering:pixelated"></div>
     <p>Your miner digs and fights on their own. Coins keep coming in, even while the app is closed.</p>
     <p><b>Tap the monsters on the pad before their ring closes.</b> Each tap strikes and adds to your combo, and the combo multiplies all your damage: the faster and more accurately you tap, the higher it climbs. Tap early for a PERFECT. A monster that escapes cuts your combo, and the faster you are, the faster they come.</p>
-    <p>Spend coins in the <b>Forge</b>, open <b>Cases</b> for gear and pets, and put skill points into your build. Reach B25 to prestige for permanent power.</p>
+    <p>This is your town: swipe left and right to explore, and tap a building to go in. The <b>Cave</b> on the far right is where you fight. Spend coins at the <b>Forge</b>, open chests at the <b>Market</b>, and grow your skills at the <b>Temple</b>. Reach B25 to prestige for permanent power.</p>
     <div class="mbtns"><button class="btn gold" data-act="close">Start digging</button></div>`, { dismissable: true });
 }
 
@@ -197,13 +234,17 @@ function boot(hotData) {
   bindInput();
   UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
   UI.nextBreak = S.settings.breakMin > 0 ? S.settings.breakMin * 60 : 0;
-  showTab('fight');
+  showTab('island');
   tapStart();
+  if (!(hotData && hotData.save)) showTitle(); // Version 2: the title screen, over a live view of your island
 
   const away = base ? (Date.now() - (S.lastSeen || Date.now())) / 1000 : 0;
   const offline = away >= 60 ? applyOffline(away) : null;
   if (base) welcomeBack(away);
   UI.booting = false;
+  // Asked before anything else: picking the preview save reloads the game.
+  const other = previewSave();
+  if (other) queueModal(() => showSaveChoice(other));
   if (!base) queueModal(showIntro);
   if (broken) toast('Your save could not be read, so the game started fresh. A copy was kept.', 'bad');
   if (S.migrateNote) {
@@ -221,6 +262,9 @@ function boot(hotData) {
   if (S.bonusRound) toast(`Your double-it round is still on: ${BONUS_TAPS} taps in a row`, 'purple');
   if (offline && offline.coins > 0) queueModal(() => showWelcomeBack(offline));
   if (!S.daily.claimed) queueModal(showDailyPopup);
+  if (!other && base && !S.v2Seen) queueModal(showV2Welcome); // first time in Version 2 with a save from the live game
+  if (!base) S.v2Seen = true;
+  checkIslands(); // islands reached before this update get their arrival rewards now
 
   saveLocal();
   applyWakeLock();

@@ -1,7 +1,7 @@
 'use strict';
 // Synthesized chiptune sound effects (no audio files) and vibration.
 
-const AU = { ctx: null, master: null, noiseBuf: null, lastHit: 0 };
+const AU = { ctx: null, master: null, noiseBuf: null, lastHit: 0, trim: 1 };
 
 function audioUnlock() {
   if (!AU.ctx) {
@@ -32,6 +32,7 @@ function soundOn() {
 // Musical notes (combo climb, fanfares) pass jitter = false so they stay in tune.
 function tone(freq, dur = 0.08, type = 'square', vol = 0.5, slideTo = 0, delay = 0, jitter = true) {
   if (!soundOn()) return;
+  vol *= AU.trim;
   if (jitter) {
     const j = 1 + rand(-0.025, 0.025);
     freq *= j;
@@ -55,7 +56,7 @@ function tone(freq, dur = 0.08, type = 'square', vol = 0.5, slideTo = 0, delay =
 function noise(dur = 0.08, vol = 0.4, freq = 1200, delay = 0) {
   if (!soundOn() || !AU.noiseBuf) return;
   freq *= 1 + rand(-0.05, 0.05);
-  vol *= rand(0.9, 1.1);
+  vol *= rand(0.9, 1.1) * AU.trim;
   const t = AU.ctx.currentTime + delay;
   const src = AU.ctx.createBufferSource();
   src.buffer = AU.noiseBuf;
@@ -196,6 +197,20 @@ const SFX = {
     tone(200, 0.1, 'square', 0.2, 150);
   },
 };
+
+// Version 2: per-sound level trims, measured against the music as a phone speaker hears it, so
+// everyday sounds sit just above the music, big moments a little louder, rapid taps a little softer.
+function trimSounds(obj, trims) {
+  for (const [k, tr] of Object.entries(trims)) {
+    const f = obj[k];
+    obj[k] = function (...a) { const prev = AU.trim; AU.trim = prev * (typeof tr === 'function' ? tr(...a) : tr); try { return f.apply(this, a); } finally { AU.trim = prev; } };
+  }
+}
+trimSounds(SFX, {
+  hit: 1.3, click: 1.26, kill: 0.5, crit: 0.64, coin: 0.65, buy: 0.8, claim: 0.63, correct: 0.46, comboBreak: 0.4,
+  quick: 0.87, wrong: 0.68, ore: 0.72, mgNote: 0.4, strike: k => (k === 'mega' ? 0.66 : 0.4), levelup: 0.55,
+  rankUp: 0.64, ultra: 0.72, reveal: r => (r <= 0 ? 1 : r < 3 ? 0.5 : 0.94),
+});
 
 function vibrate(pattern) {
   if (!S.settings.vibe || !navigator.vibrate) return;

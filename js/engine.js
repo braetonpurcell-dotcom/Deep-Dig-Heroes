@@ -38,6 +38,14 @@ const TUNE = {
   xpGrowth: 1.10, xpNeedBase: 12, xpNeedGrowth: 1.25,
   sharpenPeriod: 25,
   coreScale: 1, coreExp: 1.5, coreBonus: 0.1,
+  // Prestige pacing (V2 dev.35, sims in tools/playtest/sim.js): power from a run = depthPay * depthPast^2,
+  // and each run starts at the island halfway between your strength and your record (startShare).
+  depthFree: 10, depthPay: 0.2, sailStart: 1, startMargin: 20, startShare: 0.5,
+  // The floor each prestige needs: B25, then 25 + reqScale * prestiges^reqExp rounded to 5 (B40, B50,
+  // B60, B70, B80...), and never fewer than reqAhead floors past your strength. Its last gateFloors floors
+  // are Gate floors with gateHp^k tougher monsters until it opens; opening it pays gateKeys keys (+1 per
+  // 2 prestiges) on the spot.
+  reqScale: 15, reqExp: 0.8, reqAhead: 25, gateFloors: 3, gateHp: 1.3, gateKeys: 3,
 };
 function curve() { return S && S.curve === 1 ? CURVE_OLD : TUNE; }
 // Prestige power. On the tougher mine it counts in floors of strength (1.5 x the square root of
@@ -58,13 +66,17 @@ function sharpenDamage(L) {
 function upgradeCost(u, level) { return Math.ceil(u.base * Math.pow(u.growth, level)); }
 function coresFor(f) { return f < 25 ? 0 : Math.floor(TUNE.coreScale * Math.pow((f - 15) / 5, TUNE.coreExp)); }
 function isBossFloor(f) { return f % 10 === 0; }
-function biomeIndex(f) { return Math.floor((f - 1) / FLOORS_PER_BIOME); }
-function biomeFor(f) { return BIOMES[biomeIndex(f) % BIOMES.length]; }
+// Version 2: the cave's look comes from the island it belongs to (ISLANDS[].cave).
+function biomeIndex(f) {
+  const i = islandForFloor(f), k = Math.floor((f - ISLANDS[i].from) / FLOORS_PER_BIOME);
+  return k < 2 ? ISLANDS[i].cave[k] : ABYSS_BIOME;
+}
+function biomeFor(f) { return BIOMES[biomeIndex(f)]; }
 function biomeName(f) {
-  const i = biomeIndex(f);
-  const cycle = Math.floor(i / BIOMES.length);
+  const last = ISLANDS[ISLANDS.length - 1], deep = f - last.from - ISLE_FLOORS;
+  if (deep < 0) return BIOMES[biomeIndex(f)].name;
   const roman = ['', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X'];
-  return BIOMES[i % BIOMES.length].name + roman[Math.min(cycle, roman.length - 1)];
+  return BIOMES[ABYSS_BIOME].name + roman[Math.min(Math.floor(deep / ISLE_FLOORS), roman.length - 1)];
 }
 
 // ---------- events ----------
@@ -80,6 +92,8 @@ function emit(type, data) {
 function freshRun() {
   return {
     floor: 1, maxFloor: 1, kills: 0, auto: true,
+    open: 0, // Version 2: the deepest island you may sail to this run
+    unlocked: false, // reached this run's prestige floor (prestigeReq)
     level: 1, xp: 0, sp: 0, skills: {}, upg: {}, bossDone: {}, cases: 0,
     started: Date.now(), recordAnnounced: false,
     rush: { left: 0, mult: 1 }, // Gold Rush: kills left at the boosted coin rate
@@ -106,6 +120,14 @@ function freshState() {
     math: { streak: 0 }, // the tap combo (the key name is kept so old saves load)
     gear: { eq: { pick: null, helm: null, charm: null }, bag: [] },
     pets: { inv, eq: [] },
+    look: { ...DEFAULT_LOOK }, // Version 2: the miner's wardrobe
+    classes: [], // Version 2: saved builds (skills, gear, pets and look), up to CLASS_SLOTS
+    drill: { lv: 0, xp: 0, show: true }, // Version 2: the drill, levelled with parts from Drill Crates
+    pityDrill: { epic: 0, leg: 0 },
+    isle: { view: -1, claimed: 0 }, // Version 2: arrival rewards given (view is no longer used: the world shows the island you dig)
+    decor: { stand: { pick: null, helm: null, charm: null }, pet: null }, // Version 2: outside your house: items on the armor stand, a pet at the doghouse
+    v2Seen: false, // Version 2: the welcome guide was shown
+    activeClass: -1,
     pity: { epic: 0, leg: 0 },
     pace: 0, // tap pad pace you settled at last session
     profile: { name: '', pid: '' },
@@ -127,7 +149,7 @@ function freshState() {
       prestiges: 0, bestFloor: 1, maxHit: 0, dailyDone: 0, bestLogin: 0, days: {},
     },
     settings: {
-      sound: true, vibe: true,
+      sound: true, music: true, vibe: true,
       autoSalvage: 0, wake: false, breakMin: 0, buyAmt: '1', juice: 'high', shake: true, autoStop: ULTRA, bagSort: 'new', bagShow: 'all', bagOnly: 'any',
     },
   };
@@ -155,6 +177,7 @@ function repairItem(it) {
   it.fl = isFinite(it.fl) ? clamp(it.fl, 0, 1) : 0.5;
   it.lv = Number.isInteger(it.lv) ? clamp(it.lv, 0, MAX_ITEM_LEVEL) : 0;
   it.subs = (Array.isArray(it.subs) ? it.subs : []).filter(sb => sb && STATS[sb.k] && isFinite(sb.roll));
+  if (it.st != null && !GEAR_STYLES[it.slot].some(s => s.id === it.st)) delete it.st; // unknown style: the slot's first
   it.isNew = !!it.isNew;
   it.locked = !!it.locked;
   return true;
@@ -241,7 +264,7 @@ function hydrate(obj) {
   }
   let lockUsed = 0;
   for (const k of Object.keys(s.locks)) { const room = Math.max(0, (s.ptree.memory || 0) - lockUsed); s.locks[k] = Math.min(s.locks[k], room); lockUsed += s.locks[k]; if (!s.locks[k]) delete s.locks[k]; }
-  if (s.caseKind !== 'pet') s.caseKind = 'tool';
+  if (s.caseKind !== 'pet' && s.caseKind !== 'drill') s.caseKind = 'tool';
   if (!s.pityPet || typeof s.pityPet !== 'object') s.pityPet = { epic: 0, leg: 0 };
   s.pityPet.epic = nonNegInt(s.pityPet.epic); s.pityPet.leg = nonNegInt(s.pityPet.leg);
   if (!s.fresh || typeof s.fresh !== 'object') s.fresh = { left: 0 };
@@ -252,6 +275,8 @@ function hydrate(obj) {
   s.run.rush.mult = s.run.rush.mult === 3 ? 3 : 2;
   s.run.bestCombo = nonNegInt(s.run.bestCombo);
   s.run.giftSp = nonNegInt(s.run.giftSp);
+  // Saves from before the moving prestige floor: a run already past its floor has prestige open.
+  if (typeof s.run.unlocked !== 'boolean') s.run.unlocked = (s.run.maxFloor || 1) >= reqCurve(nonNegInt(s.prestiges));
   if (s.curve !== 1) s.curve = CURVE_LATEST;
   s.nextId = nonNegInt(s.nextId, 1);
   // Run and combo numbers.
@@ -264,6 +289,7 @@ function hydrate(obj) {
   run.maxFloor = Math.max(run.floor, nonNegInt(Math.floor(run.maxFloor), 1));
   run.cases = nonNegInt(run.cases);
   run.auto = run.auto !== false;
+  run.open = Math.min(ISLANDS.length - 1, Math.max(islandForFloor(run.maxFloor), nonNegInt(run.open)));
   if (!run.skills || typeof run.skills !== 'object') run.skills = {};
   for (const id of Object.keys(run.skills)) {
     const n = SKILL_INDEX[id];
@@ -370,6 +396,36 @@ function hydrate(obj) {
   const st = s.settings;
   if (!['low', 'med', 'high'].includes(st.juice)) st.juice = 'high';
   st.shake = st.shake !== false;
+  st.music = st.music !== false;
+  // The miner's look: any bad value goes back to the default.
+  s.look = cleanLook(s.look);
+  const dc = s.decor && typeof s.decor === 'object' ? s.decor : {};
+  s.decor = {
+    // The armor stand shows any items you pick, one per slot (item ids; a missing item just leaves the slot empty).
+    stand: Object.fromEntries(SLOT_IDS.map(k => [k, dc.stand && typeof dc.stand === 'object' && Number.isInteger(dc.stand[k]) ? dc.stand[k] : null])),
+    pet: dc.pet && PETS[dc.pet.sp] && Number.isInteger(dc.pet.r) && dc.pet.r >= 0 && dc.pet.r < RARITY.length ? { sp: dc.pet.sp, r: dc.pet.r } : null,
+  };
+  s.v2Seen = s.v2Seen === true;
+  // Islands.
+  if (!s.isle || typeof s.isle !== 'object') s.isle = { view: -1, claimed: 0 };
+  s.isle = { view: Number.isInteger(s.isle.view) && s.isle.view >= -1 && s.isle.view < ISLANDS.length ? s.isle.view : -1, claimed: Math.min(ISLANDS.length - 1, nonNegInt(s.isle.claimed)) };
+  // The drill.
+  if (!s.drill || typeof s.drill !== 'object') s.drill = { lv: 0, xp: 0, show: true };
+  s.drill = { lv: Math.min(DRILL_MAX, nonNegInt(s.drill.lv)), xp: nonNeg(s.drill.xp), show: s.drill.show !== false };
+  if (!s.pityDrill || typeof s.pityDrill !== 'object') s.pityDrill = { epic: 0, leg: 0 };
+  s.pityDrill = { epic: nonNegInt(s.pityDrill.epic), leg: nonNegInt(s.pityDrill.leg) };
+  // Saved classes.
+  s.classes = (Array.isArray(s.classes) ? s.classes : []).slice(0, CLASS_SLOTS).map(c => {
+    if (!c || typeof c !== 'object') return null;
+    const skills = {};
+    for (const [id, n] of Object.entries(c.skills || {})) if (SKILL_INDEX[id] && Number.isInteger(n) && n > 0) skills[id] = Math.min(n, SKILL_INDEX[id].max);
+    const gear = {};
+    for (const slot of SLOT_IDS) gear[slot] = c.gear && Number.isInteger(c.gear[slot]) ? c.gear[slot] : null;
+    const pets = (Array.isArray(c.pets) ? c.pets : []).filter(p => p && PETS[p.sp] && Number.isInteger(p.r) && p.r >= 0 && p.r <= TOP_RARITY).slice(0, 6).map(p => ({ sp: p.sp, r: p.r }));
+    return { name: String(c.name || 'Class').slice(0, 20), skills, gear, pets, look: cleanLook(c.look), at: nonNeg(c.at) };
+  });
+  while (s.classes.length && !s.classes[s.classes.length - 1]) s.classes.pop();
+  if (!Number.isInteger(s.activeClass) || !s.classes[s.activeClass]) s.activeClass = -1;
   st.autoSalvage = Number.isInteger(st.autoSalvage) ? clamp(st.autoSalvage, 0, TOP_RARITY) : 0;
   if (!['new', 'rarity', 'best', 'tier', 'lv', 'fn', ...Object.keys(STATS)].includes(st.bagSort)) st.bagSort = 'new';
   if (!['all', 'pick', 'helm', 'charm'].includes(st.bagShow)) st.bagShow = 'all';
@@ -418,26 +474,37 @@ function computeStats() {
   const sk = skillRank;
   const up = upgradeLevel;
   const add = { dmg: 0, coin: 0, luck: 0, aps: 0, crit: 0, critdmg: 0, xp: 0, strike: 0 };
+  let coinMain = 0; // coins from Merchant pieces' main stat: half of it while you push new floors
+  const sets = outfitCounts();
   for (const slot of SLOT_IDS) {
     const it = S.gear.eq[slot];
-    if (it) for (const s of itemStats(it)) add[s.k] += s.v;
+    if (!it) continue;
+    const o = gearStyle(it).set, setMult = o === 'assassin' ? 1 : 1 + SET_BONUS[sets[o]];
+    for (const s of itemStats(it)) {
+      const v = s.main ? s.v * setMult : s.v;
+      add[s.k] += v;
+      if (s.main && s.k === 'coin') coinMain += v;
+    }
   }
+  add.crit += SET_CRIT[sets.assassin || 0];
   for (const p of S.pets.eq) {
     const def = PETS[p.sp];
     for (const k in def.stats) add[k] += def.stats[k] * petPower(k, p.r);
   }
   const trophy = 1 + TROPHY_BONUS * S.trophies;
   const coll = 1 + COLLECTION_BONUS * collectionCount();
-  const st = { add };
+  const st = { add, outfit: outfitWorn() };
+  const perk = o => st.outfit && st.outfit.id === o && st.outfit.n >= 3 ? OUTFIT_PERK[o] : 0;
+  st.perk = perk;
   const fx = treeFx();
   st.fx = fx;
   st.deepDiver = sk('deepdiver') > 0;
   st.baseDmg = sharpenDamage(up('sharpen'));
   st.dmgMult = (1 + add.dmg) * (1 + 0.02 * branchPoints('brawler')) * (1 + (fx.dmg || 0))
-    * powerMult() * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1);
+    * powerMult() * (1 + 0.25 * ptLevel('might')) * trophy * coll * (sk('m-power') ? 1.5 : 1) * drillDmgMult();
   st.hit = Math.min(BIG, st.baseDmg * st.dmgMult);
   st.aps = 1.25 * (1 + 0.04 * up('fury')) * (1 + add.aps + 0.1 * sk('autodrill'))
-    * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner')) * (1 + 0.08 * sk('overclock')) * (sk('m-speed') ? 1.3 : 1);
+    * (1 + (fx.aps || 0)) * (1 + 0.01 * branchPoints('miner')) * (1 + 0.08 * sk('overclock')) * (sk('m-speed') ? 1.3 : 1) * drillApsMult();
   st.critChance = Math.min(0.75, 0.05 + 0.015 * up('crit') + add.crit + (fx.crit || 0) + 0.02 * sk('seismic'));
   st.critMult = 2 + 0.15 * up('critdmg') + add.critdmg + (fx.critdmg || 0) + (sk('m-crits') ? 0.5 : 0);
   if (sk('earthquake')) { st.critChance *= 0.5; st.critMult *= 2; }
@@ -453,7 +520,7 @@ function computeStats() {
   // The tap pad's own difficulty is the real limit on the combo.
   st.comboCap = paceComboCap();
   st.comboKeep = Math.min(0.96, TAP_KEEP + 0.02 * sk('ironmind'));
-  st.decay = 6 + 2 * sk('focus');
+  st.decay = (6 + 2 * sk('focus')) * (1 + perk('knight'));
   st.bossMult = 1 + 0.3 * sk('executioner');
   st.overdrive = sk('overdrive') > 0;
   st.goldDrill = sk('golddrill') > 0 ? GOLD_DRILL : 1;
@@ -461,15 +528,17 @@ function computeStats() {
   st.boost = Date.now() < S.boostUntil || freshActive() ? 2 : 1;
   st.coinMult = (1 + 0.1 * up('magnet')) * (1 + add.coin) * (1 + 0.15 * sk('greed'))
     * (1 + 0.02 * branchPoints('tycoon')) * (1 + 0.003 * sk('compound') * S.run.maxFloor)
-    * trophy * coll * st.boost * (1 + (fx.coin || 0)) * (1 + 0.25 * ptLevel('fortune')) * (st.deepDiver ? 1.6 : 1) * (sk('m-coins') ? 1.5 : 1);
+    * trophy * coll * st.boost * (1 + (fx.coin || 0)) * (1 + 0.25 * ptLevel('fortune')) * (st.deepDiver ? 1.6 : 1) * (sk('m-coins') ? 1.5 : 1)
+    * (1 + ISLE_COINS * (S.isle ? S.isle.claimed : 0));
+  st.coinPushMult = st.coinMult * (1 + add.coin - coinMain * (1 - MERCHANT_PUSH.keep)) / (1 + add.coin);
   st.xpMult = (1 + 0.1 * up('scholar')) * (1 + add.xp) * (1 + (fx.xp || 0)) * (1 + 0.25 * ptLevel('wisdom')) * (st.deepDiver ? 1.6 : 1)
-    * (1 + 0.1 * sk('insight')) * (sk('m-xp') ? 1.5 : 1);
+    * (1 + 0.1 * sk('insight')) * (sk('m-xp') ? 1.5 : 1) * (1 + perk('wizard'));
   // The Gambler's luck multiplies all your luck (gear, prestige), so a luck build really is the luckiest.
   const treeLuck = 0.1 * sk('lucky') + 0.02 * branchPoints('gambler') + (fx.luck || 0);
   st.luck = (add.luck + PRESTIGE_LUCK * Math.min(S.prestiges, PRESTIGE_LUCK_MAX) + 0.1 * ptLevel('favor')) * (1 + treeLuck)
     * (sk('allin') ? 2.5 : 1) * (sk('m-luck') ? 1.5 : 1) + treeLuck;
   st.rareBoost = sk('m-luck') ? 1.5 : 1; // Luck Mastery: Legendary and up 1.5x more likely, on top of luck
-  st.caseCostMult = sk('allin') ? 1.5 : 1;
+  st.caseCostMult = (sk('allin') ? 1.5 : 1) * (1 - perk('gambler'));
   st.caseDiscount = Math.min(0.6, 0.06 * sk('haggler') + (fx.disc || 0));
   st.epicPity = EPIC_PITY - 2 * sk('pity');
   st.scrapMult = 1 + 0.25 * sk('scrapper') + (fx.scrap || 0);
@@ -477,7 +546,7 @@ function computeStats() {
   st.bonusKey = 0.25 * sk('keymaster');
   st.bossKeys = sk('m-loot') ? 1 : 0;
   st.jackpot = sk('jackpot') > 0 ? 2 : 1;
-  st.offlineRate = 0.4 + 0.1 * sk('nightshift') + (sk('ledger') ? 0.4 : 0);
+  st.offlineRate = (0.4 + 0.1 * sk('nightshift') + (sk('ledger') ? 0.4 : 0)) * (1 + perk('scout'));
   st.offlineCap = (4 + 2 * sk('deeppockets')) * 3600;
   st.oreRate = 1 + 0.2 * sk('oresense') + (fx.ore || 0);
   return st;
@@ -521,7 +590,7 @@ function spawnEnemy(boss = false) {
   if (boss) type = BOSS_ORDER[(f / 10) % BOSS_ORDER.length];
   else if (f >= ENEMIES.goldie.minFloor && Math.random() < TREASURE_CHANCE) type = 'goldie';
   else type = weightedPick(NORMAL_ENEMIES.filter(t => ENEMIES[t].minFloor <= f), t => ENEMIES[t].weight);
-  const hp = Math.min(BIG, hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult);
+  const hp = Math.min(BIG, hpFor(f) * ENEMIES[type].hp * (boss ? 10 : 1) * ST.hpMult * gateHpMult(f));
   const name = boss ? `${biome.adj} ${BOSS_NAMES[type]}` : ENEMIES[type].name(biome);
   // With flow from tapping, the next monster arrives sooner and the first swing comes almost at once.
   const fast = boss ? 0 : flowSpeed();
@@ -555,7 +624,8 @@ function flowSpeed() { return 0.7 * clamp(R.flow || 0, 0, 1); }
 function situational(e) {
   let m = 1;
   if (R.frenzyT > 0) m *= 3;
-  if (e.boss) m *= ST.bossMult;
+  if (e.boss) m *= ST.bossMult * (1 + ST.perk('assassin'));
+  if (!farming()) m *= 1 + ST.perk('warrior');
   if (S.math.streak === 0) m *= ST.goldDrill;
   return m;
 }
@@ -578,7 +648,7 @@ function dealDamage(e, d, kind) {
 function killEnemy(e) {
   const f = S.run.floor;
   const def = ENEMIES[e.type];
-  let coins = coinUnit(f) * def.coin * ST.coinMult;
+  let coins = coinUnit(f) * def.coin * (farming() ? ST.coinMult * (1 + ST.perk('merchant')) : ST.coinPushMult);
   let xp = xpUnit(f) * def.xp * ST.xpMult;
   if (e.boss) { coins *= 10; xp *= 8; }
   const rush = S.run.rush;
@@ -624,9 +694,14 @@ function floorCleared(bossBeaten = false) {
   S.run.kills = 0;
   track('floor');
   if (!(S.run.auto || bossBeaten)) return;
-  const f = S.run.floor;
-  // Tunneler: sometimes drop two floors, but never past a boss.
-  const skip = ST.skip > 0 && !isBossFloor(f + 1) && Math.random() < ST.skip;
+  const f = S.run.floor, isle = islandForFloor(f);
+  // The island's cave ends here: the next island opens, and you sail there from the Harbor.
+  if (f >= isleEnd(isle)) {
+    if (S.run.open <= isle) { S.run.open = isle + 1; emit('isleCleared', { i: isle + 1 }); }
+    return;
+  }
+  // Tunneler: sometimes drop two floors, but never past a boss or the island's last floor.
+  const skip = ST.skip > 0 && !isBossFloor(f + 1) && f + 2 <= isleEnd(isle) && Math.random() < ST.skip;
   changeFloor(f + (skip ? 2 : 1));
   if (skip) emit('tunnel', { floor: f + 2 });
 }
@@ -648,11 +723,13 @@ function changeFloor(f) {
     }
     S.run.maxFloor = f;
     if (skillRank('compound')) recalc();
+    checkUnlock(f);
   }
   if (f > S.stats.bestFloor) {
     const prev = S.stats.bestFloor;
     S.stats.bestFloor = f;
     emit('bestFloor', { floor: f, prev });
+    checkIslands();
     if (!S.run.recordAnnounced && prev >= 10 && S.prestiges > 0) {
       S.run.recordAnnounced = true;
       emit('record', { floor: f });
@@ -741,8 +818,8 @@ function treasureEscaped() {
 // Player moving between floors. Going up turns auto-advance off so you can farm;
 // stepping back down onto the deepest floor turns it on again, so the dig resumes.
 function moveFloor(delta) {
-  const f = S.run.floor + delta;
-  if (f < 1 || f > S.run.maxFloor) return false;
+  const f = S.run.floor + delta, isle = islandForFloor(S.run.floor);
+  if (f < 1 || f > S.run.maxFloor || f < isleStart(isle) || f > isleEnd(isle)) return false; // other islands are by boat
   if (delta < 0) S.run.auto = false;
   else if (f === S.run.maxFloor) S.run.auto = true;
   changeFloor(f);
@@ -1228,6 +1305,134 @@ function learnSkill(id) {
   return true;
 }
 
+// ---------- Version 2: islands ----------
+const ISLE_KEYS = 10; // reaching island i for the first time gives 10 × i keys
+const ISLE_COINS = 0.05; // and +5% coins forever
+function islesReached() { return islandForFloor(S.stats.bestFloor); }
+function checkIslands() {
+  const out = [];
+  while (S.isle.claimed < islesReached()) {
+    S.isle.claimed++;
+    const keys = ISLE_KEYS * S.isle.claimed;
+    S.keys += keys;
+    out.push({ i: S.isle.claimed, keys });
+  }
+  if (out.length) { recalc(); emit('isles', out); }
+  return out;
+}
+// The island you are on: the one whose cave you are digging.
+function worldIsle() { return islandForFloor(S.run.floor); }
+// Sail to an island opened this run. You land in its cave on your deepest floor there (or its first
+// floor if you have never been), and it digs on from there if that is the deepest you have been.
+function sailToIsle(i) {
+  if (!(i >= 0 && i <= S.run.open)) return false;
+  const lo = isleStart(i), hi = isleEnd(i);
+  const f = lo > S.run.maxFloor ? lo : Math.min(Math.max(lo, S.run.maxFloor), hi);
+  S.run.auto = f >= S.run.maxFloor;
+  if (f !== S.run.floor) changeFloor(f);
+  emit('sail', { i });
+  return true;
+}
+function canSailOn() { const i = islandForFloor(S.run.floor); return S.run.open > i && S.run.floor >= isleEnd(i); }
+
+// ---------- Version 2: the drill ----------
+function addDrillXp(x) {
+  const d = S.drill;
+  d.xp += x;
+  while (d.lv < DRILL_MAX && d.xp >= drillNeed(d.lv)) { d.xp -= drillNeed(d.lv); d.lv++; }
+  if (d.lv >= DRILL_MAX) d.xp = 0;
+}
+function drillModel() { const i = drillModelIndex(S.drill.lv); return i >= 0 ? DRILL_MODELS[i] : null; }
+function drillDmgMult() { return 1 + DRILL_DMG * S.drill.lv; }
+function drillApsMult() { return 1 + DRILL_APS * S.drill.lv; }
+
+// ---------- Version 2: classes (saved builds) ----------
+const CLASS_SLOTS = 4;
+function cleanLook(l) {
+  const L = { ...DEFAULT_LOOK, ...(l && typeof l === 'object' ? l : {}) };
+  if (!LOOK_HATS.some(h => h.id === L.hat)) L.hat = DEFAULT_LOOK.hat;
+  for (const [k, list] of [['hatC', LOOK_CLOTH], ['hair', LOOK_HAIR], ['skin', LOOK_SKIN], ['shirt', LOOK_CLOTH], ['pants', LOOK_CLOTH], ['boots', LOOK_BOOTS]]) {
+    if (!Number.isInteger(L[k]) || L[k] < 0 || L[k] >= list.length) L[k] = DEFAULT_LOOK[k];
+  }
+  return { hat: L.hat, hatC: L.hatC, hair: L.hair, skin: L.skin, shirt: L.shirt, pants: L.pants, boots: L.boots, gearHelm: L.gearHelm !== false, gearArmor: L.gearArmor !== false };
+}
+// Points a class puts in each direction of the web, and the direction it leans to most.
+function classBranches(c) {
+  const by = {};
+  for (const b of BRANCHES) by[b.id] = 0;
+  for (const [id, n] of Object.entries(c.skills)) { const br = SKILL_INDEX[id] && SKILL_INDEX[id].branch; if (br in by) by[br] += n; }
+  return by;
+}
+function classLean(c) {
+  const by = classBranches(c);
+  let best = null;
+  for (const b of BRANCHES) if (by[b.id] > 0 && (!best || by[b.id] > by[best.id])) best = b;
+  return best;
+}
+function classPoints(c) { return Object.values(c.skills).reduce((a, n) => a + n, 0); }
+function snapshotClass(name) {
+  const gear = {};
+  for (const slot of SLOT_IDS) gear[slot] = S.gear.eq[slot] ? S.gear.eq[slot].id : null;
+  return { name, skills: { ...S.run.skills }, gear, pets: S.pets.eq.map(p => ({ sp: p.sp, r: p.r })), look: { ...S.look }, at: Date.now() };
+}
+function saveClass(i, name) {
+  if (i < 0 || i >= CLASS_SLOTS) return null;
+  while (S.classes.length < i) S.classes.push(null);
+  S.classes[i] = snapshotClass(name || (S.classes[i] && S.classes[i].name) || 'Class');
+  S.activeClass = i;
+  return S.classes[i];
+}
+// Spend points on a class's skills, inner nodes first, as far as your points go.
+function learnClassSkills(c) {
+  const want = c.skills, dist = id => Math.hypot(SKILL_INDEX[id].x, SKILL_INDEX[id].y);
+  const ids = Object.keys(want).filter(id => SKILL_INDEX[id]).sort((a, b) => dist(a) - dist(b));
+  let n = 0, more = true, guard = 0;
+  while (more && S.run.sp > 0 && guard++ < 60) {
+    more = false;
+    for (const id of ids) {
+      while (S.run.sp > 0 && skillRank(id) < Math.min(want[id], SKILL_INDEX[id].max) && canLearn(id)) {
+        if (!learnSkill(id)) break;
+        n++; more = true;
+      }
+    }
+  }
+  return n;
+}
+function classMissing(c) {
+  let left = 0;
+  for (const [id, n] of Object.entries(c.skills)) left += Math.max(0, n - skillRank(id));
+  return left;
+}
+// Switch to a saved class: refund every skill point and spend it to match, then put on its gear,
+// pets and look. Anything you no longer have (scrapped gear, merged pets) is left out and listed.
+function applyClass(i) {
+  const c = S.classes[i];
+  if (!c) return null;
+  respecSkills();
+  const placed = learnClassSkills(c);
+  const missing = [];
+  for (const slot of SLOT_IDS) {
+    const id = c.gear[slot];
+    if (id == null) continue;
+    const f = findItem(id);
+    if (!f) { missing.push(SLOTS[slot].name); continue; }
+    if (f.where === 'bag') equipItem(id);
+  }
+  S.pets.eq = [];
+  for (const p of c.pets) if (!equipPet(p.sp, p.r)) missing.push(`${RARITY[p.r].name} ${PETS[p.sp].name}`);
+  S.look = { ...c.look };
+  S.activeClass = i;
+  recalc();
+  return { placed, wanted: classPoints(c), left: classMissing(c), missing };
+}
+function deleteClass(i) {
+  if (!S.classes[i]) return false;
+  S.classes[i] = null;
+  while (S.classes.length && !S.classes[S.classes.length - 1]) S.classes.pop();
+  if (S.activeClass === i) S.activeClass = -1;
+  return true;
+}
+
 function respecSkills() {
   let refund = 0;
   for (const k in S.run.skills) refund += S.run.skills[k] - (S.locks[k] || 0);
@@ -1247,9 +1452,10 @@ function bestCaseTier() {
   for (const c of CASES) if (caseUnlocked(c)) t = c.tier;
   return t;
 }
-function caseCost(c) {
+function caseCost(c, kind = S.caseKind) {
   const runInflation = Math.pow(CASE_INFLATION, S.run.cases || 0);
-  return Math.ceil(c.base * coinUnit(S.run.maxFloor) * runInflation * (1 - ST.caseDiscount) * ST.caseCostMult);
+  const base = kind === 'drill' ? CASES[0].base * DRILL_CRATE_MULT : c.base;
+  return Math.ceil(base * coinUnit(S.run.maxFloor) * runInflation * (1 - ST.caseDiscount) * ST.caseCostMult);
 }
 function freeCrateReady() { return Date.now() >= S.freeCrateAt; }
 
@@ -1269,7 +1475,7 @@ function rarityOdds() {
 }
 
 // Tool cases and pet cases each keep their own pity counters.
-function pityFor(kind = S.caseKind) { return kind === 'pet' ? S.pityPet : S.pity; }
+function pityFor(kind = S.caseKind) { return kind === 'pet' ? S.pityPet : kind === 'drill' ? S.pityDrill : S.pity; }
 function rollRarity(minR = 0, kind = S.caseKind) {
   const pity = pityFor(kind);
   let lo = minR;
@@ -1312,13 +1518,17 @@ function rollDrop(tier, minR = 0, kind = S.caseKind) {
   if (kind === 'pet') {
     return { kind: 'pet', sp: weightedPick(PET_IDS, id => PETS[id].weight), r, odds: dropOdds(r) };
   }
+  if (kind === 'drill') {
+    return { kind: 'part', part: weightedPick(DRILL_PART_IDS, id => DRILL_PARTS[id].weight), r, xp: PART_XP[r], odds: dropOdds(r) };
+  }
   const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight);
-  const main = SLOTS[slot].main;
+  const style = weightedPick(GEAR_STYLES[slot], s => s.weight);
+  const main = style.main;
   const subs = shuffle(SUB_POOL.filter(k => k !== main))
     .slice(0, SUB_COUNT[r])
     .map(k => ({ k, roll: Math.round(rand(0.7, 1.3) * 1000) / 1000 }));
   const fl = rollFloat();
-  const item = { id: S.nextId++, slot, r, t: dropMaterial(tier), fl, lv: 0, subs, isNew: true };
+  const item = { id: S.nextId++, slot, st: style.id, r, t: dropMaterial(tier), fl, lv: 0, subs, isNew: true };
   return { kind: 'gear', r, item, odds: dropOdds(r, fl) };
 }
 
@@ -1337,6 +1547,13 @@ function recordPull(d) {
 
 function grantDrop(d) {
   if (d.r > S.stats.bestDrop) S.stats.bestDrop = d.r;
+  if (d.kind === 'part') {
+    const before = S.drill.lv, modelBefore = drillModelIndex(before);
+    addDrillXp(d.xp);
+    if (S.drill.lv > before) d.levelTo = S.drill.lv;
+    if (drillModelIndex(S.drill.lv) > modelBefore) d.evolved = DRILL_MODELS[drillModelIndex(S.drill.lv)].name;
+    return;
+  }
   recordPull(d);
   if (d.kind === 'pet') {
     S.pets.inv[d.sp][d.r]++;
@@ -1378,9 +1595,12 @@ function grantDrop(d) {
   S.gear.bag.unshift(it);
 }
 
+// An upgrade is a better item of the same main stat; a different style is a different choice.
 function isUpgrade(it) {
   const eq = S.gear.eq[it.slot];
-  return !eq || itemStats(it)[0].v > itemStats(eq)[0].v;
+  if (!eq) return true;
+  const a = itemStats(it)[0], b = itemStats(eq)[0];
+  return a.k === b.k && a.v > b.v;
 }
 
 function itemRank(it) { return it.r * 1000 + it.t * 20 + it.lv; }
@@ -1438,12 +1658,27 @@ function statValue(k, r, t, mult, sub = false) {
 function itemStats(it) {
   const lv = 1 + 0.1 * it.lv;
   const q = quality(it.fl);
-  const main = SLOTS[it.slot].main;
-  const out = [{ k: main, v: statValue(main, it.r, it.t, q * lv), main: true }];
+  const main = gearStyle(it).main;
+  const boost = MAIN_SUBLIKE[main], mm = MAIN_MULT[main] || 1;
+  const out = [{ k: main, v: boost ? statValue(main, it.r, it.t, q * lv * boost, true) : statValue(main, it.r, it.t, q * lv * mm), main: true }];
   for (const s of it.subs) out.push({ k: s.k, v: statValue(s.k, it.r, it.t, q * s.roll * lv, true) * 0.5 });
   return out;
 }
-function itemName(it) { return `${MATERIALS[it.t].name} ${SLOTS[it.slot].name}`; }
+// Outfit pieces you wear, counted per outfit, and the outfit with a set bonus (two or more pieces).
+function outfitCounts(eq = S.gear.eq) {
+  const n = {};
+  for (const slot of SLOT_IDS) if (eq[slot]) { const o = gearStyle(eq[slot]).set; n[o] = (n[o] || 0) + 1; }
+  return n;
+}
+function outfitWorn(eq = S.gear.eq) {
+  const n = outfitCounts(eq);
+  let best = null;
+  for (const o in n) if (n[o] >= 2 && (!best || n[o] > n[best])) best = o;
+  return best ? { id: best, n: n[best] } : null;
+}
+function hasPerk(o) { return !!(ST && ST.outfit && ST.outfit.id === o && ST.outfit.n >= 3); }
+function farming() { return S.run.floor < S.run.maxFloor; }
+function itemName(it) { return `${MATERIALS[it.t].name} ${gearStyle(it).name}`; }
 function scrapValue(it) {
   const st = ST || { scrapMult: 1 };
   return Math.ceil(SCRAP_BY_RARITY[it.r] * materialScale(it.t) * st.scrapMult * (1 + it.lv * 0.5));
@@ -1787,11 +2022,44 @@ function startGoldRush(kind, f) {
 }
 
 // ---------- prestige ----------
-// Prestiging pays two things. Power (+10% damage each, forever) grows with the square of the level
-// you reached, so deep runs count for much more than quick ones. Cores are spent in the prestige tree.
+// Prestiging pays two things. Power makes you stronger forever (see powerFloors) and grows with the
+// square of how far past your strength the run went (powerGain). Cores are spent in the prestige tree.
 function prestigeGain() { return coresFor(S.run.maxFloor); }
-function powerGain() { return Math.round((S.run.level * S.run.level) / 40); }
-function canPrestige() { return S.run.maxFloor >= 25 && prestigeGain() > 0; }
+// Depth past your strength: how many floors deeper this run went than your power alone carries you.
+function depthPast() { return Math.max(0, S.run.maxFloor - powerFloors() - TUNE.depthFree); }
+// Power from a run grows with the square of how far past your strength you dug, so pushing twice as
+// deep pays four times as much, and quick resets that never get past your strength pay nothing.
+function powerGain() { const d = depthPast(); return Math.round(TUNE.depthPay * d * d); }
+// The floor where a run starts paying power: your strength plus the free floors.
+function payFloor() { return Math.ceil(powerFloors() + TUNE.depthFree) + 1; }
+function reqCurve(p) { return p <= 0 ? 25 : Math.round((25 + TUNE.reqScale * Math.pow(p, TUNE.reqExp)) / 5) * 5; }
+function prestigeReq(p = S.prestiges, w = powerFloors()) { return Math.max(reqCurve(p), Math.ceil((w + TUNE.reqAhead) / 5) * 5); }
+function canPrestige() { return !!S.run.unlocked && prestigeGain() > 0; }
+// Gate floors: the last few floors before this run's prestige floor, tougher until it opens.
+function gateLevel(f) { const req = prestigeReq(), k = TUNE.gateFloors - (req - f); return S.run.unlocked || f > req || k <= 0 ? 0 : k; }
+function gateHpMult(f) { const k = gateLevel(f); return k ? Math.pow(TUNE.gateHp, k) : 1; }
+// Reaching the prestige floor opens prestige for this run and pays out on the spot.
+function checkUnlock(f) {
+  if (S.run.unlocked || f < prestigeReq()) return;
+  S.run.unlocked = true;
+  const keys = TUNE.gateKeys + Math.floor(S.prestiges / 2);
+  S.keys += keys;
+  emit('prestigeUnlocked', { floor: prestigeReq(), keys });
+}
+// Sail-out start: each run begins at the first floor of the deepest island (past the last island, the
+// deepest 100-floor stretch) at or above the point halfway (TUNE.startShare) between your strength and
+// your record, so runs don't grow longer and longer re-climbing floors you outgrew long ago.
+function runStartFloor() {
+  if (!TUNE.sailStart) return 1;
+  const w = powerFloors(), best = S.stats.bestFloor;
+  const safe = Math.min(best - TUNE.startMargin, w + (best - w) * TUNE.startShare), last = ISLANDS[ISLANDS.length - 1].from;
+  let f = 1;
+  for (const isl of ISLANDS) if (isl.from <= safe) f = isl.from;
+  if (safe >= last + ISLE_FLOORS) f = last + Math.floor((safe - last) / ISLE_FLOORS) * ISLE_FLOORS;
+  const cap = prestigeReq(S.prestiges + 1, w) - TUNE.gateFloors - 10; // always some digging before the next gate
+  while (f > 1 && f > cap) f = f > last ? f - ISLE_FLOORS : ISLANDS[Math.max(0, islandForFloor(f) - 1)].from;
+  return f;
+}
 
 function doPrestige() {
   if (!canPrestige()) return null;
@@ -1806,7 +2074,9 @@ function doPrestige() {
   S.prestiges++;
   S.stats.prestiges = S.prestiges;
   S.coins = 0;
+  const start = runStartFloor();
   S.run = freshRun();
+  if (start > 1) { S.run.floor = S.run.maxFloor = start; S.run.open = islandForFloor(start); }
   S.run.skills = { ...S.locks };
   S.run.sp = 2 * ptLevel('headstart');
   S.math.streak = 0;

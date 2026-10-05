@@ -3,7 +3,18 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v2.0.0
+Version 2 is here: the whole game rebuilt as an adventure.
+- **Your town:** walk left and right through Greenhollow and tap a building to go in: the House (gear, pets, outfits), the Forge, the Market (cases and the drill), the Temple (skills and prestige), the Quest board and the Harbor. Settings and prestige are under ⚙ top right.
+- **Islands:** every 100 floors is a new island with its own cave: Greenhollow, Frostpeak, Sunscorch, Emberfall and Starfall. Sail between them from the dock. Each cave island has its own scenery, wildlife and a hidden surprise.
+- **Outfits:** gear comes in seven outfits (Warrior, Knight, Assassin, Scout, Merchant, Gambler, Wizard), your miner wears them, and two or three pieces of one outfit give a set bonus for its job. Save whole builds (gear, skills, pets) as classes.
+- **Prestige:** each prestige needs a deeper floor (B25, B40, B50, B60...). The last 3 floors before it are tough Gate floors, and reaching it shows PRESTIGE UNLOCKED with keys on the spot. Power grows with the square of how far past your strength you dig, and each new run sails straight to a deeper island.
+- **The drill:** collect parts from the Drill Crate to build and evolve your drill.
+- **Art:** a 24-pixel Game Boy Color style for the miner, outfits, monsters and bosses, with backgrounds for every area, a decorated yard with an armor stand and a doghouse for your pet.
+- Your save comes with you. If you also played the Version 2 preview, the game asks once which save to keep; the other stays on your phone as a backup.
+
 ## v1.11.11
+Commit: 429950d
 - Tapping flow now powers up your swings as well as speeding them up: at full flow your miner hits 50% harder on top of swinging up to 60% faster. When you're not tapping, everything runs at its normal speed and strength, and attack speed from skills and gear works as before.
 
 ## v1.11.10

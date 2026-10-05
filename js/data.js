@@ -100,8 +100,39 @@ const BIOMES = [
     ground: ['#56461c', '#382e12', '#fff0a0'], oreColor: '#ffffff',
     enemy: ['#fff1a8', '#cfae45', '#ffffff'],
   },
+  // Version 2: caves for the cold, desert and lava islands.
+  {
+    name: 'Frozen Tunnels', adj: 'Frost', ore: 'Ice',
+    bg: ['#0e1620', '#1a2a3a'], rock: ['#5a7a96', '#3c5670', '#8fb4d0'],
+    ground: ['#7a98b2', '#4e6a84', '#e6f4ff'], oreColor: '#9ff0ff',
+    enemy: ['#bfe8ff', '#6aa8d8', '#ffffff'],
+  },
+  {
+    name: 'Glacier Halls', adj: 'Glacier', ore: 'Frostsilver',
+    bg: ['#0a1630', '#16305a'], rock: ['#2f5c8c', '#1e3e62', '#5a9ad0'],
+    ground: ['#3a6ea0', '#22466e', '#c8ecff'], oreColor: '#ffffff',
+    enemy: ['#7fd0ff', '#3a7ab8', '#e0f6ff'],
+  },
+  {
+    name: 'Sandstone Tombs', adj: 'Sand', ore: 'Gold',
+    bg: ['#21160a', '#3a2812'], rock: ['#9a7440', '#6e5028', '#c49a5a'],
+    ground: ['#a8804a', '#76562e', '#f2d48a'], oreColor: '#ffd23f',
+    enemy: ['#e8c070', '#a8803a', '#fff0c0'],
+  },
+  {
+    name: 'Sunken Ruins', adj: 'Ruin', ore: 'Jade',
+    bg: ['#0c1a1a', '#163030'], rock: ['#4a7a6a', '#30544a', '#78aa94'],
+    ground: ['#5a8a74', '#3a5e50', '#a8f0d0'], oreColor: '#4affd0',
+    enemy: ['#6ae0b0', '#2e9a78', '#d0fff0'],
+  },
+  {
+    name: 'Cinder Core', adj: 'Cinder', ore: 'Fireopal',
+    bg: ['#140808', '#2a0e0e'], rock: ['#3a2a2a', '#241818', '#5a4040'],
+    ground: ['#4a1e14', '#2a100a', '#ff5a1a'], oreColor: '#ff9a2a',
+    enemy: ['#ff5a4a', '#a82a20', '#ffc0a0'],
+  },
 ];
-const FLOORS_PER_BIOME = 25;
+const FLOORS_PER_BIOME = 50; // two cave biomes per island
 
 const ENEMIES = {
   rock: { hp: 0.8, coin: 2.0, xp: 0.5, weight: 35, minFloor: 1, name: b => `${b.ore} Node` },
@@ -323,18 +354,18 @@ const PRESTIGE_TREE = [
 // Gear stats. Values are fractions (0.30 = +30%) except crit, which is flat percentage points.
 const STATS = {
   dmg: { name: 'Damage', base: 0.15, tier: 2.5 },
-  coin: { name: 'Coins', base: 0.15, tier: 2.5 },
+  coin: { name: 'Coins', base: 0.15, tier: 2.3 },
   luck: { name: 'Luck', base: 0.10, tier: 1.45 },
   aps: { name: 'Attack speed', base: 0.05, tier: 1.35 },
   crit: { name: 'Crit chance', base: 0.015, tier: 1.15 },
   critdmg: { name: 'Crit damage', base: 0.20, tier: 1.8 },
   xp: { name: 'XP', base: 0.10, tier: 1.7 },
-  strike: { name: 'Tap strike', base: 0.25, tier: 2.2 },
+  strike: { name: 'Tap strike', base: 0.5, tier: 3.0 },
 };
 const SLOTS = {
   pick: { name: 'Pickaxe', main: 'dmg', weight: 40 },
   helm: { name: 'Helmet', main: 'coin', weight: 30 },
-  charm: { name: 'Charm', main: 'luck', weight: 30 },
+  charm: { name: 'Armor', main: 'luck', weight: 30 }, // Version 2: charms became armor you can see on your miner
 };
 const SLOT_IDS = Object.keys(SLOTS);
 const SUB_POOL = ['aps', 'crit', 'critdmg', 'xp', 'strike', 'dmg', 'coin', 'luck'];
@@ -405,12 +436,12 @@ const QUEST_REWARD = { keys: 2, scrap: 25 };
 const statAtLeast = (key, n) => () => (S.stats[key] || 0) >= n;
 const ACHIEVEMENTS = [
   { id: 'f10', name: 'Going Down', desc: 'Reach B10', test: statAtLeast('bestFloor', 10), keys: 1 },
-  { id: 'f25', name: 'Stone Cold', desc: 'Reach B25', test: statAtLeast('bestFloor', 25), keys: 2 },
-  { id: 'f50', name: 'Crystal Clear', desc: 'Reach B50', test: statAtLeast('bestFloor', 50), keys: 3 },
-  { id: 'f75', name: 'Feel the Heat', desc: 'Reach B75', test: statAtLeast('bestFloor', 75), keys: 4 },
-  { id: 'f100', name: 'Into the Abyss', desc: 'Reach B100', test: statAtLeast('bestFloor', 100), keys: 5 },
-  { id: 'f150', name: 'Starcore', desc: 'Reach B150', test: statAtLeast('bestFloor', 150), keys: 8 },
-  { id: 'f200', name: 'Bottomless', desc: 'Reach B200', test: statAtLeast('bestFloor', 200), keys: 10 },
+  { id: 'f25', name: 'Deep Roots', desc: 'Reach B25', test: statAtLeast('bestFloor', 25), keys: 2 },
+  { id: 'f50', name: 'Stone Cold', desc: 'Reach B50', test: statAtLeast('bestFloor', 50), keys: 3 },
+  { id: 'f75', name: 'Halfway Home', desc: 'Reach B75', test: statAtLeast('bestFloor', 75), keys: 4 },
+  { id: 'f100', name: 'Island Hopper', desc: 'Reach B100', test: statAtLeast('bestFloor', 100), keys: 5 },
+  { id: 'f150', name: 'Frostbitten', desc: 'Reach B150', test: statAtLeast('bestFloor', 150), keys: 8 },
+  { id: 'f200', name: 'Sun Seeker', desc: 'Reach B200', test: statAtLeast('bestFloor', 200), keys: 10 },
   { id: 't100', name: 'Warm Up', desc: 'Tap 100 monsters', test: statAtLeast('taps', 100), keys: 1 },
   { id: 't1000', name: 'Quick Hands', desc: 'Tap 1,000 monsters', test: statAtLeast('taps', 1000), keys: 2 },
   { id: 't5000', name: 'Whack-a-Mole', desc: 'Tap 5,000 monsters', test: statAtLeast('taps', 5000), keys: 4 },
@@ -459,3 +490,126 @@ const ACHIEVEMENTS = [
 ];
 const TROPHY_BONUS = 0.02;
 const COLLECTION_BONUS = 0.01;
+
+// Version 2: islands. Each island has its own cave of 100 floors, with two cave biomes of 50 floors
+// (cave: indexes into BIOMES). You sail between them from the Harbor; an island's cave ends at its
+// last floor, and beating that floor lets you sail on to the next island. Past Starfall's 100 floors
+// the cave goes on forever as The Abyss. Reaching an island for the first time gives a reward.
+const ISLANDS = [
+  { id: 'green', name: 'Greenhollow', from: 1, blurb: 'Meadows, a farm and a windmill', cave: [0, 1], caveLook: 'Earth and stone' },
+  { id: 'frost', name: 'Frostpeak', from: 101, blurb: 'Snowfields and a frozen river', cave: [6, 7], caveLook: 'Ice caves' },
+  { id: 'sand', name: 'Sunscorch', from: 201, blurb: 'Dunes, palms and an oasis', cave: [8, 9], caveLook: 'Desert tombs' },
+  { id: 'ember', name: 'Emberfall', from: 301, blurb: 'Ash plains and a river of lava', cave: [3, 10], caveLook: 'Lava caves' },
+  { id: 'star', name: 'Starfall', from: 401, blurb: 'A crystal island under the night sky', cave: [2, 5], caveLook: 'Crystal and starlight' },
+];
+const ISLE_FLOORS = 100;
+const ABYSS_BIOME = 4;
+function isleStart(i) { return ISLANDS[i].from; }
+function isleEnd(i) { return i + 1 < ISLANDS.length ? ISLANDS[i + 1].from - 1 : Infinity; }
+function islandForFloor(f) { let i = 0; ISLANDS.forEach((s, k) => { if (f >= s.from) i = k; }); return i; }
+
+// Version 2: the miner's look, picked in the House.
+const LOOK_SKIN = [['#f4c393', '#d39a6a'], ['#ffdcbc', '#e8b48c'], ['#d9a066', '#b07a46'], ['#a86a3e', '#7e4a26'], ['#6e4224', '#4e2c16']];
+const LOOK_HAIR = ['#3a2418', '#7a4a26', '#c8862a', '#f2d27a', '#c84828', '#1e1e26', '#e8e8f0', '#5a7ae8', '#e05aa0', '#4aa86a'];
+const LOOK_CLOTH = ['#3e7bd6', '#d84848', '#4a9a48', '#8a5ab0', '#f08a28', '#2aa8a0', '#f06aa8', '#f2c14e', '#e8e8f0', '#3a3a46', '#8a5a32', '#3b3155'];
+const LOOK_BOOTS = ['#6a4122', '#2a2a34', '#8a5a32', '#d84848', '#e8e8f0', '#3e7bd6'];
+const LOOK_HATS = [
+  { id: 'helmet', name: 'Miner helmet' },
+  { id: 'cap', name: 'Cap' },
+  { id: 'none', name: 'No hat' },
+  { id: 'beanie', name: 'Beanie', isle: 1 },
+  { id: 'bandana', name: 'Bandana', isle: 2 },
+  { id: 'viking', name: 'Viking helmet', isle: 3 },
+  { id: 'crown', name: 'Crown', isle: 4 },
+];
+const DEFAULT_LOOK = { hat: 'helmet', hatC: 7, hair: 1, skin: 0, shirt: 0, pants: 11, boots: 0, gearHelm: true, gearArmor: true };
+
+// Version 2: the drill (Jackson's idea). Drill parts come from the Drill Crate in the Market. Each
+// part adds XP to your drill by its rarity; the drill levels up (more damage and speed) and every
+// 10 levels it evolves into a new model. Your miner holds the drill instead of the pickaxe.
+const PART_XP = [1, 2, 4, 8, 16, 40, 100, 250, 600, 1500, 4000];
+const DRILL_PARTS = {
+  bit: { name: 'Drill bit', weight: 30 },
+  gear: { name: 'Gear', weight: 30 },
+  motor: { name: 'Motor', weight: 25 },
+  cell: { name: 'Power cell', weight: 15 },
+};
+const DRILL_PART_IDS = Object.keys(DRILL_PARTS);
+const DRILL_MODELS = [
+  { lv: 1, name: 'Hand Drill', body: '#c48a3a', trim: '#6e4520', bit: '#b9c2c9' },
+  { lv: 10, name: 'Power Drill', body: '#f2c14e', trim: '#2a2a34', bit: '#cfd6df' },
+  { lv: 20, name: 'Twin Drill', body: '#d84848', trim: '#2a2a34', bit: '#e9eef4', twin: true },
+  { lv: 30, name: 'Diamond Drill', body: '#4f7bd9', trim: '#e9eef4', bit: '#7ff6ff' },
+  { lv: 40, name: 'Magma Drill', body: '#ff6a2a', trim: '#3a140c', bit: '#ffd23f', glow: '#ffd860' },
+  { lv: 50, name: 'Plasma Drill', body: '#2aa8a0', trim: '#e9eef4', bit: '#c4fff2', glow: '#62ffd8' },
+  { lv: 60, name: 'Void Drill', body: '#5b4a86', trim: '#c46cff', bit: '#e07bff', glow: '#e07bff', twin: true },
+  { lv: 70, name: 'Star Drill', body: '#fff6c0', trim: '#cfae45', bit: '#ffffff', glow: '#fff1a8' },
+  { lv: 80, name: 'Eternium Drill', body: '#ff9cf0', trim: '#7f6bff', bit: '#3be8ff', glow: '#ff6bd6', twin: true },
+  { lv: 90, name: 'Singularity Drill', body: '#241a34', trim: '#ffffff', bit: '#ff4dd2', glow: 'rainbow', twin: true },
+];
+const DRILL_MAX = 100;
+const DRILL_DMG = 0.06; // +6% damage per drill level
+const DRILL_APS = 0.004; // +0.4% attack speed per drill level
+const DRILL_CRATE_MULT = 2; // a Drill Crate costs twice a Copper Crate
+function drillNeed(lv) { return Math.round(10 * Math.pow(1.12, lv)); } // XP to go from lv to lv + 1
+function drillModelIndex(lv) { let m = -1; DRILL_MODELS.forEach((d, i) => { if (lv >= d.lv) m = i; }); return m; }
+
+// Version 2: gear styles. Every slot comes in seven styles, one per outfit, and the style decides
+// the main stat and how the item looks, both as an icon and on your miner. Items from before styles
+// existed have none and read as the slot's first style, which has the main stat they always had.
+// Style ids stay as they were first saved; only the names changed when the styles became outfits.
+const GEAR_STYLES = {
+  pick: [
+    { id: 'war', main: 'dmg', name: 'Battle Axe', set: 'warrior', weight: 40 },
+    { id: 'gilded', main: 'coin', name: 'Gilded Pick', set: 'merchant', weight: 12 },
+    { id: 'clover', main: 'luck', name: 'Clover Pick', set: 'gambler', weight: 11 },
+    { id: 'rune', main: 'xp', name: 'Rune Staff', set: 'wizard', weight: 11 },
+    { id: 'swift', main: 'aps', name: 'Swift Pick', set: 'scout', weight: 12 },
+    { id: 'sword', main: 'strike', name: 'Sword', set: 'knight', weight: 14 },
+    { id: 'daggers', main: 'critdmg', name: 'Twin Daggers', set: 'assassin', weight: 12 },
+  ],
+  helm: [
+    { id: 'prospector', main: 'coin', name: "Merchant's Hat", set: 'merchant', weight: 36 },
+    { id: 'horned', main: 'dmg', name: 'Horned Helm', set: 'warrior', weight: 14 },
+    { id: 'lucky', main: 'luck', name: "Dealer's Cap", set: 'gambler', weight: 13 },
+    { id: 'scholar', main: 'xp', name: 'Wizard Hat', set: 'wizard', weight: 12 },
+    { id: 'aviator', main: 'aps', name: 'Scout Goggles', set: 'scout', weight: 12 },
+    { id: 'storm', main: 'strike', name: "Knight's Helm", set: 'knight', weight: 13 },
+    { id: 'hood', main: 'critdmg', name: 'Assassin Hood', set: 'assassin', weight: 12 },
+  ],
+  charm: [
+    { id: 'cloak', main: 'luck', name: 'Lucky Cloak', set: 'gambler', weight: 36 },
+    { id: 'plate', main: 'dmg', name: 'Plate Armor', set: 'warrior', weight: 14 },
+    { id: 'vest', main: 'coin', name: 'Merchant Vest', set: 'merchant', weight: 13 },
+    { id: 'robe', main: 'xp', name: 'Wizard Robe', set: 'wizard', weight: 12 },
+    { id: 'jerkin', main: 'aps', name: 'Scout Jerkin', set: 'scout', weight: 12 },
+    { id: 'mail', main: 'strike', name: "Knight's Mail", set: 'knight', weight: 13 },
+    { id: 'shadow', main: 'critdmg', name: 'Shadow Cloak', set: 'assassin', weight: 12 },
+  ],
+};
+// Outfits: wear two or three pieces of one outfit for its set bonus. Each outfit has a job it is
+// best at, so the right one depends on what you are doing: pushing, tapping, bosses, sleeping,
+// farming coins, opening cases or levelling up.
+//   two pieces: the outfit's main stat +10% (Assassin: +15% crit chance)
+//   three pieces: the main stat +25% (Assassin: +35% crit chance) and the outfit's perk
+const OUTFITS = {
+  warrior: { name: 'Warrior', color: '#c8503a', job: 'Pushing deeper', perk: '+25% damage on floors you have not cleared yet' },
+  knight: { name: 'Knight', color: '#d63447', job: 'Active tapping', perk: 'Your combo drains 30% slower' },
+  assassin: { name: 'Assassin', color: '#7a6aa8', job: 'Boss hunting', perk: '+50% damage to bosses' },
+  scout: { name: 'Scout', color: '#3e8ad6', job: 'AFK and overnight', perk: '+50% offline earnings' },
+  merchant: { name: 'Merchant', color: '#a05ad0', job: 'Farming coins', perk: '+50% coins on floors you already cleared' },
+  gambler: { name: 'Gambler', color: '#3eaa4a', job: 'Opening cases', perk: 'Cases cost 15% less' },
+  wizard: { name: 'Wizard', color: '#4a6ae8', job: 'Levelling up', perk: 'An extra +50% XP from every kill' },
+};
+const OUTFIT_IDS = Object.keys(OUTFITS);
+const SET_BONUS = [0, 0, 0.10, 0.25];
+const SET_CRIT = [0, 0, 0.15, 0.35];
+const OUTFIT_PERK = { warrior: 0.25, knight: 0.3, assassin: 0.5, scout: 0.5, merchant: 0.5, gambler: 0.15, wizard: 0.5 };
+// While you push floors you have not cleared, Merchant pieces pay only this share of their coin bonus.
+const MERCHANT_PUSH = { keep: 0.25 };
+// Speed and crit damage as main stats don't grow like damage: speed would make the miner swing
+// fifty times as fast, and crit damage only counts when you crit. Speed grows like a sub-stat
+// (times 3); crit damage grows like damage, half again as much.
+const MAIN_SUBLIKE = { aps: 3 };
+const MAIN_MULT = { critdmg: 1.5 };
+function gearStyle(it) { const list = GEAR_STYLES[it.slot]; return list.find(s => s.id === it.st) || list[0]; }

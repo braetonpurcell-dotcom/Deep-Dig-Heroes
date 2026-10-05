@@ -1541,7 +1541,7 @@ function buildMore() {
   const powerNow = S.curve === 1
     ? 'Power is permanent strength. Right now it adds +10% damage per point; from your next prestige on, every run is on the tougher mine, where it counts in floors of strength: with 10 floors of strength your miner hits as hard as if the mine were 10 floors shallower.'
     : 'Power is permanent strength, counted in floors: with 10 floors of strength your miner hits as hard as if the mine were 10 floors shallower.';
-  let h = `<div class="card row"><div class="grow"><b>Version 2 preview</b><div class="small muted">${GAME_VERSION} · a separate save from the live game</div></div>
+  let h = `<div class="card row"><div class="grow"><b>${window.DDH_TEST_RECOPY ? 'Version 2 preview' : 'Deep Dig Heroes'}</b><div class="small muted">${GAME_VERSION}${window.DDH_TEST_RECOPY ? ' · a separate save from the live game' : ''}</div></div>
     <button class="btn small gold" data-act="v2Welcome">What's new</button></div>`;
   h += `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
     <p class="small">Start a new run and keep your gear, pets, keys, scrap, cores and power. ${powerNow} Each prestige needs a deeper floor (this one: B${prestigeReq()}), guarded by ${TUNE.gateFloors} tough Gate floors; opening it pays keys on the spot. Power pays for every floor you dig past B${payFloor() - 1} and grows with the square of that depth, so the further you push past the gate, the bigger the reward: twice as far pays four times the power. Cores buy upgrades in the Prestige tree at the Temple.</p>
@@ -1801,6 +1801,8 @@ function handleAction(el) {
     case 'setDogPet': S.decor.pet = PETS[d.sp] ? { sp: d.sp, r: Number(d.r) } : null; SFX.click(); closeModal(); break;
     case 'worldBoss': if (UI.tab === 'island') history.pushState({ ddh: 'fight' }, ''); fightBoss(); break;
     case 'v2Welcome': showV2Welcome(); break;
+    case 'keepPreviewSave': keepSave(true); break;
+    case 'keepMainSave': keepSave(false); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
     case 'learnPlan': doLearnPlan(d.id); break;

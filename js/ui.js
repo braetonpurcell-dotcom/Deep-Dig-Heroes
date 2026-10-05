@@ -110,13 +110,17 @@ function pumpModalQueue() {
 }
 
 // ---------- tabs ----------
+// Version 2: the island is home; every other screen gets a back bar with its name.
+const SCREEN_TITLE = { fight: 'Cave', forge: 'Forge', skills: 'Temple', cases: 'Market', bag: 'House', quests: 'Quest board', more: 'Settings' };
 function showTab(name) {
   if (UI.tab === 'bag' && name !== 'bag') markItemsSeen();
   UI.tab = name;
-  for (const b of $$('#tabs button')) b.classList.toggle('on', b.dataset.tab === name);
   for (const s of $$('#panel > .tab')) s.hidden = s.id !== 'tab-' + name;
-  // Skills gets the whole screen: the mine view and floor bar step aside.
-  const full = name === 'skills';
+  $('#screenbar').hidden = name === 'island';
+  $('#screenTitle').textContent = SCREEN_TITLE[name] || '';
+  document.body.classList.toggle('on-island', name === 'island');
+  // Version 2: every screen but the cave is its own page; the fight scene only shows in the cave.
+  const full = name !== 'fight';
   if (document.body.classList.contains('fulltab') !== full) {
     document.body.classList.toggle('fulltab', full);
     if (!full) resizeCanvas();
@@ -124,13 +128,15 @@ function showTab(name) {
   cropStage(name);
   $('#panel').scrollTop = 0;
   if (name === 'forge') UI.forgeSeen = UPGRADES.filter(upgradeUnlocked).length;
+  if (name === 'fight' && typeof enterCaveScene === 'function') enterCaveScene();
   buildTab(name);
+  if (typeof roomShow === 'function') roomShow(name);
 }
 
 // Off the Fight tab the mine view is cut down to its bottom half (the miner and the ground), so the
 // tab below gets more room. The canvas keeps its size; the stage just hides the top part.
 function cropStage(name = UI.tab) {
-  const crop = name !== 'fight' && name !== 'skills';
+  const crop = name !== 'fight' && name !== 'skills' && name !== 'island';
   document.body.classList.toggle('croptab', crop);
   SCN.top = crop ? 47 : 0; // canvas rows hidden above the crop (48% of 96)
   if (crop) {
@@ -141,7 +147,8 @@ function cropStage(name = UI.tab) {
 window.addEventListener('resize', () => cropStage());
 
 function buildTab(name = UI.tab) {
-  if (name === 'fight') updateFight();
+  if (name === 'island') buildIsland();
+  else if (name === 'fight') updateFight();
   else if (name === 'forge') buildForge();
   else if (name === 'skills') buildSkills();
   else if (name === 'cases') buildCases();
@@ -183,8 +190,12 @@ function updateFloorBar() {
   $('#fName').textContent = 'B' + f + (isBossFloor(f) ? ' · Boss' : '');
   const vein = nextVein();
   $('#fBiome').textContent = biomeName(f) + (vein ? ` · ⛏ vein B${vein}` : '') + (S.run.maxFloor > f ? ` · best B${S.run.maxFloor}` : '');
-  $('#fUp').disabled = f <= 1;
-  $('#fDown').disabled = f >= S.run.maxFloor;
+  const isle = islandForFloor(f);
+  $('#fUp').disabled = f <= isleStart(isle);
+  $('#fDown').disabled = f >= Math.min(S.run.maxFloor, isleEnd(isle));
+  const sail = canSailOn();
+  $('#fSail').hidden = !sail;
+  if (sail) $('#fSailTo').textContent = ISLANDS[isle + 1].name;
   const auto = $('#fAuto');
   auto.classList.toggle('on', S.run.auto);
   auto.setAttribute('aria-pressed', S.run.auto ? 'true' : 'false');
@@ -198,8 +209,9 @@ function updateFloorBar() {
 }
 
 function setDot(tab, on) {
-  const b = $(`#tabs button[data-tab="${tab}"] .dot`);
+  const b = $(`.isle .sign[data-go="${tab}"] .dot`);
   if (b) b.classList.toggle('show', !!on);
+  if (tab === 'more') $('#setBtn').classList.toggle('has-dot', !!on); // settings lives in the HUD now
 }
 
 function updateBadges() {
@@ -224,11 +236,11 @@ function setTicker(text, kind = '', ms = 1800) {
 function goalMessages() {
   const out = [];
   if (bossWaiting()) return [['A boss blocks the way. Your miner farms this floor until you tap Fight boss.', 'gold']];
-  if (canPrestige()) out.push([`Prestige ready: +${fmt(powerGain())} power and +${prestigeGain()} cores in the More tab`, 'gold']);
+  if (canPrestige()) out.push([`Prestige ready: +${fmt(powerGain())} power and +${prestigeGain()} cores in Settings (⚙ top right)`, 'gold']);
   if (S.run.sp > 0) out.push([`${plural(S.run.sp, 'skill point')} to spend in Skills`, 'gold']);
   const c = claimableCounts();
   if (c.daily + c.quests + c.bonus + c.ach > 0) out.push(['Rewards are waiting in Quests', 'gold']);
-  if (freeCrateReady()) out.push(['Your free crate is ready in Cases', 'gold']);
+  if (freeCrateReady()) out.push(['Your free crate is ready at the Market', 'gold']);
   const nextU = UPGRADES.find(u => !upgradeUnlocked(u));
   if (nextU) out.push([`A new Forge upgrade unlocks at B${nextU.unlock}`, '']);
   const f = S.run.floor;
@@ -236,7 +248,7 @@ function goalMessages() {
     const nb = Math.ceil(f / 10) * 10;
     out.push([`Boss at B${nb}, ${plural(nb - f, 'floor')} to go`, '']);
   }
-  if (S.prestiges === 0 && S.run.maxFloor < 25) out.push(['Reach B25 to unlock prestige', '']);
+  if (!S.run.unlocked) out.push([gateLevel(S.run.floor) ? `Gate floor! Break through to B${prestigeReq()} to unlock prestige` : `Reach B${prestigeReq()} to unlock prestige`, gateLevel(S.run.floor) ? 'gold' : '']);
   const toEpic = epicPityLeft();
   if (toEpic <= 3) out.push([`Epic or better guaranteed within ${plural(toEpic, 'case')}`, '']);
   out.push([`Level ${S.run.level + 1} in ${fmt(Math.max(0, xpNeed(S.run.level) - S.run.xp))} XP`, '']);
@@ -339,7 +351,8 @@ function upgradeEffect(u) {
 
 function buildForge() {
   const amt = S.settings.buyAmt;
-  let h = `<div class="seg" role="group" aria-label="Buy amount">${['1', '10', 'max'].map(a =>
+  let h = drillCardHtml('forge');
+  h += `<div class="seg" role="group" aria-label="Buy amount">${['1', '10', 'max'].map(a =>
     `<button data-act="buyAmt" data-v="${a}" class="${amt === a ? 'on' : ''}">${a === 'max' ? 'Max' : '×' + a}</button>`).join('')}</div>`;
   h += '<div class="list">';
   for (const u of UPGRADES) {
@@ -537,11 +550,13 @@ function buildSummary() {
 
 function skillTabsHtml() {
   return `<div class="seg"><button data-act="skillView" data-v="web" class="${UI.skillView === 'web' ? 'on' : ''}">Skill web</button>
-    <button data-act="skillView" data-v="prestige" class="${UI.skillView === 'prestige' ? 'on' : ''}">Prestige tree</button></div>`;
+    <button data-act="skillView" data-v="classes" class="${UI.skillView === 'classes' ? 'on' : ''}">Classes</button>
+    <button data-act="skillView" data-v="prestige" class="${UI.skillView === 'prestige' ? 'on' : ''}">Prestige</button></div>`;
 }
 
 function buildSkills() {
   if (UI.skillView === 'prestige') { buildPrestigeTree(); return; }
+  if (UI.skillView === 'classes') { buildClasses(); return; }
   let spent = 0;
   for (const k in S.run.skills) spent += S.run.skills[k];
   let h = skillTabsHtml();
@@ -557,6 +572,43 @@ function buildSkills() {
   $('#tab-skills').innerHTML = h;
   $('#tab-skills').classList.add('web');
   applyTreeView();
+}
+
+// ---------- Version 2: classes ----------
+function buildClasses() {
+  $('#tab-skills').classList.remove('web');
+  let h = skillTabsHtml();
+  h += `<div class="card small">Save your skills, gear, pets and look as a class, then switch in one tap. Switching is free: your skill points come back and are spent to match.
+    After a prestige, <b>Auto</b> in the Skill web rebuilds your active class as you earn points.</div>`;
+  for (let i = 0; i < CLASS_SLOTS; i++) {
+    const c = S.classes[i];
+    if (!c) {
+      h += `<div class="card classslot empty"><div class="classhead"><div class="classhero none">+</div><div class="grow"><b class="muted">Empty slot</b>
+        <div class="small muted">Save the build you're using now.</div></div><button class="btn small gold" data-act="classSave" data-i="${i}">Save here</button></div></div>`;
+      continue;
+    }
+    const lean = classLean(c), active = S.activeClass === i, by = classBranches(c), left = active ? classMissing(c) : 0;
+    const kit = SLOT_IDS.map(slot => { const f = c.gear[slot] != null ? findItem(c.gear[slot]) : null; return f ? `<img src="${gearUrl(f.it.slot, f.it.t, f.it.r, false, f.it.st)}" alt="${itemName(f.it)}">` : ''; }).join('')
+      + c.pets.map(p => `<img src="${petUrl(p.sp, false, p.r)}" alt="${PETS[p.sp].name}">`).join('');
+    h += `<div class="card classslot ${active ? 'active' : ''}" style="--cc:${lean ? lean.color : 'var(--line-hi)'}">
+      <div class="classhead"><img class="classhero" src="${spriteUrl(heroSprite(0, c.look), 4)}" alt="">
+        <div class="grow"><b>${escapeHtml(c.name)}</b>${active ? ' <span class="classtag">Active</span>' : ''}
+          <div class="small" style="color:var(--cc)">${lean ? lean.name : 'No skills'} · ${classPoints(c)} ${classPoints(c) === 1 ? 'point' : 'points'}</div>
+          ${BRANCHES.filter(b => by[b.id]).length > 1 ? `<div class="small muted">${BRANCHES.filter(b => by[b.id]).map(b => `<span style="color:${b.color}">${b.name} ${by[b.id]}</span>`).join(' · ')}</div>` : ''}
+          ${left ? `<div class="small" style="color:var(--gold)">${left} more ${left === 1 ? 'point' : 'points'} to finish it</div>` : ''}</div></div>
+      ${kit ? `<div class="classkit">${kit}</div>` : ''}
+      <div class="classbtns"><button class="btn small ${active ? '' : 'gold'}" data-act="classUse" data-i="${i}">${active ? 'Re-apply' : 'Switch'}</button>
+        <button class="btn small" data-act="classSave" data-i="${i}">Save over</button>
+        <button class="btn small" data-act="classRename" data-i="${i}">Rename</button>
+        <button class="btn small bad" data-act="classDelete" data-i="${i}">Delete</button></div></div>`;
+  }
+  $('#tab-skills').innerHTML = h;
+}
+function newClassName() {
+  const snap = snapshotClass(''), lean = classLean(snap), base = lean ? lean.name : 'Class';
+  let name = base, n = 2;
+  while (S.classes.some(c => c && c.name === name)) name = `${base} ${n++}`;
+  return name;
 }
 
 function buildPrestigeTree() {
@@ -685,9 +737,11 @@ function buildCases() {
   const best = bestCaseTier();
   const ready = freeCrateReady();
   const pet = S.caseKind === 'pet';
-  let h = `<div class="seg"><button data-act="caseKind" data-v="tool" class="${pet ? '' : 'on'}">Tool cases</button>
-    <button data-act="caseKind" data-v="pet" class="${pet ? 'on' : ''}">Pet cases</button></div>`;
-  h += `<div class="card"><div class="small muted">${pet ? 'Pet cases drop pets only.' : 'Tool cases drop pickaxes, helmets and charms only.'} Each kind has its own pity.</div><div class="pity">
+  let h = `<div class="seg"><button data-act="caseKind" data-v="tool" class="${S.caseKind === 'tool' ? 'on' : ''}">Tools</button>
+    <button data-act="caseKind" data-v="pet" class="${pet ? 'on' : ''}">Pets</button>
+    <button data-act="caseKind" data-v="drill" class="${S.caseKind === 'drill' ? 'on' : ''}">Drill</button></div>`;
+  if (S.caseKind === 'drill') { $('#tab-cases').innerHTML = h + drillCasesHtml(); refreshCases(); return; }
+  h += `<div class="card"><div class="small muted">${pet ? 'Pet cases drop pets only.' : 'Tool cases drop pickaxes and swords, helmets and armor, in six styles: damage, coins, luck, XP, speed and tap strike.'} Each kind has its own pity.</div><div class="pity">
       <div>Epic+ guaranteed in <b>${epicPityLeft()}</b></div>
       <div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - pityFor().leg)}</b></div></div>
     <div class="odds" style="margin-top:6px">${RARITY.map((r, i) =>
@@ -713,6 +767,37 @@ function buildCases() {
   }
   $('#tab-cases').innerHTML = h;
   refreshCases();
+}
+
+// ---------- Version 2: drill crates ----------
+function drillCardHtml(where) {
+  const d = S.drill, mi = drillModelIndex(d.lv), m = mi >= 0 ? DRILL_MODELS[mi] : null, next = DRILL_MODELS[mi + 1];
+  const need = d.lv >= DRILL_MAX ? 0 : drillNeed(d.lv), pct = need ? Math.min(100, (d.xp / need) * 100) : 100;
+  return `<div class="card drillcard"><div class="drillimg">${m ? `<img src="${drillUrl(mi, 4)}" alt="${m.name}">` : `<img src="${partUrl('bit', 0)}" alt="" style="opacity:.45;width:48px">`}</div>
+    <div class="grow"><b>${m ? m.name : 'No drill yet'}</b> <span class="small muted">Lv ${d.lv}${d.lv >= DRILL_MAX ? ' (max)' : ''}</span>
+      <div class="drillbar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="small muted">${d.lv >= DRILL_MAX ? 'Fully upgraded' : `${fmt(Math.floor(d.xp))}/${fmt(need)} XP to Lv ${d.lv + 1}`}${next ? ` · ${next.name} at Lv ${next.lv}` : ''}</div>
+      <div class="small">${d.lv ? `<span style="color:var(--good)">+${fmt(Math.round(DRILL_DMG * d.lv * 100))}% damage · +${(DRILL_APS * d.lv * 100).toFixed(1)}% attack speed</span>` : 'Every drill part from a Drill Crate builds and upgrades your drill.'}</div>
+      ${where === 'forge' ? `<div class="mbtns"><button class="btn small gold" data-act="goDrillCrates">Get drill parts</button>${m ? `<button class="btn small" data-act="drillShow">Holding: ${d.show ? 'Drill' : S.gear.eq.pick ? gearStyle(S.gear.eq.pick).name : 'Pickaxe'}</button>` : ''}</div>` : ''}</div></div>`;
+}
+function drillCasesHtml() {
+  const odds = baseRarityOdds(), ready = freeCrateReady();
+  let h = drillCardHtml('market');
+  h += `<div class="card"><div class="small muted">Drill Crates drop drill parts. Each part adds XP to your drill by its rarity, and every 10 levels the drill evolves into a new model. Drill Crates have their own pity.</div>
+    <div class="pity"><div>Epic+ guaranteed in <b>${epicPityLeft()}</b></div><div>Legendary+ in <b>${Math.max(1, LEGENDARY_PITY - pityFor().leg)}</b></div></div>
+    <div class="odds" style="margin-top:6px">${RARITY.map((r, i) => `<span class="tc${i}">${r.name} ${oddsShort(1 / odds[i])} · ${fmt(PART_XP[i])} XP</span>`).join('')}</div>
+    <div class="small muted" style="margin-top:4px">Raw odds shown. Your luck ${fmtPct(Math.max(0, ST.luck))} makes rare parts more likely.</div></div>`;
+  h += autoCardHtml();
+  h += `<div class="card casecard"><div class="chest"><img src="${drillCrateUrl()}" alt=""></div><div>
+      <b>Free Drill Crate</b><div class="small muted" id="freeTimer">${ready ? 'Ready now' : 'Next in ' + fmtClock((S.freeCrateAt - Date.now()) / 1000)}</div>
+      <div class="casebtns"><button class="btn good" data-act="openFree" ${ready ? '' : 'disabled'}>Open free crate</button></div></div></div>`;
+  h += `<div class="card casecard"><div class="chest"><img src="${drillCrateUrl()}" alt=""></div><div>
+      <b>Drill Crate</b> <span class="small muted">· drill parts</span>
+      <div class="casebtns">
+        ${[1, 10, 25, 'max'].map(n => `<button class="btn gold" data-act="openCase" data-t="1" data-n="${n}"></button>`).join('')}
+        <button class="btn purple wide" data-act="openKey" data-t="1">${icon('key', '')} Use key</button>
+      </div></div></div>`;
+  return h;
 }
 
 // Case prices follow the deepest floor of the run, which keeps changing while the miner digs,
@@ -768,20 +853,25 @@ function oddsLong(n) { return '1 in ' + Math.round(n).toLocaleString('en-US'); }
 
 function dropView(d) {
   if (d.kind === 'pet') return { img: petUrl(d.sp, false, d.r), r: d.r, label: PETS[d.sp].name, odds: d.odds };
+  if (d.kind === 'part') return { img: partUrl(d.part, d.r), r: d.r, label: DRILL_PARTS[d.part].name, odds: d.odds };
   const it = d.item;
-  return { img: gearUrl(it.slot, it.t, it.r), r: it.r, label: SLOTS[it.slot].name, odds: d.odds, wear: WEAR[wearIndex(it.fl)].short };
+  return { img: gearUrl(it.slot, it.t, it.r, false, it.st), r: it.r, label: gearStyle(it).name, odds: d.odds, wear: WEAR[wearIndex(it.fl)].short };
 }
 
 // Reel filler rolled with the real odds, so what slides past is what the case really holds.
 function decoy(tier, forceR = null) {
   const r = forceR == null ? weightedIndex(rarityWeights(0)) : forceR;
+  if (S.caseKind === 'drill') {
+    const part = weightedPick(DRILL_PART_IDS, id => DRILL_PARTS[id].weight);
+    return { img: partUrl(part, r), r, label: DRILL_PARTS[part].name, odds: dropOdds(r) };
+  }
   if (S.caseKind === 'pet') {
     const sp = weightedPick(PET_IDS, id => PETS[id].weight);
     return { img: petUrl(sp, false, r), r, label: PETS[sp].name, odds: dropOdds(r) };
   }
-  const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight);
+  const slot = weightedPick(SLOT_IDS, s => SLOTS[s].weight), style = weightedPick(GEAR_STYLES[slot], s => s.weight);
   const fl = rollFloat();
-  return { img: gearUrl(slot, dropMaterial(tier), r), r, label: SLOTS[slot].name, odds: dropOdds(r, fl), wear: WEAR[wearIndex(fl)].short };
+  return { img: gearUrl(slot, dropMaterial(tier), r, false, style.id), r, label: style.name, odds: dropOdds(r, fl), wear: WEAR[wearIndex(fl)].short };
 }
 
 function tileHtml(v, extra = '') {
@@ -790,6 +880,7 @@ function tileHtml(v, extra = '') {
 
 function caseLabel(ctx) {
   const c = CASES[ctx.tier - 1];
+  if (S.caseKind === 'drill' && ctx.method !== 'reward') return ctx.method === 'free' ? 'Free Drill Crate' : 'Drill Crate';
   if (ctx.method === 'free') return 'Free ' + c.name;
   if (ctx.method === 'reward') return ctx.title || 'Reward Crate';
   return c.name;
@@ -877,12 +968,22 @@ function againButton(ctx) {
   return `<button class="btn gold" data-act="again" data-t="${c.tier}" data-n="${n}" data-cost="${cost}" ${S.coins < cost ? 'disabled' : ''}>Open another ${costHtml(cost)}</button>`;
 }
 
+function evolveText(name) { return name === DRILL_MODELS[0].name ? `You built your first drill: a ${name}!` : `Your drill evolved into a ${name}!`; }
+function drillLevelNote(drops) {
+  const lv = drops.filter(d => d.levelTo).map(d => d.levelTo), ev = drops.filter(d => d.evolved).map(d => d.evolved);
+  return (ev.length ? `<div class="rsub record">${evolveText(ev[ev.length - 1])}</div>` : '')
+    + (lv.length ? `<div class="rsub" style="color:var(--good)">Drill reached Lv ${Math.max(...lv)}</div>` : '');
+}
 function dropDetailHtml(d) {
+  if (d.kind === 'part') {
+    return `<div class="rname tc${d.r}">${RARITY[d.r].name} ${DRILL_PARTS[d.part].name}</div>
+      ${pullOddsHtml(d)}<div class="rsub">+${fmt(d.xp)} drill XP</div>${drillLevelNote([d])}`;
+  }
   if (d.kind === 'pet') {
     const def = PETS[d.sp];
     const inParty = petEquippedCount(d.sp, d.r) > 0;
     const full = S.pets.eq.length >= petSlots();
-    const where = inParty ? 'In your party.' : full ? 'Party full: swap pets in Bag › Pets.' : '';
+    const where = inParty ? 'In your party.' : full ? 'Party full: swap pets in the House › Pets.' : '';
     const merge = d.r < MERGE_MAX ? `Merge ${mergeCost(d.r)} into the next rarity.` : '';
     return `<div class="rname tc${d.r}">${RARITY[d.r].name} ${def.name}</div>
       ${pullOddsHtml(d)}<div class="rsub">${petBonusText(d.sp, d.r)}</div>
@@ -907,7 +1008,7 @@ function dropDetailHtml(d) {
 function pullOddsHtml(d) {
   if (!isFinite(d.odds)) return '';
   const wear = d.kind === 'gear' ? ' ' + WEAR[wearIndex(d.item.fl)].short : '';
-  const what = d.kind === 'pet' ? 'pet' : SLOTS[d.item.slot].name.toLowerCase();
+  const what = d.kind === 'pet' ? 'pet' : d.kind === 'part' ? 'drill part' : SLOTS[d.item.slot].name.toLowerCase();
   const rec = d.recordAll ? 'Your rarest pull ever!' : d.record ? `Your rarest ${what} yet!` : '';
   return `<div class="pull-odds tc${d.r}">${RARITY[d.r].name}${wear} · ${oddsLong(d.odds)}</div>${rec ? `<div class="rsub record">${rec}</div>` : ''}`;
 }
@@ -923,8 +1024,10 @@ function revealResult(drops, ctx) {
   const extra = drops.slice(1);
   for (const d of extra) {
     const v = dropView(d);
-    h += `<div class="small" style="text-align:center;margin-top:4px">Bonus drop: <span class="tc${v.r}">${RARITY[v.r].name} ${d.kind === 'pet' ? PETS[d.sp].name : itemName(d.item)}</span></div>`;
+    h += `<div class="small" style="text-align:center;margin-top:4px">Bonus drop: <span class="tc${v.r}">${RARITY[v.r].name} ${d.kind === 'pet' ? PETS[d.sp].name : d.kind === 'part' ? DRILL_PARTS[d.part].name + ' (+' + fmt(d.xp) + ' XP)' : itemName(d.item)}</span></div>`;
   }
+  if (extra.length && drops.some(d => d.kind === 'part')) h += drillLevelNote(extra);
+  if (drops.some(d => d.evolved)) showDrillEvolve(drops.filter(d => d.evolved).pop().evolved);
   let actions = '';
   if (win.kind === 'gear' && !win.autoEquipped && !win.salvaged && findItem(win.item.id)) {
     actions += `<button class="btn good" data-act="equipItem" data-id="${win.item.id}">Equip</button>`;
@@ -963,6 +1066,7 @@ function showMulti(drops, ctx) {
         }
         const best = Math.max(...views.map(v => v.r));
         releaseToasts();
+        if (drops.some(d => d.evolved)) showDrillEvolve(drops.filter(d => d.evolved).pop().evolved);
         SFX.reveal(best);
         if (best >= 2) vibrate([30, 40, 80]);
         if (best >= ULTRA) celebrate(best);
@@ -978,7 +1082,8 @@ function showMulti(drops, ctx) {
           ${salvaged ? `<div class="rsub">Auto-salvaged for ${salvaged} scrap</div>` : ''}
           ${room.length ? `<div class="rsub">Bag full: scrapped ${plural(room.length, 'weaker item')} (+${roomScrap} scrap) to make room</div>` : ''}
           ${drops.some(d => d.recordAll) ? '<div class="rsub record">New rarest pull ever!</div>' : ''}
-          <div class="rsub">Check the Bag tab to compare and equip.</div>
+          ${drops.some(d => d.kind === 'part') ? `<div class="rsub">+${fmt(drops.reduce((a, d) => a + (d.xp || 0), 0))} drill XP · ${drillModel() ? drillModel().name : 'Drill'} Lv ${S.drill.lv}</div>${drillLevelNote(drops)}` : ''}
+          ${drops.some(d => d.kind === 'gear') ? '<div class="rsub">Check the House to compare and equip.</div>' : ''}
           <div class="mbtns">${againButton(ctx)}<button class="btn" data-act="close">Close</button></div>`;
         if (UI.modalOpts) UI.modalOpts.dismissable = true;
       };
@@ -989,14 +1094,69 @@ function showMulti(drops, ctx) {
 
 // ---------- bag ----------
 function buildBag() {
-  let h = `<div class="seg">${[['gear', 'Gear'], ['pets', 'Pets'], ['index', 'Index']].map(([k, l]) =>
+  let h = `<div class="seg">${[['gear', 'Gear'], ['pets', 'Pets'], ['look', 'Outfits'], ['index', 'Index']].map(([k, l]) =>
     `<button data-act="bagView" data-v="${k}" class="${UI.bagView === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (UI.bagView === 'gear') h += gearViewHtml();
   else if (UI.bagView === 'pets') h += petsViewHtml();
+  else if (UI.bagView === 'look') h += lookViewHtml();
   else h += indexViewHtml();
   $('#tab-bag').innerHTML = h;
   const q = $('#bagSearch');
   if (q) q.addEventListener('input', onBagSearch);
+}
+
+// ---------- Version 2: outfits ----------
+// Each outfit is a class you wear: a tool, a helmet and armor of one style.
+function outfitMain(o) { return GEAR_STYLES.pick.find(x => x.set === o).main; }
+function outfitStyles(o) { const r = {}; for (const slot of SLOT_IDS) r[slot] = GEAR_STYLES[slot].find(x => x.set === o); return r; }
+function outfitBonusLines(o) {
+  const nm = STATS[outfitMain(o)].name, stat = nm === nm.toUpperCase() ? nm : nm.toLowerCase();
+  if (o === 'assassin') return [`2 pieces: +${Math.round(SET_CRIT[2] * 100)}% crit chance`, `3 pieces: +${Math.round(SET_CRIT[3] * 100)}% crit chance and ${OUTFITS[o].perk.toLowerCase()}`];
+  return [`2 pieces: +${Math.round(SET_BONUS[2] * 100)}% ${stat}`, `3 pieces: +${Math.round(SET_BONUS[3] * 100)}% ${stat} and ${OUTFITS[o].perk[0].toLowerCase() + OUTFITS[o].perk.slice(1)}`];
+}
+// Your best piece of an outfit in each slot, from what you wear and your bag: the most of the
+// outfit's stat in total (main stat and sub-stats together).
+function outfitScore(it, o) { const k = outfitMain(o); return itemStats(it).reduce((a, s) => a + (s.k === k ? s.v : 0), 0); }
+function outfitBest(o) {
+  const out = {};
+  for (const it of SLOT_IDS.map(k => S.gear.eq[k]).filter(Boolean).concat(S.gear.bag)) {
+    if (gearStyle(it).set !== o) continue;
+    const cur = out[it.slot];
+    if (!cur || outfitScore(it, o) > outfitScore(cur, o)) out[it.slot] = it;
+  }
+  return out;
+}
+function outfitLine() {
+  const w = outfitWorn();
+  if (!w) return '<span class="muted">No set bonus: wear two pieces of one outfit.</span>';
+  const o = OUTFITS[w.id], lines = outfitBonusLines(w.id);
+  return `<b style="color:${o.color}">${o.name} ${w.n}/3</b> · ${lines[w.n - 2].replace(/^\d pieces: /, '')}`;
+}
+function lookViewHtml() {
+  const L = S.look, counts = outfitCounts();
+  const sw = (k, list, cur) => `<div class="swrow">${list.map((c, i) => `<button class="sw ${i === cur ? 'on' : ''}" style="--c:${Array.isArray(c) ? c[0] : c}" data-act="look" data-k="${k}" data-v="${i}" aria-label="${k} colour ${i + 1}"></button>`).join('')}</div>`;
+  let h = `<div class="card lookcard"><div class="lookprev"><img class="f1" src="${spriteUrl(heroSprite(0), 5)}" alt="Your miner"><img class="f2" src="${spriteUrl(heroSprite(1), 5)}" alt=""></div>
+    <div><h3>Your outfit</h3><p class="small muted">Your miner wears the helmet and armor you equip. Wear two or three pieces of one outfit for its set bonus. Each outfit has its own job.</p>
+    <div class="small">${outfitLine()}</div></div></div>`;
+  h += '<div class="outfitgrid">';
+  for (const o of OUTFIT_IDS) {
+    const def = OUTFITS[o], best = outfitBest(o), sty = outfitStyles(o), have = SLOT_IDS.filter(k => best[k]).length, wearing = counts[o] || 0;
+    const sample = slot => best[slot] || { slot, st: sty[slot].id, t: 5, r: 2 };
+    const img = spriteUrl(heroSprite(0, L, { helm: sample('helm'), charm: sample('charm') }), 3);
+    const lines = outfitBonusLines(o);
+    h += `<div class="card outfit ${wearing >= 2 ? 'on' : ''}" style="--oc:${def.color}">
+      <div class="outhead"><img src="${img}" alt=""><div class="grow"><b style="color:var(--oc)">${def.name}</b><div class="small">${def.job}</div>
+        <div class="small muted">${sty.pick.name} · ${sty.helm.name} · ${sty.charm.name}</div></div></div>
+      <div class="small">${lines[0]}</div><div class="small">${lines[1]}</div>
+      <div class="outfoot"><span class="small ${have ? '' : 'muted'}">${wearing ? `Wearing ${wearing}/3` : `You own ${have}/3`}</span>
+        <button class="btn small ${wearing === 3 || !have ? '' : 'gold'}" data-act="wearOutfit" data-o="${o}" ${have && wearing < have ? '' : 'disabled'}>${wearing && wearing >= have ? 'Worn' : 'Wear best'}</button></div></div>`;
+  }
+  h += '</div>';
+  h += `<div class="card"><h3>Your miner</h3>
+    <div class="lookrow"><span class="small muted">Hair</span>${sw('hair', LOOK_HAIR, L.hair)}</div>
+    <div class="lookrow"><span class="small muted">Skin</span>${sw('skin', LOOK_SKIN, L.skin)}</div>
+    <div class="mbtns"><button class="btn small" data-act="lookRandom">Random</button><button class="btn small" data-act="lookReset">Reset</button></div></div>`;
+  return h;
 }
 
 function gearViewHtml() {
@@ -1008,10 +1168,11 @@ function gearViewHtml() {
       continue;
     }
     const main = itemStats(it)[0];
-    h += `<button class="eqslot rc${it.r}" data-act="item" data-id="${it.id}"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="">
-      <span class="sn">${SLOTS[slot].name}${it.lv ? ' +' + it.lv : ''}</span><span class="sv">${statText(main.k, main.v)}</span></button>`;
+    h += `<button class="eqslot rc${it.r}" data-act="item" data-id="${it.id}"><img src="${gearUrl(it.slot, it.t, it.r, false, it.st)}" alt="">
+      <span class="sn">${gearStyle(it).name}${it.lv ? ' +' + it.lv : ''}</span><span class="sv">${statText(main.k, main.v)}</span></button>`;
   }
   h += '</div>';
+  h += `<div class="row small setline">${outfitLine()}</div>`;
   h += `<div class="row small">${icon('scrap', '')}<span><b>${fmt(S.scrap)}</b> scrap · bag ${S.gear.bag.length}/${BAG_SIZE}</span></div>
     <div class="bagtools">
       <button class="btn small" data-act="bulkPick">${salvageLabel(bulkR())} ▸</button>
@@ -1020,7 +1181,7 @@ function gearViewHtml() {
       <button class="btn small" data-act="bagShow">Show: ${bagShowText()} ▾</button></div>`;
   if (S.gear.bag.length) {
     h += `<div class="bagsearch"><input type="search" id="bagSearch" enterkeyhint="search" autocomplete="off" spellcheck="false"
-      placeholder="Search: eclipse charm fn, luck>50, t20" value="${escapeHtml(UI.bagQuery || '')}">
+      placeholder="Search: eclipse armor fn, luck>50, sword" value="${escapeHtml(UI.bagQuery || '')}">
       <button class="btn small" data-act="bagSearchHelp" aria-label="Search help">?</button></div>`;
   }
   h += `<div id="bagList">${bagListHtml()}</div>`;
@@ -1029,13 +1190,13 @@ function gearViewHtml() {
 
 function bagListHtml() {
   const shown = sortedBag();
-  if (!S.gear.bag.length) return '<div class="card muted small">Your bag is empty. Open cases to find pickaxes, helmets and charms. Compare the numbers and equip the best ones.</div>';
+  if (!S.gear.bag.length) return '<div class="card muted small">Your bag is empty. Open cases at the Market to find pickaxes, swords, helmets and armor. Compare the numbers and equip the best ones.</div>';
   if (!shown.length) return `<div class="card muted small">Nothing matches${(UI.bagQuery || '').trim() ? ' your search' : ''}. ${S.settings.bagShow !== 'all' || S.settings.bagOnly !== 'any' ? 'The Show filter is on too. ' : ''}</div>`;
   let h = (UI.bagQuery || '').trim() ? `<div class="small muted" style="margin-bottom:4px">${plural(shown.length, 'match')}</div>` : '';
   h += '<div class="baggrid">';
   for (const it of shown) {
     h += `<button class="bagtile rc${it.r}" data-act="item" data-id="${it.id}" aria-label="${RARITY[it.r].name} ${itemName(it)}">
-      <img src="${gearUrl(it.slot, it.t, it.r)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
+      <img src="${gearUrl(it.slot, it.t, it.r, false, it.st)}" alt=""><span class="tr">T${it.t}</span>${it.lv ? `<span class="lv">+${it.lv}</span>` : ''}${it.locked ? `<span class="lk">${icon('lock', '')}</span>` : ''}${it.isNew ? '<span class="new">NEW</span>' : ''}</button>`;
   }
   return h + '</div>';
 }
@@ -1052,7 +1213,7 @@ const SEARCH_KEYS = {
 function itemSearchText(it) {
   const w = WEAR[wearIndex(it.fl)];
   const stats = itemStats(it).map(s => STATS[s.k].name.toLowerCase() + ' ' + s.k).join(' ');
-  return [RARITY[it.r].name, MATERIALS[it.t].name, SLOTS[it.slot].name, SLOTS[it.slot].name + 's', w.name, w.short, stats,
+  return [RARITY[it.r].name, MATERIALS[it.t].name, SLOTS[it.slot].name, SLOTS[it.slot].name + 's', gearStyle(it).name, it.slot === 'charm' ? 'charm charms' : '', w.name, w.short, stats,
     it.locked ? 'locked' : 'unlocked', it.isNew ? 'new' : '', it.lv ? 'upgraded +' + it.lv : ''].join(' ').toLowerCase().split(/\s+/);
 }
 function searchValue(it, key) {
@@ -1087,7 +1248,7 @@ const BAG_SORT_LABEL = {
   new: 'Newest', rarity: 'Rarity', best: 'Best by type', tier: 'Highest tier', lv: 'Most upgraded', fn: 'Best wear (FN)',
   dmg: 'Damage', coin: 'Coins', luck: 'Luck', aps: 'Attack speed', crit: 'Crit chance', critdmg: 'Crit damage', xp: 'XP', strike: 'Tap strike',
 };
-const BAG_SHOW_LABEL = { all: 'All', pick: 'Pickaxes', helm: 'Helmets', charm: 'Charms' };
+const BAG_SHOW_LABEL = { all: 'All', pick: 'Pickaxes', helm: 'Helmets', charm: 'Armor' };
 const BAG_ONLY_LABEL = {
   any: 'Anything', r3: 'Legendary+', r5: 'Exotic+', r7: 'Celestial+', fn: 'Factory New', locked: 'Locked', unlocked: 'Unlocked', new: 'New', upg: 'Upgraded',
 };
@@ -1248,8 +1409,10 @@ function showItem(id) {
   } else actions += `<button class="btn" data-act="unequip" data-slot="${it.slot}">Unequip</button>`;
   actions += '<button class="btn" data-act="close">Close</button>';
   openModal(`<button class="lockbtn ${it.locked ? 'on' : ''}" data-act="lockItem" data-id="${it.id}" aria-pressed="${it.locked}" aria-label="${it.locked ? 'Unlock item' : 'Lock item'}">${icon(it.locked ? 'lock' : 'unlock', '')}<small>${it.locked ? 'Locked' : 'Lock'}</small></button>
-    <div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r)}" alt="" style="width:64px;image-rendering:pixelated"></div>
+    <div class="result"><div style="text-align:center"><img src="${gearUrl(it.slot, it.t, it.r, false, it.st)}" alt="" style="width:64px;image-rendering:pixelated"></div>
     <div class="rname tc${it.r}">${RARITY[it.r].name} ${itemName(it)}${it.lv ? ' +' + it.lv : ''}</div>
+    <div class="rsub"><b style="color:${OUTFITS[gearStyle(it).set].color}">${OUTFITS[gearStyle(it).set].name} outfit</b> · ${it.slot === 'pick' ? 'Tool' : SLOTS[it.slot].name} · ${OUTFITS[gearStyle(it).set].job.toLowerCase()}</div>
+    <div class="rsub small">${outfitBonusLines(gearStyle(it).set).join(' · ')}</div>
     <div class="rsub">${MATERIALS[it.t].name} (B${(it.t - 1) * MATERIAL_FLOORS + 1}+ material) · ${wearHtml(it)}</div>
     <div class="rsub">${RARITY[it.r].name} ${WEAR[wearIndex(it.fl)].short} pulls are ${oddsLong(dropOdds(it.r, it.fl))}</div>
     ${lines}<div class="rsub">Reforging adds +10% to every stat (max +${MAX_ITEM_LEVEL}).</div></div>${cmp}
@@ -1363,6 +1526,12 @@ function powerText(p, afterPrestige = false) {
   return `${fl < 10 ? fl.toFixed(1) : fmt(Math.round(fl))} floors of strength`;
 }
 
+// Where the next run begins, once your strength carries you past the first island.
+function nextStartText() {
+  const f = runStartFloor();
+  return f > 1 ? ` · Next run sails straight to ${ISLANDS[islandForFloor(f)].name}, B${f}` : '';
+}
+
 function buildMore() {
   const gain = prestigeGain();
   const can = canPrestige();
@@ -1372,14 +1541,17 @@ function buildMore() {
   const powerNow = S.curve === 1
     ? 'Power is permanent strength. Right now it adds +10% damage per point; from your next prestige on, every run is on the tougher mine, where it counts in floors of strength: with 10 floors of strength your miner hits as hard as if the mine were 10 floors shallower.'
     : 'Power is permanent strength, counted in floors: with 10 floors of strength your miner hits as hard as if the mine were 10 floors shallower.';
-  let h = `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
-    <p class="small">Start over at B1 and keep your gear, pets, keys, scrap, cores and power. ${powerNow} It grows with the square of the level you reach, so a deep run is worth far more than a quick one. Cores buy upgrades in the Prestige tree (Skills tab).</p>
+  let h = `<div class="card row"><div class="grow"><b>${window.DDH_TEST_RECOPY ? 'Version 2 preview' : 'Deep Dig Heroes'}</b><div class="small muted">${GAME_VERSION}${window.DDH_TEST_RECOPY ? ' · a separate save from the live game' : ''}</div></div>
+    <button class="btn small gold" data-act="v2Welcome">What's new</button></div>`;
+  h += `<div class="card prestige-card"><h3>Prestige: collapse the mine</h3>
+    <p class="small">Start a new run and keep your gear, pets, keys, scrap, cores and power. ${powerNow} Each prestige needs a deeper floor (this one: B${prestigeReq()}), guarded by ${TUNE.gateFloors} tough Gate floors; opening it pays keys on the spot. Power pays for every floor you dig past B${payFloor() - 1} and grows with the square of that depth, so the further you push past the gate, the bigger the reward: twice as far pays four times the power. Cores buy upgrades in the Prestige tree at the Temple.</p>
     <div style="margin:8px 0"><div class="small muted">Deepest this run: B${S.run.maxFloor} · Level ${S.run.level}</div>
-    <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (${powerText(S.power)} → ${powerText(S.power + pg, true)})</div></div>
+    <div class="big">+${fmt(pg)} power · +${gain} cores</div><div class="small muted">Power ${fmt(S.power)} → ${fmt(S.power + pg)} (${powerText(S.power)} → ${powerText(S.power + pg, true)})</div>
+    <div class="small muted">${plural(Math.floor(depthPast()), 'floor')} past your strength so far${nextStartText()}</div></div>
     ${nextCase ? `<div class="small">Your next prestige unlocks the ${nextCase.name}.</div>` : ''}
     ${S.prestiges < 3 ? `<div class="small">Prestige ${S.prestiges < 1 ? 1 : 3} adds a pet slot.</div>` : ''}
     ${S.prestiges < PRESTIGE_LUCK_MAX ? `<div class="small">Each of your first ${PRESTIGE_LUCK_MAX} prestiges also adds +${Math.round(PRESTIGE_LUCK * 100)}% luck (${S.prestiges}/${PRESTIGE_LUCK_MAX}).</div>` : ''}
-    <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : 'Reach B25 to prestige'}</button></div>`;
+    <button class="btn purple wide" data-act="askPrestige" ${can ? '' : 'disabled'} style="margin-top:8px">${can ? 'Prestige now' : `Reach B${prestigeReq()} to prestige`}</button></div>`;
 
   const st = S.stats;
   const tries = st.taps + st.escapes;
@@ -1406,6 +1578,7 @@ function buildMore() {
   h += `<div class="card"><h3>Settings</h3>
     ${settingRow('Player name', `<button class="btn small" data-fb="name">${playerName() ? escapeHtml(playerName()) : 'Set name'}</button>`, 'Shown on the feedback you send.')}
     ${settingRow('Sound', toggleBtn('sound'))}
+    ${settingRow('Music', toggleBtn('music'), 'Soft background music. Sound must be on.')}
     ${settingRow('Vibration', toggleBtn('vibe'), 'Android only. iPhones do not allow web vibration.')}
     ${settingRow('Juice', segBtns('juice', [['low', 'Low'], ['med', 'Med'], ['high', 'High']]), 'How strong hits, freezes and particles feel.')}
     ${settingRow('Screen shake', toggleBtn('shake'))}
@@ -1498,9 +1671,89 @@ on('collection', ({ count }) => toast(`New index entry ${count}/${(PET_IDS.lengt
 on('bestFloor', ({ floor }) => {
   const u = UPGRADES.find(x => x.unlock === floor);
   if (u) toast('New Forge upgrade: ' + u.name, 'good', 'anvil');
-  if (floor === 25 && S.prestiges === 0) toast('Prestige unlocked! See the More tab.', 'purple', 'core');
+});
+// Version 2: an island's last floor is beaten, so the next island opens.
+on('isleCleared', ({ i }) => {
+  SFX.levelup();
+  toast(`${ISLANDS[i - 1].name}'s cave is cleared! Sail on to ${ISLANDS[i].name} (tap ⛵ or go to the Harbor)`, 'gold');
+  updateFloorBar();
+});
+// The prestige floor is reached: a big moment, and keys on the spot.
+on('prestigeUnlocked', ({ floor, keys }) => {
+  SFX.levelup();
+  banner('PRESTIGE UNLOCKED', `B${floor} - +${keys} KEYS`, '#b76dff', 2.8);
+  toast(`Prestige unlocked at B${floor}: +${keys} keys. Push deeper for more power, or prestige in Settings (⚙).`, 'purple', 'core');
+  updateFloorBar();
+});
+// Stepping onto a Gate floor (the last floors before the prestige floor).
+on('floor', ({ floor }) => {
+  const k = gateLevel(floor);
+  if (k && UI.gateToast !== floor) { UI.gateToast = floor; toast(`Gate floor ${k}/${TUNE.gateFloors}: monsters are ${Math.round((gateHpMult(floor) - 1) * 100)}% tougher until B${prestigeReq()} opens prestige`, 'bad', 'skull'); }
 });
 on('bossFail', () => setTicker('The boss escaped. Farm here, then tap Retry boss.', 'bad', 4000));
+// Version 2: a short guide to everything new, shown once to players coming from the live game.
+function showV2Welcome() {
+  S.v2Seen = true;
+  const row = (img, title, text) => `<div class="v2row">${img}<div><b>${title}</b><div class="small muted">${text}</div></div></div>`;
+  const im = (src, w = 40) => `<img src="${src}" alt="" style="width:${w}px;image-rendering:pixelated">`;
+  openModal(`<h2>Welcome to Version 2</h2>
+    ${row(im(spriteUrl(heroSprite(0), 3)), 'Your town', 'Hold ◀ or ▶ to walk, or swipe to look around. Tap a building to go in; ◂ World brings you back. The Cave on the far right is where you fight.')}
+    ${row(im(spriteUrl(heroSprite(0, S.look, { helm: { slot: 'helm', st: 'storm', t: 9, r: 3 }, charm: { slot: 'charm', st: 'mail', t: 9, r: 3 } }), 3)), 'Outfits', 'Gear comes in seven outfits: Warrior, Knight, Assassin, Scout, Merchant, Gambler and Wizard. Your miner wears them, and two or three pieces of one outfit give a set bonus for its job.')}
+    ${row(im(petUrl('drake', false, 3)), 'Classes', 'At the Temple, save your skills, gear, pets and look as a class and switch in one tap.')}
+    ${row(im(drillUrl(1, 3), 52), 'The drill', "The Market's Drill tab sells Drill Crates. Every part levels your drill, which replaces your pickaxe and evolves every 10 levels.")}
+    ${row(`<span class="isleswatch" style="background:${ISLE_STYLE.frost.swatch}"></span>`, 'Islands', 'Every island has its own cave of 100 floors: earth, ice, desert, lava and crystal. Beat the last floor, then sail on from the Harbor.')}
+    ${row(im(iconUrl('cog'), 32), 'Settings and feedback', 'Top right: ⚙ for settings and prestige, F to send feedback.')}
+    <div class="mbtns"><button class="btn gold" data-act="close">Let's go</button></div>`, { dismissable: true });
+}
+
+// Version 2: a boss waiting is easy to miss from the world, so it gets said once per boss floor.
+on('floor', () => {
+  if (!bossWaiting() || UI.tab === 'fight' || UI.bossToast === S.run.floor) return;
+  UI.bossToast = S.run.floor;
+  setTimeout(() => { if (bossWaiting() && UI.tab !== 'fight') toast(`A boss blocks B${S.run.floor}! Fight it in the Cave to go deeper.`, 'bad', 'skull'); }, 400);
+});
+
+// Version 2: the drill evolving gets its own moment, over whatever is open.
+function showDrillEvolve(name) {
+  const mi = DRILL_MODELS.findIndex(m => m.name === name);
+  if (mi < 0) return;
+  const el = document.createElement('div');
+  el.className = 'evolve';
+  el.innerHTML = `<div class="evburst"></div>
+    ${mi > 0 ? `<img class="evold" src="${drillUrl(mi - 1, 6)}" alt="">` : ''}<img class="evnew" src="${drillUrl(mi, 6)}" alt="">
+    <div class="evtext"><small>${mi > 0 ? 'Your drill evolved' : 'You built your first drill'}</small><b>${name}</b>
+    <span>Lv ${S.drill.lv} · +${fmt(Math.round(DRILL_DMG * S.drill.lv * 100))}% damage · +${(DRILL_APS * S.drill.lv * 100).toFixed(1)}% speed</span></div>`;
+  document.body.appendChild(el);
+  SFX.rankUp(4);
+  vibrate([40, 40, 40, 40, 160]);
+  const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 400); };
+  el.addEventListener('pointerdown', close, { once: true });
+  setTimeout(close, 3400);
+}
+// A flash in the class's colour when you switch class.
+function classFlash(color) {
+  const el = document.createElement('div');
+  el.className = 'classflash';
+  el.style.setProperty('--cc', color || '#ffcc4d');
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 900);
+}
+
+// Version 2: reaching a new island for the first time.
+on('isles', list => {
+  const keys = list.reduce((a, x) => a + x.keys, 0), last = ISLANDS[list[list.length - 1].i];
+  if (UI.tab === 'fight' && !UI.booting) { SFX.levelup(); toast(`Land ho! You reached ${last.name}: +${keys} keys and +${Math.round(ISLE_COINS * list.length * 100)}% coins forever`, 'gold', 'key'); return; }
+  queueModal(() => showIslesArrived(list));
+});
+function showIslesArrived(list) {
+  const keys = list.reduce((a, x) => a + x.keys, 0), last = ISLANDS[list[list.length - 1].i];
+  openModal(`<h2>${list.length > 1 ? 'New islands reached!' : 'Land ho: ' + last.name + '!'}</h2>
+    <div class="islelist">${list.map(x => { const isl = ISLANDS[x.i]; return `<div class="isleopt on"><span class="isleswatch" style="background:${ISLE_STYLE[isl.id].swatch}"></span><span class="grow"><b>${isl.name}</b><small>B${isl.from}+ · ${isl.blurb}</small></span></div>`; }).join('')}</div>
+    <p style="text-align:center">+${keys} keys · +${Math.round(ISLE_COINS * list.length * 100)}% coins forever</p>
+    <p class="small muted" style="text-align:center">Each island is a cave of 100 floors. Sail to any island's cave from the dock at the end of the road in town.</p>
+    <div class="mbtns"><button class="btn gold" data-act="close">Explore</button></div>`, { dismissable: true });
+  SFX.levelup();
+}
 on('dailyAuto', res => {
   let what = res.label;
   if (res.keys) what = `+${res.keys} keys`;
@@ -1534,13 +1787,86 @@ function handleAction(el) {
     case 'buy':
       if (buyUpgrade(d.id)) { SFX.buy(); buildForge(); updateHud(); } else SFX.error();
       break;
-    case 'caseKind': S.caseKind = d.v === 'pet' ? 'pet' : 'tool'; SFX.click(); buildCases(); break;
+    case 'caseKind':
+      if (UI.auto) { toast('Stop auto-roll first', 'bad'); break; }
+      S.caseKind = d.v === 'pet' || d.v === 'drill' ? d.v : 'tool'; SFX.click(); buildCases(); break;
+    case 'goDrillCrates': if (UI.auto) stopAutoRoll(); S.caseKind = 'drill'; SFX.click(); showTab('cases'); break;
+    case 'drillShow': S.drill.show = !S.drill.show; SFX.click(); buildForge(); break;
+    case 'sail': sailTo(Number(d.i)); break;
+    case 'openStand': SFX.click(); openStand(); break;
+    case 'openDoghouse': SFX.click(); openDoghouse(); break;
+    case 'standSlot': SFX.click(); openStandPicker(d.slot, d.sort || 'rare'); break;
+    case 'standPick': { const id = d.id === '' ? null : Number(d.id); S.decor.stand[d.slot] = id; SFX.click(); openStand(); break; }
+    case 'standBack': SFX.click(); openStand(); break;
+    case 'setDogPet': S.decor.pet = PETS[d.sp] ? { sp: d.sp, r: Number(d.r) } : null; SFX.click(); closeModal(); break;
+    case 'worldBoss': if (UI.tab === 'island') history.pushState({ ddh: 'fight' }, ''); fightBoss(); break;
+    case 'v2Welcome': showV2Welcome(); break;
+    case 'keepPreviewSave': keepSave(true); break;
+    case 'keepMainSave': keepSave(false); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
     case 'learnPlan': doLearnPlan(d.id); break;
     case 'lockSkill': if (lockRank(d.id)) { SFX.buy(); toast('Rank locked: it stays through prestige', 'purple', 'lock'); } buildSkills(); break;
     case 'unlockSkill': if (unlockRank(d.id)) SFX.click(); buildSkills(); break;
-    case 'autoSkills': { const n = autoSpendSkills(); if (n) { SFX.buy(); toast(`Auto spent ${n} ${n === 1 ? 'point' : 'points'}`, 'good'); } buildSkills(); break; }
+    case 'autoSkills': {
+      // With a class active, Auto rebuilds it first, then spreads any points left over.
+      const c = S.classes[S.activeClass];
+      const forClass = c ? learnClassSkills(c) : 0;
+      const n = forClass + autoSpendSkills();
+      if (n) { SFX.buy(); toast(forClass ? `Auto spent ${n} ${n === 1 ? 'point' : 'points'} (${forClass} on ${c.name})` : `Auto spent ${n} ${n === 1 ? 'point' : 'points'}`, 'good'); }
+      buildSkills();
+      break;
+    }
+    case 'classSave': {
+      const i = Number(d.i), c = S.classes[i];
+      if (c && !d.ok) {
+        openModal(`<h2>Save over ${escapeHtml(c.name)}?</h2><p class="small muted" style="text-align:center">Your skills, gear, pets and look right now replace what this class had.</p>
+          <div class="mbtns"><button class="btn gold" data-act="classSave" data-i="${i}" data-ok="1">Save</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
+        break;
+      }
+      closeModal();
+      saveClass(i, c ? c.name : newClassName());
+      SFX.claim(); toast(`Saved ${S.classes[i].name}`, 'good');
+      buildSkills();
+      break;
+    }
+    case 'classUse': {
+      const res = applyClass(Number(d.i));
+      if (!res) break;
+      const c = S.classes[Number(d.i)], lean = classLean(c);
+      classFlash(lean ? lean.color : null);
+      SFX.levelup();
+      toast(res.left ? `${c.name}: ${res.wanted - res.left}/${res.wanted} points placed. Earn ${res.left} more to finish it.` : `Switched to ${c.name}`, 'good');
+      if (res.missing.length) toast(`No longer have: ${res.missing.join(', ')}`, 'bad');
+      buildSkills();
+      break;
+    }
+    case 'classRename': {
+      const i = Number(d.i), c = S.classes[i];
+      if (!c) break;
+      openModal(`<h2>Name this class</h2><input type="text" id="classNameInput" maxlength="20" autocomplete="off" value="${escapeHtml(c.name)}">
+        <div class="mbtns"><button class="btn gold" data-act="classRenameOk" data-i="${i}">Save</button><button class="btn" data-act="close">Cancel</button></div>`,
+      { dismissable: true, onOpen(sheet) { const inp = $('#classNameInput', sheet); inp.focus(); inp.select(); } });
+      break;
+    }
+    case 'classRenameOk': {
+      const c = S.classes[Number(d.i)], v = ($('#classNameInput').value || '').trim().replace(/\s+/g, ' ').slice(0, 20);
+      if (!c) break;
+      if (!v) { toast('Type a name first', 'bad'); break; }
+      c.name = v; closeModal(); SFX.click(); buildSkills();
+      break;
+    }
+    case 'classDelete': {
+      const i = Number(d.i), c = S.classes[i];
+      if (!c) break;
+      if (!d.ok) {
+        openModal(`<h2>Delete ${escapeHtml(c.name)}?</h2><p class="small muted" style="text-align:center">Only the saved class goes. Your skills, gear and pets stay as they are.</p>
+          <div class="mbtns"><button class="btn bad" data-act="classDelete" data-i="${i}" data-ok="1">Delete</button><button class="btn" data-act="close">Cancel</button></div>`, { dismissable: true });
+        break;
+      }
+      closeModal(); deleteClass(i); SFX.click(); buildSkills();
+      break;
+    }
     case 'treeZoom': {
       const k = Number(d.v);
       if (k) UI.view.k = clamp(UI.view.k * k, TREE_MIN_K, 2); else UI.view = { cx: 0, cy: 0, k: 0.9 };
@@ -1592,11 +1918,11 @@ function handleAction(el) {
     case 'bagShowDone': closeModal(); break;
     case 'bagSearchHelp':
       openModal(`<h2>Search the bag</h2><div class="small" style="line-height:1.6">
-        <p>Type words and every one has to match: <b>eclipse charm</b>, <b>fn pickaxe</b>, <b>legendary crit</b>, <b>locked</b>, <b>new</b>.</p>
+        <p>Type words and every one has to match: <b>eclipse armor</b>, <b>fn sword</b>, <b>clover</b>, <b>legendary crit</b>, <b>locked</b>, <b>new</b>.</p>
         <p>Compare numbers with &gt; &lt; &gt;= &lt;= or =:</p>
         <p><b>luck&gt;50</b> over +50% luck (main and sub-stats added up)<br><b>dmg&gt;1000</b>, <b>coins&gt;200</b>, <b>speed&gt;10</b>, <b>crit&gt;5</b>, <b>cd&gt;100</b>, <b>xp&gt;20</b>, <b>tap&gt;50</b><br>
         <b>t20</b> or <b>t&gt;=20</b> tier · <b>lv&gt;0</b> upgraded · <b>float&lt;0.01</b> cleanest floats</p>
-        <p>Mix them: <b>charm fn luck&gt;100 t&gt;=17</b></p></div>
+        <p>Mix them: <b>armor fn luck&gt;100 t&gt;=17</b></p></div>
         <button class="btn good" style="width:100%" data-act="close">Got it</button>`);
       break;
     case 'again': {
@@ -1606,6 +1932,25 @@ function handleAction(el) {
       break;
     }
     case 'bagView': if (UI.bagView === 'gear') markItemsSeen(); UI.bagView = d.v; buildBag(); break;
+    case 'look': if (d.k === 'hair' || d.k === 'skin') { S.look[d.k] = Number(d.v); SFX.click(); buildBag(); } break;
+    case 'lookRandom': {
+      const pick = n => Math.floor(Math.random() * n);
+      S.look = { ...S.look, hair: pick(LOOK_HAIR.length), skin: pick(LOOK_SKIN.length) };
+      SFX.click(); buildBag();
+      break;
+    }
+    case 'lookReset': S.look = { ...DEFAULT_LOOK }; SFX.click(); buildBag(); break;
+    case 'wearOutfit': {
+      const o = d.o, best = outfitBest(o);
+      let n = 0;
+      for (const slot of SLOT_IDS) { const it = best[slot]; if (it && S.gear.eq[slot] !== it && equipItem(it.id)) n++; }
+      if (!n) break;
+      SFX.equip ? SFX.equip() : SFX.click();
+      const w = outfitWorn();
+      toast(`${OUTFITS[o].name} on${w && w.id === o ? ` (${w.n}/3)` : ''}`, 'gold');
+      buildBag();
+      break;
+    }
     case 'item': showItem(Number(d.id)); break;
     case 'equipItem':
       if (equipItem(Number(d.id))) { SFX.buy(); toast('Equipped', 'good'); }
@@ -1745,6 +2090,7 @@ function askPrestige() {
     <div class="kv"><span>Power</span><span>+${fmt(powerGain())} (${powerText(S.power)} → ${powerText(S.power + powerGain(), true)})</span>
     <span>Cores</span><span>+${gain} to spend in the Prestige tree</span>
     <span>You keep</span><span>gear, pets, keys, scrap</span><span>Resets</span><span>coins, floor, Forge, level, skills</span></div>
+    ${nextStartText() ? `<p class="small">${nextStartText().slice(3)}.</p>` : ''}
     ${nextCase ? `<p class="small">Unlocks the ${nextCase.name}.</p>` : ''}
     ${S.prestiges === 0 || S.prestiges === 2 ? '<p class="small">Adds a pet slot.</p>' : ''}
     ${S.prestiges < PRESTIGE_LUCK_MAX ? `<p class="small">Luck +${Math.round(PRESTIGE_LUCK * 100)}% on every case.</p>` : ''}
@@ -1789,7 +2135,7 @@ function doRestore(id) {
   makeBackup(JSON.parse(serialize()), 'Before restoring a backup');
   loadState(raw);
   saveNow();
-  showTab('fight');
+  showTab('island');
   toast('Backup restored', 'good');
 }
 
@@ -1813,7 +2159,7 @@ function doReset() {
   R.session = 0;
   saveNow();
   closeModal();
-  showTab('fight');
+  showTab('island');
   toast('Fresh start. Good luck down there.', 'good');
 }
 
@@ -1841,7 +2187,7 @@ function doImport() {
     loadState(obj);
     saveNow();
       toast('Save loaded', 'good');
-    showTab('fight');
+    showTab('island');
   } catch (e) {
     toast(e.message || 'That code did not work', 'bad');
   }
@@ -1853,12 +2199,6 @@ function bindInput() {
     if (el && !el.disabled) {
       audioUnlock();
       handleAction(el);
-      return;
-    }
-    const tab = e.target.closest('#tabs button');
-    if (tab) {
-      audioUnlock();
-      showTab(tab.dataset.tab);
       return;
     }
   });
@@ -1879,6 +2219,7 @@ function bindInput() {
   $('#fDown').addEventListener('click', () => { moveFloor(1); updateFloorBar(); });
   $('#fAuto').addEventListener('click', () => { setAuto(!S.run.auto); updateFloorBar(); });
   $('#fBoss').addEventListener('click', () => { retryBoss(); updateFloorBar(); });
+  $('#fSail').addEventListener('click', () => { const i = islandForFloor(S.run.floor) + 1; if (sailToIsle(i)) { SFX.claim(); toast(`Sailed to ${ISLANDS[i].name}: ${ISLANDS[i].caveLook.toLowerCase()}`, 'gold'); } updateFloorBar(); });
   $('#fFight').addEventListener('click', fightBoss);
   $('#arena').addEventListener('pointerdown', mgPointer);
   $('#fPrestige').addEventListener('click', () => { audioUnlock(); askPrestige(); });
@@ -1927,7 +2268,8 @@ function uiTick(dt) {
 // "Off", "Commons", "Rare and below" ... "Eclipse and below" for a scrap-below-rarity threshold.
 function salvageLabel(n) { return n <= 0 ? 'Off' : n === 1 ? 'Commons' : `${RARITY[n - 1].name} and below`; }
 
-function autoCases() { return CASES.filter(caseUnlocked); }
+function autoCases() { return S.caseKind === 'drill' ? [CASES[0]] : CASES.filter(caseUnlocked); }
+function autoCaseName(c) { return S.caseKind === 'drill' ? 'Drill Crate' : c.name; }
 function autoTier() {
   const ok = autoCases();
   if (!UI.autoTier || !ok.some(c => c.tier === UI.autoTier)) UI.autoTier = ok[ok.length - 1].tier;
@@ -1953,13 +2295,13 @@ function renderAutoBox() {
   if (!a) {
     const cost = caseCost(c);
     h += `<div class="autoopts">
-        <button class="btn small" data-act="autoCase">${c.name}</button>
+        <button class="btn small" data-act="autoCase">${autoCaseName(c)}</button>
         <button class="btn small" data-act="autoStopAt">Stop at <span class="tc${stop}">${RARITY[stop].name}+</span></button>
-        <button class="btn small" data-act="autoScrap">Scrap: ${salvageLabel(S.settings.autoSalvage)}</button></div>
+        ${S.caseKind === 'drill' ? '' : `<button class="btn small" data-act="autoScrap">Scrap: ${salvageLabel(S.settings.autoSalvage)}</button>`}</div>
       <div class="casebtns"><button class="btn gold" data-act="autoStart" ${S.coins < cost ? 'disabled' : ''}>Start · ${costHtml(cost)} per case</button>
       <button class="btn purple" data-act="autoStartKeys" ${S.keys < 1 ? 'disabled' : ''}>${icon('key', '')} Use keys (${fmt(S.keys)})</button></div>`;
   } else {
-    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${c.name}: <b>${fmt(a.n)}</b> opened · ${a.keys ? `${plural(a.spent, 'key')} used, ${fmt(S.keys)} left` : fmt(a.spent) + ' coins'} · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
+    h += `<div class="small">${a.paused ? '<b>Paused</b> while the game is in the background. ' : ''}${autoCaseName(c)}: <b>${fmt(a.n)}</b> opened · ${a.keys ? `${plural(a.spent, 'key')} used, ${fmt(S.keys)} left` : fmt(a.spent) + ' coins'} · stops at <span class="tc${stop}">${RARITY[stop].name}+</span></div>
       <div class="odds">${a.counts.map((n, r) => (n ? `<span class="tc${r}">${fmt(n)} ${RARITY[r].name}</span>` : '')).join('')}</div>
       <div class="autorecent">${a.recent.map(v => tileHtml(v, 'mini')).join('')}</div>
       ${a.best ? `<div class="small">Best this session: <span class="tc${a.best.r}">${RARITY[a.best.r].name}</span> · ${oddsLong(a.best.odds)}</div>` : ''}
