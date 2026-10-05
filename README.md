@@ -65,9 +65,9 @@ There are three copies of the game:
 
 | Copy | Folder | Link | What it's for |
 |---|---|---|---|
-| Live | root | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/ | What everyone plays |
-| Beta | `beta/` | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/beta/ | The next v1 update: bug fixes and features, promoted to live when ready |
-| V2 | `v2/` | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/v2/ | The version 2 overhaul (new UI), built in the background over time |
+| Live | root | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/ | What everyone plays (Version 2 since v2.0.0) |
+| Beta | `beta/` | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/beta/ | The old v1 test copy (retired: v1 is no longer live) |
+| V2 | `v2/` | https://braetonpurcell-dotcom.github.io/Deep-Dig-Heroes/v2/ | The Version 2 preview, promoted to live as v2.0.0; keeps working for players who installed it, and the place to try the next V2 changes before they go live |
 
 Beta and V2 each:
 
