@@ -499,18 +499,18 @@ function drawPets() {
     const spr = petSprite(p.sp, p.r);
     const pad = spr.fxPad || 0;
     // Four party slots (after prestige 3) must all fit between the miner and the left edge.
-    const x = HERO_X - 18 - i * 8;
+    const x = HERO_X - 13 - i * 10;
     const phase = R.time * (def.fly ? 5 : 3) + i * 1.7;
-    let y = def.fly ? GROUND_Y - 42 - (i % 2) * 9 + Math.round(Math.sin(phase) * 2) : GROUND_Y - 24 - (Math.sin(phase) > 0.75 ? 1 : 0);
+    let y = def.fly ? GROUND_Y - 38 + Math.round(Math.sin(phase) * 2) : GROUND_Y - 15 - (Math.sin(phase) > 0.75 ? 1 : 0);
     if (!R.enemy || R.enemy.enter > 0) y -= SCN.step && !def.fly ? 1 : 0;
     if (!def.fly) {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(x + 5, GROUND_Y, 14, 1);
+      ctx.fillRect(x + 3, GROUND_Y, 10, 1);
     }
     ctx.drawImage(spr, Math.round(x) - pad, Math.round(y) - pad);
     if (p.r >= 2 && Math.sin(R.time * 4 + i) > 0.85) {
       ctx.fillStyle = RARITY[p.r].color;
-      ctx.fillRect(Math.round(x + rand(2, 22)), Math.round(y + rand(6, 22)), 1, 1);
+      ctx.fillRect(Math.round(x + rand(0, 16)), Math.round(y + rand(0, 16)), 1, 1);
     }
   });
 }
