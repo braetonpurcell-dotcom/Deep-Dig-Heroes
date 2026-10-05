@@ -115,16 +115,30 @@ function putWrapped(g, x, y, w, h) {
   if (x + w > LW) g.fillRect(x - LW, Math.floor(y), w, h);
 }
 
-function pixelBlob(g, cx, cy, rx, ry, fill, edge) {
+function pixelBlob(g, cx, cy, rx, ry, fill, edge, under = null) {
   for (let dx = -Math.ceil(rx); dx <= Math.ceil(rx); dx++) {
-    let top = null;
-    for (let dy = -Math.ceil(ry); dy <= Math.ceil(ry); dy++) {
-      if ((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) > 1) continue;
-      if (top === null) top = dy;
-      g.fillStyle = dy === top ? edge : fill;
+    let top = null, bot = null;
+    for (let dy = -Math.ceil(ry); dy <= Math.ceil(ry); dy++) if ((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1) { if (top === null) top = dy; bot = dy; }
+    if (top === null) continue;
+    for (let dy = top; dy <= bot; dy++) {
+      g.fillStyle = dy === top ? edge : under && dy === bot ? under : fill;
       putWrapped(g, cx + dx, cy + dy, 1, 1);
     }
   }
+}
+
+// A stalagmite (or a boulder when it's short and wide): a rough cone lit along its left edge and
+// shaded down its right, its tip catching the light.
+function stalagmite(g, x, base, w, h, R) {
+  const [mid, dark, light] = R;
+  for (let r = 0; r < h; r++) {
+    const t = r / h, ww = Math.max(1, Math.round(w * Math.pow(t, 0.75))), ox = Math.round(x - ww / 2), y = base - h + r;
+    g.fillStyle = shade(dark, -0.35); putWrapped(g, ox - 1, y, ww + 2, 1);
+    g.fillStyle = mid; putWrapped(g, ox, y, ww, 1);
+    if (ww > 2) { g.fillStyle = light; putWrapped(g, ox, y, 1, 1); g.fillStyle = dark; putWrapped(g, ox + ww - Math.max(1, Math.floor(ww / 3)), y, Math.max(1, Math.floor(ww / 3)), 1); }
+    if (r > 2 && (r * 7 + x) % 9 === 0) { g.fillStyle = dark; putWrapped(g, ox + Math.floor(ww / 2), y, 1, 1); }
+  }
+  g.fillStyle = light; putWrapped(g, Math.round(x), base - h, 1, 1);
 }
 
 function biomeLayers(bi) {
@@ -139,7 +153,7 @@ function biomeLayers(bi) {
   g.fillStyle = grad;
   g.fillRect(0, 0, LW, GROUND_Y);
   for (let i = 0; i < 24; i++) {
-    pixelBlob(g, rng() * LW, 12 + rng() * 62, 3 + rng() * 10, 2 + rng() * 6, b.rock[1], b.rock[0]);
+    pixelBlob(g, rng() * LW, 12 + rng() * 62, 3 + rng() * 10, 2 + rng() * 6, b.rock[1], b.rock[0], shade(b.rock[1], -0.3));
   }
   // stalactites
   let x = 0;
@@ -169,6 +183,52 @@ function biomeLayers(bi) {
   g.fillStyle = 'rgba(0,0,0,0.18)';
   g.fillRect(0, GROUND_Y - 22, LW, 22);
 
+  // Middle distance: stalagmites and boulders between the far wall and the floor, dimmed by the dark
+  // so they sit back, scrolling at their own speed for depth.
+  const mid = makeCanvas(LW, GROUND_Y + 2);
+  const mg = mid.getContext('2d');
+  const dim = R3 => R3.map(c => shade(c, -0.35));
+  // Each biome has its own things standing in the middle distance.
+  const KIND = { 'Crystal Caverns': 'crystal', Starcore: 'crystal', 'The Abyss': 'crystal', 'Frozen Tunnels': 'ice', 'Glacier Halls': 'ice',
+    'Magma Depths': 'lava', 'Cinder Core': 'lava', 'Sandstone Tombs': 'pillar', 'Sunken Ruins': 'ruin', Topsoil: 'roots' }[b.name] || 'rock';
+  for (let k = 0; k < 7; k++) {
+    const x = 6 + k * 23 + Math.floor(rng() * 10), tall = rng() < 0.6;
+    if (KIND === 'crystal' || KIND === 'ice') {
+      const c = KIND === 'ice' ? ['#bfe8fa', '#7ab8d8', '#ffffff'] : [shade(b.oreColor, -0.25), shade(b.oreColor, -0.55), shade(b.oreColor, 0.35)];
+      const n = 2 + Math.floor(rng() * 3);
+      for (let j = 0; j < n; j++) stalagmite(mg, x + (j - n / 2) * 5 + Math.floor(rng() * 3), GROUND_Y + 1, 5 + Math.floor(rng() * 3), 8 + Math.floor(rng() * (j === 1 ? 20 : 10)), c);
+      continue;
+    }
+    if ((KIND === 'pillar' || KIND === 'ruin') && k % 2 === 0) {
+      const h = 18 + Math.floor(rng() * 30), w = 8, top = GROUND_Y + 1 - h, stone = dim(b.rock);
+      mg.fillStyle = shade(stone[1], -0.4); putWrapped(mg, x - 1, top + 3, w + 2, h - 3);
+      mg.fillStyle = stone[0]; putWrapped(mg, x, top + 3, w, h - 3);
+      mg.fillStyle = stone[2]; putWrapped(mg, x + 1, top + 3, 1, h - 3); putWrapped(mg, x + 4, top + 3, 1, h - 3);
+      mg.fillStyle = stone[1]; putWrapped(mg, x + 6, top + 3, 1, h - 3);
+      mg.fillStyle = shade(stone[1], -0.4); putWrapped(mg, x - 2, top + 1, w + 4, 3);
+      mg.fillStyle = stone[2]; putWrapped(mg, x - 1, top + 1, w + 2, 1);
+      for (let j = 0; j < 4; j++) { mg.fillStyle = shade(stone[1], -0.4); putWrapped(mg, x + Math.floor(rng() * w), top, 1, 1 + Math.floor(rng() * 2)); } // broken top
+      if (KIND === 'ruin') { mg.fillStyle = '#3e7a4a'; for (let j = 0; j < 8; j++) putWrapped(mg, x - 1 + Math.floor(rng() * (w + 2)), top + 2 + Math.floor(rng() * 6), 1, 1 + Math.floor(rng() * 3)); }
+      continue;
+    }
+    if (tall) stalagmite(mg, x, GROUND_Y + 1, 5 + Math.floor(rng() * 6), 14 + Math.floor(rng() * 26), dim(b.rock));
+    else pixelBlob(mg, x, GROUND_Y - 3, 6 + rng() * 6, 4 + rng() * 2, shade(b.rock[0], -0.35), shade(b.rock[2], -0.3), shade(b.rock[1], -0.5));
+    if (rng() < 0.5) stalagmite(mg, x + 7, GROUND_Y + 1, 3, 5 + Math.floor(rng() * 6), dim(b.rock));
+  }
+  if (KIND === 'roots') { // roots hanging from the ceiling, and little mushrooms
+    for (let i = 0; i < 9; i++) { let x = Math.floor(rng() * LW); const len = 6 + Math.floor(rng() * 16);
+      for (let y = 0; y < len; y++) { mg.fillStyle = y === len - 1 ? '#8a6a48' : '#4a3424'; putWrapped(mg, x, y, 1, 1); if (rng() < 0.2) x += rng() < 0.5 ? -1 : 1; } }
+    for (let i = 0; i < 6; i++) { const x = Math.floor(rng() * LW), y = GROUND_Y - 1, cap = ['#c8503a', '#d8a050', '#a87ac8'][i % 3];
+      mg.fillStyle = '#d8ccb0'; putWrapped(mg, x, y - 2, 1, 3); mg.fillStyle = shade(cap, -0.3); putWrapped(mg, x - 2, y - 3, 5, 1); mg.fillStyle = cap; putWrapped(mg, x - 1, y - 4, 3, 1); putWrapped(mg, x - 2, y - 3, 4, 1); mg.fillStyle = '#fff4e0'; putWrapped(mg, x - 1, y - 4, 1, 1); }
+  }
+  if (KIND === 'lava') { // glowing cracks at the foot of the wall
+    for (let i = 0; i < 6; i++) { let x = Math.floor(rng() * LW); for (let y = GROUND_Y; y > GROUND_Y - 6 - rng() * 10; y--) { mg.fillStyle = y > GROUND_Y - 3 ? '#ffb040' : '#e0501a'; putWrapped(mg, x, y, 1, 1); if (rng() < 0.4) x += rng() < 0.5 ? -1 : 1; } }
+  }
+  for (let i = 0; i < 4; i++) { // a few ore glints on them
+    const ox = Math.floor(rng() * LW), oy = GROUND_Y - 4 - Math.floor(rng() * 14);
+    if (mg.getImageData(((ox % LW) + LW) % LW, oy, 1, 1).data[3]) { mg.fillStyle = shade(b.oreColor, -0.1); putWrapped(mg, ox, oy, 1, 1); }
+  }
+
   const ground = makeCanvas(LW, LH - GROUND_Y);
   const gg = ground.getContext('2d');
   gg.fillStyle = b.ground[0];
@@ -188,8 +248,20 @@ function biomeLayers(bi) {
   }
   gg.fillStyle = shade(b.ground[0], 0.18);
   for (let i = 0; i < 14; i++) putWrapped(gg, rng() * LW, 4 + Math.floor(rng() * 11), 2, 1);
+  // pebbles and bits of rubble with a lit top and a shadow under them
+  for (let i = 0; i < 18; i++) {
+    const px = rng() * LW, py = 3 + Math.floor(rng() * 12), w = 2 + Math.floor(rng() * 3);
+    gg.fillStyle = shade(b.ground[1], -0.3); putWrapped(gg, px, py + 1, w, 1);
+    gg.fillStyle = b.rock[0]; putWrapped(gg, px, py, w, 1);
+    gg.fillStyle = b.rock[2]; putWrapped(gg, px, py, 1, 1);
+  }
+  for (let i = 0; i < 5; i++) { const ox = rng() * LW, oy = 5 + Math.floor(rng() * 9); gg.fillStyle = b.oreColor; putWrapped(gg, ox, oy, 1, 1); }
+  if (b.name === 'Magma Depths' || b.name === 'Cinder Core') for (let i = 0; i < 3; i++) { // little lava pools in the floor
+    const ox = 20 + i * 52 + Math.floor(rng() * 20), oy = 8 + Math.floor(rng() * 5), w = 8 + Math.floor(rng() * 8);
+    gg.fillStyle = '#3a0c06'; putWrapped(gg, ox - 1, oy - 1, w + 2, 4); gg.fillStyle = '#e0501a'; putWrapped(gg, ox, oy, w, 2); gg.fillStyle = '#ffb040'; putWrapped(gg, ox + 2, oy, w - 5, 1);
+  }
 
-  const out = { wall, ground };
+  const out = { wall, mid, ground };
   SCN.layers.set(bi, out);
   return out;
 }
@@ -759,6 +831,9 @@ function render(dt) {
   const wo = Math.floor(SCN.scroll * 0.35) % LW;
   ctx.drawImage(layers.wall, -wo, 0);
   ctx.drawImage(layers.wall, LW - wo, 0);
+  const mo = Math.floor(SCN.scroll * 0.65) % LW;
+  ctx.drawImage(layers.mid, -mo, 0);
+  ctx.drawImage(layers.mid, LW - mo, 0);
   const go = Math.floor(SCN.scroll) % LW;
   ctx.drawImage(layers.ground, -go, GROUND_Y);
   ctx.drawImage(layers.ground, LW - go, GROUND_Y);
