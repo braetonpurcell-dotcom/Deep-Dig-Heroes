@@ -1787,16 +1787,16 @@ function drawDecor(g, t) {
   const base = dg.y + 22, walking = d.state === 'walk', hop = walking && Math.floor(t * 8) % 2 ? 1 : 0;
   g.save(); g.translate(Math.round(d.x), 0); if (d.dir < 0) g.scale(-1, 1);
   if (def.fly) {
-    const perch = d.state === 'lie', y = perch ? dg.y - 12 : base - 26 + Math.round(Math.sin(t * 5) * 2);
-    g.drawImage(spr, -8 - pad, y - pad);
+    const perch = d.state === 'lie', y = perch ? dg.y - 16 : base - 30 + Math.round(Math.sin(t * 5) * 2);
+    g.drawImage(spr, -12 - pad, y - pad);
   } else if (d.state === 'lie') {
     // Lying down: the pet flattened low to the ground, breathing slowly.
-    const h = 11 + (Math.sin(t * 2) > 0 ? 1 : 0);
-    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(-7, base - 1, 15, 2);
-    g.drawImage(spr, 0, 0, spr.width, spr.height, -9 - pad, base - h - pad, spr.width + 2, h + pad * 2);
+    const h = 17 + (Math.sin(t * 2) > 0 ? 1 : 0);
+    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(-9, base - 1, 19, 2);
+    g.drawImage(spr, 0, 0, spr.width, spr.height, -13 - pad, base - h - pad, spr.width + 3, h + pad * 2);
   } else {
-    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(-5, base - 1, 10, 2);
-    g.drawImage(spr, -8 - pad, base - 16 - hop - pad);
+    g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(-7, base - 1, 14, 2);
+    g.drawImage(spr, -12 - pad, base - 24 - hop - pad);
   }
   g.restore();
   if (d.state === 'lie' && !def.fly) { const zz = (t * 0.6) % 1; g.globalAlpha = 1 - zz; g.fillStyle = '#ffffff'; g.font = '6px "Jersey 10", monospace'; g.fillText('z', d.x + 6 + zz * 3, base - 14 - zz * 8); g.globalAlpha = 1; }
@@ -1855,9 +1855,9 @@ function drawMe(g, t) {
   const pet = S.pets.eq[0];
   if (pet) {
     const def = PETS[pet.sp], spr = petSprite(pet.sp, pet.r), pad = spr.fxPad || 0, px = x - me.dir * 20;
-    const py = def.fly ? y - 30 + Math.round(Math.sin(t * 5) * 2) : y - 12 - (me.held && Math.floor(me.walkT * 8) % 2 ? 1 : 0);
-    if (!def.fly) { g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(px - 5, y + 2, 10, 2); }
-    g.save(); g.translate(px, 0); if (me.dir < 0) g.scale(-1, 1); g.drawImage(spr, -8 - pad, py - pad); g.restore();
+    const py = def.fly ? y - 34 + Math.round(Math.sin(t * 5) * 2) : y - 21 - (me.held && Math.floor(me.walkT * 8) % 2 ? 1 : 0);
+    if (!def.fly) { g.fillStyle = 'rgba(15,35,15,0.3)'; g.fillRect(px - 7, y + 2, 14, 2); }
+    g.save(); g.translate(px, 0); if (me.dir < 0) g.scale(-1, 1); g.drawImage(spr, -12 - pad, py - pad); g.restore();
   }
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x - 7, y + 2, 14, 2);
   g.save(); g.translate(x, 0); if (me.dir < 0) g.scale(-1, 1);
