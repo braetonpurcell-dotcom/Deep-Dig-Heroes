@@ -582,6 +582,13 @@ function buildSprite(rows, palette) {
   return c;
 }
 
+// A PX sprite at twice the detail (see up2x), for menus. Boxy chests keep hard corners.
+function hiSprite(name, palette = {}, cacheKey = '') {
+  const key = 'hi|' + name + '|' + cacheKey;
+  let c = spriteCache.get(key);
+  if (!c) { c = buildSprite(hiRows('px.' + name, PX[name], name !== 'chest'), palette); spriteCache.set(key, c); }
+  return c;
+}
 function sprite(name, palette = {}, cacheKey = '') {
   const key = name + '|' + cacheKey;
   let c = spriteCache.get(key);
@@ -1056,12 +1063,46 @@ function basePalette(slot, tier, r) {
   return { m: mat, M: r >= 3 ? mix(shade(mat, 0.5), rc, 0.5) : shade(mat, 0.5), g: rc, G: shade(rc, 0.6) };
 }
 
-function gearSprite(slot, tier, rarity, style = null) {
+// Version 2: menus show gear, chests and drill parts at twice the detail, made from the same art by
+// up2x below; the world (the miner's tool, the armor stand) keeps the small originals.
+// Scale2x (EPX) doubles a sprite and rounds off its stair-step diagonals (smooth = false keeps hard
+// corners, for boxy shapes); the doubled 2-pixel outlines are then thinned back to 1 pixel.
+function up2x(rows, smooth = true) {
+  const h = rows.length, w = rows[0].length;
+  const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? '.' : rows[y][x]);
+  const g = [];
+  for (let y = 0; y < h * 2; y++) g.push(new Array(w * 2));
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const P = at(x, y), A = at(x, y - 1), B = at(x + 1, y), C = at(x - 1, y), D = at(x, y + 1);
+    g[2 * y][2 * x] = smooth && C === A && C !== D && A !== B ? A : P;
+    g[2 * y][2 * x + 1] = smooth && A === B && A !== C && B !== D ? B : P;
+    g[2 * y + 1][2 * x] = smooth && D === C && D !== B && C !== A ? C : P;
+    g[2 * y + 1][2 * x + 1] = smooth && B === D && B !== A && D !== C ? D : P;
+  }
+  const H = h * 2, W = w * 2, G = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? '.' : g[y][x]);
+  const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const edge = g.map((row, y) => row.map((c, x) => c === 'k' && N4.some(([a, b]) => G(x + a, y + b) === '.')));
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (g[y][x] !== 'k' || edge[y][x]) continue;
+    const nearEdge = N4.some(([a, b]) => edge[y + b] && edge[y + b][x + a]);
+    if (!nearEdge && G(x - 1, y) !== 'k' && G(x, y - 1) !== 'k') continue;
+    const count = {};
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { const c = G(x + a, y + b); if ((a || b) && c !== '.' && c !== 'k') count[c] = (count[c] || 0) + 1; }
+    const best = Object.keys(count).sort((p, q) => count[q] - count[p])[0];
+    if (best) g[y][x] = best;
+  }
+  return g.map(r => r.join(''));
+}
+const HI_ROWS = new Map();
+function hiRows(key, rows, smooth) { let r = HI_ROWS.get(key); if (!r) { r = up2x(rows, smooth); HI_ROWS.set(key, r); } return r; }
+
+function gearSprite(slot, tier, rarity, style = null, hi = false) {
   const st = style || GEAR_STYLES[slot][0].id;
-  const key = `gearfx|${slot}|${st}|${tier}|${rarity}`;
+  const key = `gearfx|${slot}|${st}|${tier}|${rarity}${hi ? '|hi' : ''}`;
   let c = spriteCache.get(key);
   if (c) return c;
-  const base = buildSprite(GEAR_ICON[slot][st], gearPalette(slot, tier, rarity, st));
+  const rows = hi ? hiRows(slot + '.' + st, GEAR_ICON[slot][st], slot !== 'charm') : GEAR_ICON[slot][st];
+  const base = buildSprite(rows, gearPalette(slot, tier, rarity, st));
   c = rarity >= 4 ? decorateSprite(base, rarity, hashStr(key)) : base;
   spriteCache.set(key, c);
   return c;
@@ -1140,7 +1181,7 @@ function decorateSprite(src, r, seed) {
 function chestSprite(tier) {
   const mat = MATERIALS[CASES[tier - 1].chest].color;
   const body = tier === 1 ? '#7a4a2a' : shade(mat, -0.45);
-  return sprite('chest', { m: mat, M: shade(mat, 0.5), b: body, d: shade(body, -0.4), y: '#ffcc4d' }, 'chest' + tier);
+  return hiSprite('chest', { m: mat, M: shade(mat, 0.5), b: body, d: shade(body, -0.4), y: '#ffcc4d' }, 'chest' + tier);
 }
 
 function iconSprite(name) {
@@ -1154,17 +1195,17 @@ PX.part_motor = ['............', '..kkkkkkk...', '.kmMMMMMmk..', '.kmaaaaamkkk',
 PX.part_cell = ['....kkkk....', '....kMMk....', '..kkkkkkkk..', '..kMmmmmnk..', '..kaaaaaak..', '..kAaaaaak..', '..kaaAAaak..', '..kaAAaaak..', '..kaaaaaak..', '..kmmmmmnk..', '..kkkkkkkk..', '............'];
 function partSprite(part, r = 0) {
   const acc = r <= 0 ? '#8fa6bf' : RARITY[r].color;
-  const base = sprite('part_' + part, { m: '#b9c2c9', M: '#eef2f6', n: '#6e7682', a: acc, A: shade(acc, 0.45) }, 'r' + r);
+  const base = hiSprite('part_' + part, { m: '#b9c2c9', M: '#eef2f6', n: '#6e7682', a: acc, A: shade(acc, 0.45) }, 'r' + r);
   if (r < 4) return base;
   const key = `partfx|${part}|${r}`;
   let c = spriteCache.get(key);
   if (!c) { c = decorateSprite(base, r, hashStr(key)); spriteCache.set(key, c); }
   return c;
 }
-function partUrl(part, r = 0) { return spriteUrl(partSprite(part, r), 4, 'part:' + part + ':' + r); }
+function partUrl(part, r = 0) { return spriteUrl(partSprite(part, r), 2, 'part:' + part + ':' + r); }
 // A yellow and black hazard crate.
-function drillCrateSprite() { return sprite('chest', { m: '#f2c14e', M: '#fff3b0', b: '#2a2a34', d: '#16161c', y: '#f2c14e' }, 'drillcrate'); }
-function drillCrateUrl() { return spriteUrl(drillCrateSprite(), 4, 'drillcrate'); }
+function drillCrateSprite() { return hiSprite('chest', { m: '#f2c14e', M: '#fff3b0', b: '#2a2a34', d: '#16161c', y: '#f2c14e' }, 'drillcrate'); }
+function drillCrateUrl() { return spriteUrl(drillCrateSprite(), 2, 'drillcrate'); }
 // The drill, facing right: a body with a pistol grip, a chuck, and a bit whose spiral turns with frame.
 const DRILL_RAINBOW = ['#ff4d4d', '#ffb84d', '#fff34d', '#4dff88', '#4dd2ff', '#a64dff', '#ff4dd2'];
 function drillSprite(mi, frame = 0) {
@@ -1217,16 +1258,16 @@ function spriteUrl(canvas, scale = 4, key = null) {
 }
 
 function iconUrl(name) {
-  return spriteUrl(iconSprite(name), 4, 'icon:' + name);
+  return spriteUrl(hiSprite(name, ICON_PALETTES[name] || {}, 'icon'), 2, 'icon:' + name); // menus: twice the detail
 }
 function petUrl(sp, locked = false, r = 0) {
   const s = petSprite(sp, r);
   return spriteUrl(locked ? silhouette(s, '#2e2440') : s, 4, 'pet:' + sp + ':' + r + (locked ? ':l' : ''));
 }
 function gearUrl(slot, tier, rarity, locked = false, style = null) {
-  const s = gearSprite(slot, tier, rarity, style);
-  return spriteUrl(locked ? silhouette(s, '#2e2440') : s, 4, `gear:${slot}:${style || '-'}:${tier}:${rarity}${locked ? ':l' : ''}`);
+  const s = gearSprite(slot, tier, rarity, style, true);
+  return spriteUrl(locked ? silhouette(s, '#2e2440') : s, 2, `gear:${slot}:${style || '-'}:${tier}:${rarity}${locked ? ':l' : ''}`);
 }
 function chestUrl(tier) {
-  return spriteUrl(chestSprite(tier), 4, 'chest:' + tier);
+  return spriteUrl(chestSprite(tier), 2, 'chest:' + tier);
 }

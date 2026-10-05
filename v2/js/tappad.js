@@ -25,34 +25,56 @@ function tapStop() {
   TAP.targets = [];
 }
 
-// A pixel-art cave wall in the current biome's colors, redrawn when the biome changes.
+// A pixel-art cave wall in the current biome's colors, drawn at the pad's own size in crisp 3x pixels
+// (close to the fight view's scale): rough cobblestones lit on top and shaded underneath, dark gaps,
+// cracks, and ore glinting in a few stones. Kept dim so the monsters stand out. Redrawn when the
+// biome or the pad's size changes.
+const TAP_PX = 3;
 function tapBackground() {
-  const b = biomeFor(S.run.floor);
-  if (TAP.bgKey === b.name) return;
-  TAP.bgKey = b.name;
+  const b = biomeFor(S.run.floor), pad = $('#tappad');
+  const W = Math.max(32, Math.ceil(pad.clientWidth / TAP_PX)), H = Math.max(24, Math.ceil(pad.clientHeight / TAP_PX));
+  const key = `${b.name}|${W}x${H}`;
+  if (TAP.bgKey === key) return;
+  TAP.bgKey = key;
   const c = document.createElement('canvas');
-  c.width = 96;
-  c.height = 72;
+  c.width = W;
+  c.height = H;
   const g = c.getContext('2d');
   const rng = mulberry32(hashStr(b.name));
+  const [mid, dark, light] = b.rock;
   g.fillStyle = b.bg[0];
-  g.fillRect(0, 0, 96, 72);
-  for (let i = 0; i < 46; i++) {
-    const w = 4 + Math.floor(rng() * 12);
-    const h = 3 + Math.floor(rng() * 7);
-    const x = Math.floor(rng() * 96) - 4;
-    const y = Math.floor(rng() * 72) - 3;
-    g.fillStyle = b.rock[i % 3 === 0 ? 2 : i % 2];
-    g.globalAlpha = 0.35 + rng() * 0.3;
-    g.fillRect(x, y, w, h);
-    g.fillRect(x + 1, y - 1, w - 2, h + 2);
+  g.fillRect(0, 0, W, H);
+  for (let y = -4, row = 0; y < H; row++) {
+    const sh = 7 + Math.floor(rng() * 5);
+    for (let x = -Math.floor(rng() * 14); x < W;) {
+      const sw = 9 + Math.floor(rng() * 14), tone = rng();
+      const body = tone < 0.6 ? mid : tone < 0.85 ? dark : shade(mid, 0.08);
+      // the stone, with its corners knocked off
+      g.fillStyle = body; g.fillRect(x + 1, y + 1, sw - 2, sh - 2); g.fillRect(x + 2, y, sw - 4, sh);
+      g.fillStyle = light; g.fillRect(x + 2, y + 1, sw - 4, 1); g.fillRect(x + 1, y + 2, 1, Math.max(1, sh - 5));
+      g.fillStyle = shade(dark, -0.25); g.fillRect(x + 2, y + sh - 2, sw - 4, 1); g.fillRect(x + sw - 2, y + 2, 1, sh - 4);
+      if (rng() < 0.3) { // a crack
+        g.fillStyle = shade(dark, -0.35);
+        let cx = x + 3 + Math.floor(rng() * (sw - 6)), cy = y + 2;
+        for (let k = 0; k < sh - 4; k++) { g.fillRect(cx, cy + k, 1, 1); if (rng() < 0.4) cx += rng() < 0.5 ? -1 : 1; }
+      }
+      if (rng() < 0.18) { // an ore fleck
+        const ox = x + 3 + Math.floor(rng() * (sw - 6)), oy = y + 3 + Math.floor(rng() * Math.max(1, sh - 6));
+        g.fillStyle = shade(b.oreColor, -0.3); g.fillRect(ox, oy, 2, 2);
+        g.fillStyle = b.oreColor; g.fillRect(ox, oy, 1, 1);
+        if (rng() < 0.5) { g.fillStyle = shade(b.oreColor, 0.6); g.fillRect(ox + 1, oy - 1, 1, 1); }
+      }
+      x += sw;
+    }
+    y += sh;
   }
-  g.globalAlpha = 1;
-  for (let i = 0; i < 26; i++) {
-    g.fillStyle = i % 4 ? b.rock[1] : b.oreColor;
-    g.fillRect(Math.floor(rng() * 96), Math.floor(rng() * 72), 1, 1);
-  }
-  $('#tappad').style.backgroundImage = `url(${c.toDataURL()})`;
+  // dim it so the monsters stand out, darkest at the edges
+  g.fillStyle = b.bg[0]; g.globalAlpha = 0.45; g.fillRect(0, 0, W, H);
+  const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
+  gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.55)');
+  g.globalAlpha = 1; g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  pad.style.backgroundImage = `url(${c.toDataURL()})`;
+  pad.style.backgroundSize = `${W * TAP_PX}px ${H * TAP_PX}px`;
 }
 
 function tapEnemyUrl(type) {
