@@ -501,7 +501,7 @@ function drawPets() {
     // Four party slots (after prestige 3) must all fit between the miner and the left edge.
     const x = HERO_X - 13 - i * 10;
     const phase = R.time * (def.fly ? 5 : 3) + i * 1.7;
-    let y = def.fly ? GROUND_Y - 38 + Math.round(Math.sin(phase) * 2) : GROUND_Y - 15 - (Math.sin(phase) > 0.75 ? 1 : 0);
+    let y = def.fly ? GROUND_Y - 38 - (i % 2) * 9 + Math.round(Math.sin(phase) * 2) : GROUND_Y - 15 - (Math.sin(phase) > 0.75 ? 1 : 0);
     if (!R.enemy || R.enemy.enter > 0) y -= SCN.step && !def.fly ? 1 : 0;
     if (!def.fly) {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
