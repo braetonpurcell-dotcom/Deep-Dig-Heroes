@@ -115,6 +115,7 @@ function freshState() {
     locks: {}, // skill ranks kept through prestige (node id -> ranks)
     caseKind: 'tool', // which cases you open: 'tool' (gear) or 'pet'
     fresh: { left: 0 }, // Fresh Hands seconds left (counts down only while the game is open)
+    cloudBk: { play: 0, at: 0 }, // off-the-phone backups: seconds played since the last one, and when it went
     pityPet: { epic: 0, leg: 0 },
     run: freshRun(),
     math: { streak: 0 }, // the tap combo (the key name is kept so old saves load)
@@ -268,6 +269,8 @@ function hydrate(obj) {
   if (!s.pityPet || typeof s.pityPet !== 'object') s.pityPet = { epic: 0, leg: 0 };
   s.pityPet.epic = nonNegInt(s.pityPet.epic); s.pityPet.leg = nonNegInt(s.pityPet.leg);
   if (!s.fresh || typeof s.fresh !== 'object') s.fresh = { left: 0 };
+  if (!s.cloudBk || typeof s.cloudBk !== 'object') s.cloudBk = { play: 0, at: 0 };
+  s.cloudBk.play = nonNeg(s.cloudBk.play); s.cloudBk.at = nonNeg(s.cloudBk.at);
   s.fresh.left = clamp(nonNeg(s.fresh.left), 0, FRESH_MAX);
   if (typeof s.fresh.keyDay !== 'string') s.fresh.keyDay = '';
   if (!s.run.rush || typeof s.run.rush !== 'object') s.run.rush = { left: 0, mult: 1 };

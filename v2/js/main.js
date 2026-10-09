@@ -26,6 +26,40 @@ function previewSave() {
     return v2 && v2.stats ? v2 : null;
   } catch (e) { return null; }
 }
+// A restore link (the game's address + #restore= + a save code): offers to load that save. Used to
+// give back progress lost with the phone's storage.
+function restoreFromLink() {
+  const m = /^#restore=(.+)$/.exec(location.hash || '');
+  if (!m) return null;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+  try {
+    return parseCode(decodeURIComponent(m[1]));
+  } catch (e) {
+    toast(e.message || 'That restore link did not work', 'bad');
+    return null;
+  }
+}
+function showRestoreLink(obj) {
+  UI.restoreObj = obj;
+  const who = obj.profile && obj.profile.name ? escapeHtml(obj.profile.name) : 'a player';
+  openModal(`<h2>Restore a save?</h2>
+    <p>This link holds a save for <b>${who}</b>: best B${fmt(obj.stats.bestFloor || 1)}, ${obj.prestiges || 0} prestiges, ${fmt(Math.round(obj.power || 0))} power.</p>
+    <p class="small muted">Loading it replaces the progress on this phone. A backup of this phone's save is kept.</p>
+    <div class="mbtns"><button class="btn gold" data-act="restoreLink">Load it</button><button class="btn" data-act="close">Not now</button></div>`);
+}
+function loadRestoreLink() {
+  const obj = UI.restoreObj;
+  if (!obj) return;
+  UI.restoreObj = null;
+  makeBackup(JSON.parse(serialize()), 'Before a restore link');
+  loadState(obj);
+  saveNow();
+  closeModal();
+  showTab('island');
+  toast('Save restored. Welcome back!', 'good');
+  sendCloudBackup('restored');
+}
+
 function showSaveChoice(v2) {
   const line = (title, s) => `<div class="card"><b>${title}</b><div class="small muted">Best B${fmt(s.stats.bestFloor || 1)} · ${s.prestiges || 0} prestiges · ${Math.round((s.stats.playTime || 0) / 3600)} h played${s.savedAt ? ' · last played ' + new Date(s.savedAt).toLocaleDateString() : ''}</div></div>`;
   openModal(`<h2>Two saves on this phone</h2>
@@ -48,6 +82,11 @@ function keepSave(preview) {
   } catch (e) { /* storage blocked: keep playing the main save */ }
   closeModal();
   if (!S.v2Seen) queueModal(showV2Welcome);
+}
+
+// Ask the browser not to clear the save when the phone runs low on space (it can still be cleared by hand).
+function keepStorage() {
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => {}); } catch (e) { /* not available */ }
 }
 
 function showIntro() {
@@ -242,7 +281,10 @@ function boot(hotData) {
   const offline = away >= 60 ? applyOffline(away) : null;
   if (base) welcomeBack(away);
   UI.booting = false;
-  // Asked before anything else: picking the preview save reloads the game.
+  // Asked before anything else: a restore link, then (picking the preview save reloads the game) the
+  // choice between two saves.
+  const restore = restoreFromLink();
+  if (restore) queueModal(() => showRestoreLink(restore));
   const other = previewSave();
   if (other) queueModal(() => showSaveChoice(other));
   if (!base) queueModal(showIntro);
@@ -268,6 +310,8 @@ function boot(hotData) {
 
   saveLocal();
   applyWakeLock();
+  keepStorage();
+  cloudBackupOnOpen();
   // Opened in the background (restored tab): the drill is idle until the player looks at it.
   if (document.hidden) {
     hiddenAt = Date.now();

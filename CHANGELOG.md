@@ -3,7 +3,13 @@
 Newest first. Each `## vX.Y.Z` section becomes a GitHub release with the game files of that exact version.
 Older entries name the commit they belong to; the newest entry uses whatever commit sets that version in `js/version.js`.
 
+## v2.0.1
+- **Backups off your phone:** if you have a player name (the one on the leaderboard), a copy of your save now goes to the game's developer about once an hour of play and after every prestige. If your phone's storage is ever cleared, your progress can be given back.
+- **Restore links:** a link to the game with a save attached asks whether to load that save, so lost progress comes back with one tap.
+- The game now asks your phone to keep its save when storage runs low.
+
 ## v2.0.0
+Commit: ec1a98e
 Version 2 is here: the whole game rebuilt as an adventure.
 - **Your town:** walk left and right through Greenhollow and tap a building to go in: the House (gear, pets, outfits), the Forge, the Market (cases and the drill), the Temple (skills and prestige), the Quest board and the Harbor. Settings and prestige are under ⚙ top right.
 - **Islands:** every 100 floors is a new island with its own cave: Greenhollow, Frostpeak, Sunscorch, Emberfall and Starfall. Sail between them from the dock. Each cave island has its own scenery, wildlife and a hidden surprise.

@@ -1588,7 +1588,7 @@ function buildMore() {
   </div>`;
 
   h += `<div class="card"><h3>Save</h3>
-    <p class="small muted">Progress saves on this device every few seconds${CLOUD.ready ? ' and to your Claude account' : ''}. Copy a save code to back it up or move it to another phone.</p>
+    <p class="small muted">Progress saves on this device every few seconds${CLOUD.ready ? ' and to your Claude account' : ''}.${playerName() ? ' About once an hour a backup copy also goes to the game\'s developer, so progress lost with this phone\'s storage can be given back.' : ' Set a player name (leaderboard) to also get an automatic backup off this phone.'} Copy a save code to keep your own backup or move it to another phone.</p>
     <div class="mbtns" style="margin-top:8px"><button class="btn" data-act="copySave">Copy save code</button><button class="btn" data-act="showImport">Load a code</button></div>
     <textarea id="exportText" hidden readonly aria-label="Your save code"></textarea>
     <div id="importBox" hidden><textarea id="importText" aria-label="Paste a save code" placeholder="Paste a code that starts with DDH1."></textarea>
@@ -1802,6 +1802,7 @@ function handleAction(el) {
     case 'worldBoss': if (UI.tab === 'island') history.pushState({ ddh: 'fight' }, ''); fightBoss(); break;
     case 'v2Welcome': showV2Welcome(); break;
     case 'keepPreviewSave': keepSave(true); break;
+    case 'restoreLink': loadRestoreLink(); break;
     case 'keepMainSave': keepSave(false); break;
     case 'skillView': UI.skillView = d.v; buildSkills(); break;
     case 'learnSkill': doLearnSkill(d.id); break;
@@ -2028,6 +2029,7 @@ function handleAction(el) {
     case 'askPrestige': askPrestige(); break;
     case 'doPrestige': {
       const res = doPrestige();
+      if (res) sendCloudBackup('prestige');
       if (res) UI.pendingBonus = null;
       closeModal();
       if (res) {
